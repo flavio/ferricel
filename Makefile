@@ -21,6 +21,7 @@ $(RUNTIME_TARGET): $(RUNTIME_SOURCES) $(RUNTIME_CARGO) $(WORKSPACE_CARGO)
 	cargo build -p runtime --target wasm32-unknown-unknown --release
 
 # Build and run ferricel (depends on runtime)
+# NOTE: Runtime WASM is embedded at compile-time using include_bytes!
 ferricel: $(RUNTIME_TARGET) $(FERRICEL_SOURCES) $(FERRICEL_CARGO) $(WORKSPACE_CARGO)
 	@echo "Building ferricel..."
 	cargo build -p ferricel --release
@@ -35,9 +36,11 @@ help:
 	@echo "Available targets:"
 	@echo "  all      - Build ferricel and runtime (default)"
 	@echo "  runtime  - Build only the runtime WASM module"
-	@echo "  ferricel - Build runtime and ferricel binary"
+	@echo "  ferricel - Build runtime and ferricel binary (runtime is embedded at compile-time)"
 	@echo "  clean    - Remove all build artifacts"
 	@echo "  help     - Show this help message"
+	@echo ""
+	@echo "Note: The runtime WASM must be built before ferricel, as it's embedded using include_bytes!"
 	@echo ""
 	@echo "Usage examples:"
 	@echo "  make ferricel"

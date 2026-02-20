@@ -5,17 +5,15 @@ use walrus::{FunctionBuilder, ModuleConfig, ValType};
 
 use crate::compiler;
 
-pub fn run(cel_code: &str, output_path: &Path, runtime_path: &Path) -> Result<(), anyhow::Error> {
-    // Check if runtime exists
-    if !runtime_path.exists() {
-        anyhow::bail!(
-            "Runtime WASM not found at {}. Did you build the 'runtime' crate first?",
-            runtime_path.display()
-        );
-    }
+// Embed the runtime WASM at compile time
+const RUNTIME_BYTES: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../target/wasm32-unknown-unknown/release/runtime.wasm"
+));
 
-    // 1. Load the runtime template
-    let mut module = ModuleConfig::new().parse_file(runtime_path)?;
+pub fn run(cel_code: &str, output_path: &Path) -> Result<(), anyhow::Error> {
+    // 1. Load the runtime template from embedded bytes
+    let mut module = ModuleConfig::new().parse(RUNTIME_BYTES)?;
 
     let env = compiler::CompilerEnv {
         add_func_id: module.exports.get_func("cel_int_add")?,

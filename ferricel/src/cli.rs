@@ -1,4 +1,4 @@
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
 use clap::{Parser as ClapParser, Subcommand};
 
@@ -22,19 +22,5 @@ pub enum Commands {
         /// Output file path
         #[arg(short, long, default_value = "final_cel_program.wasm")]
         output: PathBuf,
-
-        /// Path to the runtime WASM file
-        #[arg(
-            short, 
-            long,
-            default_value = concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../target/wasm32-unknown-unknown/release/runtime.wasm"
-            )
-        )]
-        runtime: PathBuf,
     },
 }
-
-
-
