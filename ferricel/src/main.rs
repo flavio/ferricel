@@ -9,5 +9,6 @@ fn main() -> Result<(), anyhow::Error> {
 
     match cli.command {
         cli::Commands::Build { expression, output } => cmd::build::run(&expression, &output),
+        cli::Commands::Run { wasm } => cmd::run::run(&wasm),
     }
 }

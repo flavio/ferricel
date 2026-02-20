@@ -11,6 +11,6 @@ pub extern "C" fn cel_malloc(len: usize) -> *mut u8 {
 
 // 2. Helper function for CEL logic (Exported so Walrus can find it)
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_add(a: i32, b: i32) -> i32 {
+pub extern "C" fn cel_int_add(a: i64, b: i64) -> i64 {
     a + b
 }

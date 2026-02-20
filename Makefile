@@ -46,3 +46,7 @@ help:
 	@echo "  make ferricel"
 	@echo "  cargo run -p ferricel -- build --expression '10 + 20'"
 	@echo "  cargo run -p ferricel -- build -e '5 + 15' -o output.wasm"
+	@echo "  cargo run -p ferricel -- run output.wasm"
+	@echo ""
+	@echo "Workflow example:"
+	@echo "  cargo run -p ferricel -- build -e '10 + 20' && cargo run -p ferricel -- run final_cel_program.wasm"

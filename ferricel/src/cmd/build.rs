@@ -27,11 +27,11 @@ pub fn run(cel_code: &str, output_path: &Path) -> Result<(), anyhow::Error> {
         .parse(cel_code)
         .map_err(|e| anyhow::anyhow!("Parse error: {:?}", e))?;
 
-    // 3. Build the 'validate' function (i32, i32) -> i32
+    // 3. Build the 'validate' function (i32, i32) -> i64
     let mut validate_func = FunctionBuilder::new(
         &mut module.types,
         &[ValType::I32, ValType::I32],
-        &[ValType::I32],
+        &[ValType::I64],
     );
     let input_ptr_arg = module.locals.add(ValType::I32);
     let data_ptr_arg = module.locals.add(ValType::I32);

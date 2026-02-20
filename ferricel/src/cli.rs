@@ -23,4 +23,9 @@ pub enum Commands {
         #[arg(short, long, default_value = "final_cel_program.wasm")]
         output: PathBuf,
     },
+    /// Run a compiled WebAssembly module
+    Run {
+        /// Path to the WASM file to execute
+        wasm: PathBuf,
+    },
 }
