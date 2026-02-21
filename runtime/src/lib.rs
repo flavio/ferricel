@@ -9,8 +9,121 @@ pub extern "C" fn cel_malloc(len: usize) -> *mut u8 {
     ptr
 }
 
-// 2. Helper function for CEL logic (Exported so Walrus can find it)
+// 2. Helper functions for CEL logic (Exported so Walrus can find them)
+
+// Arithmetic operations
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_add(a: i64, b: i64) -> i64 {
     a + b
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_int_sub(a: i64, b: i64) -> i64 {
+    a - b
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_int_mul(a: i64, b: i64) -> i64 {
+    a * b
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_int_div(a: i64, b: i64) -> i64 {
+    if b == 0 {
+        0 // Return 0 on division by zero (CEL behavior may vary)
+    } else {
+        a / b
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_int_mod(a: i64, b: i64) -> i64 {
+    if b == 0 {
+        0 // Return 0 on modulo by zero
+    } else {
+        a % b
+    }
+}
+
+// Comparison operations (return i64: 1 for true, 0 for false)
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_int_eq(a: i64, b: i64) -> i64 {
+    if a == b {
+        1
+    } else {
+        0
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_int_ne(a: i64, b: i64) -> i64 {
+    if a != b {
+        1
+    } else {
+        0
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_int_gt(a: i64, b: i64) -> i64 {
+    if a > b {
+        1
+    } else {
+        0
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_int_lt(a: i64, b: i64) -> i64 {
+    if a < b {
+        1
+    } else {
+        0
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_int_gte(a: i64, b: i64) -> i64 {
+    if a >= b {
+        1
+    } else {
+        0
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_int_lte(a: i64, b: i64) -> i64 {
+    if a <= b {
+        1
+    } else {
+        0
+    }
+}
+
+// Logical operations (work on i64 booleans, return i64)
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_bool_and(a: i64, b: i64) -> i64 {
+    if a != 0 && b != 0 {
+        1
+    } else {
+        0
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_bool_or(a: i64, b: i64) -> i64 {
+    if a != 0 || b != 0 {
+        1
+    } else {
+        0
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_bool_not(a: i64) -> i64 {
+    if a == 0 {
+        1
+    } else {
+        0
+    }
 }
