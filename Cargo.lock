@@ -598,6 +598,7 @@ dependencies = [
  "cel",
  "clap",
  "rstest",
+ "serde_json",
  "walrus",
  "wasmtime",
 ]
@@ -1313,6 +1314,10 @@ dependencies = [
 [[package]]
 name = "runtime"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "rustc-demangle"

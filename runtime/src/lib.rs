@@ -1,4 +1,17 @@
+use serde::Serialize;
 use std::mem;
+
+extern crate alloc;
+use alloc::vec::Vec;
+
+// CEL Value representation for JSON serialization
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum CelValue {
+    Int(i64),
+    Bool(bool),
+    // Future: String(String), Double(f64), etc.
+}
 
 // 1. Memory Allocator for the Host
 #[unsafe(no_mangle)]
@@ -7,6 +20,17 @@ pub extern "C" fn cel_malloc(len: usize) -> *mut u8 {
     let ptr = buf.as_mut_ptr();
     mem::forget(buf);
     ptr
+}
+
+// Memory deallocator
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_free(ptr: *mut u8, len: usize) {
+    if !ptr.is_null() && len > 0 {
+        unsafe {
+            let _ = Vec::from_raw_parts(ptr, len, len);
+            // Vec will be dropped here, freeing the memory
+        }
+    }
 }
 
 // 2. Helper functions for CEL logic (Exported so Walrus can find them)
@@ -129,4 +153,48 @@ pub extern "C" fn cel_bool_not(a: i64) -> i64 {
     } else {
         0
     }
+}
+
+// 3. JSON Serialization Helpers
+
+/// Encode pointer and length into a single i64
+/// Low 32 bits = pointer, High 32 bits = length
+#[inline]
+fn encode_ptr_len(ptr: i32, len: i32) -> i64 {
+    ((len as i64) << 32) | (ptr as i64 & 0xFFFFFFFF)
+}
+
+/// Serialize a CelValue to JSON and return (ptr, len) encoded in i64
+fn serialize_to_json(value: &CelValue) -> i64 {
+    // Serialize to JSON bytes
+    let json_bytes = serde_json::to_vec(value).expect("Failed to serialize CelValue to JSON");
+
+    let len = json_bytes.len();
+
+    // Allocate memory for the JSON
+    let ptr = cel_malloc(len);
+
+    // Copy JSON bytes to allocated memory
+    unsafe {
+        std::ptr::copy_nonoverlapping(json_bytes.as_ptr(), ptr, len);
+    }
+
+    // Encode and return
+    encode_ptr_len(ptr as i32, len as i32)
+}
+
+/// Convert i64 result to CelValue and serialize to JSON
+/// Returns encoded (ptr, len) as i64
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_serialize_int(value: i64) -> i64 {
+    let cel_value = CelValue::Int(value);
+    serialize_to_json(&cel_value)
+}
+
+/// Convert i64 boolean (0 or 1) to CelValue::Bool and serialize to JSON
+/// Returns encoded (ptr, len) as i64
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_serialize_bool(value: i64) -> i64 {
+    let cel_value = CelValue::Bool(value != 0);
+    serialize_to_json(&cel_value)
 }

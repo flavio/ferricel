@@ -31,12 +31,43 @@ pub struct CompilerEnv {
     pub and_func_id: FunctionId,
     pub or_func_id: FunctionId,
     pub not_func_id: FunctionId,
+
+    // JSON serialization functions
+    pub serialize_int_func_id: FunctionId,
+    pub serialize_bool_func_id: FunctionId,
+}
+
+/// Determine if an expression returns a boolean value
+fn expr_returns_bool(expr: &Expr) -> bool {
+    match expr {
+        Expr::Literal(literal) => matches!(literal, CelVal::Boolean(_)),
+        Expr::Call(call_expr) => {
+            matches!(
+                call_expr.func_name.as_str(),
+                // Comparison operators return bool
+                operators::EQUALS
+                    | operators::NOT_EQUALS
+                    | operators::GREATER
+                    | operators::LESS
+                    | operators::GREATER_EQUALS
+                    | operators::LESS_EQUALS
+                    // Logical operators return bool
+                    | operators::LOGICAL_AND
+                    | operators::LOGICAL_OR
+                    | operators::LOGICAL_NOT
+            )
+        }
+        // Add more cases as needed for other expression types
+        _ => false,
+    }
 }
 
 /// Compile a CEL expression into a WebAssembly module
 ///
 /// Takes a CEL expression string and returns the compiled WASM module as bytes.
 /// The resulting module exports a `validate` function with signature (i32, i32) -> i64.
+/// The returned i64 encodes a pointer (low 32 bits) and length (high 32 bits) to
+/// JSON-serialized result in WASM memory.
 pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     // 1. Load the runtime template from embedded bytes
     let mut module = ModuleConfig::new().parse(RUNTIME_BYTES)?;
@@ -62,6 +93,10 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         and_func_id: module.exports.get_func("cel_bool_and")?,
         or_func_id: module.exports.get_func("cel_bool_or")?,
         not_func_id: module.exports.get_func("cel_bool_not")?,
+
+        // JSON serialization functions
+        serialize_int_func_id: module.exports.get_func("cel_serialize_int")?,
+        serialize_bool_func_id: module.exports.get_func("cel_serialize_bool")?,
     };
 
     // 3. Remove the helpers from exports so the Host can't call them directly
@@ -79,6 +114,8 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     module.exports.remove("cel_bool_and")?;
     module.exports.remove("cel_bool_or")?;
     module.exports.remove("cel_bool_not")?;
+    module.exports.remove("cel_serialize_int")?;
+    module.exports.remove("cel_serialize_bool")?;
 
     // 4. Parse the CEL expression
     let root_ast = Parser::default()
@@ -99,13 +136,22 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     // 6. Walk the AST and compile to WASM instructions
     compile_expr(&root_ast.expr, &mut body, &env)?;
 
-    // 7. Finish the function definition
+    // 7. Serialize the result to JSON
+    // Determine if the result is a boolean or integer
+    let is_bool = expr_returns_bool(&root_ast.expr);
+    if is_bool {
+        body.call(env.serialize_bool_func_id);
+    } else {
+        body.call(env.serialize_int_func_id);
+    }
+
+    // 8. Finish the function definition
     let validate_id = validate_func.finish(vec![input_ptr_arg, data_ptr_arg], &mut module.funcs);
 
-    // 8. Export the 'validate' function for the Host
+    // 9. Export the 'validate' function for the Host
     module.exports.add("validate", validate_id);
 
-    // 9. Emit the module as bytes
+    // 10. Emit the module as bytes
     let wasm_bytes = module.emit_wasm();
 
     Ok(wasm_bytes)
@@ -285,7 +331,19 @@ mod tests {
     /// Test helper: compile CEL expression and execute it, returning the result
     fn compile_and_execute(cel_expr: &str) -> Result<i64, anyhow::Error> {
         let wasm_bytes = compile_cel_to_wasm(cel_expr)?;
-        runtime::execute_wasm(&wasm_bytes)
+        let json_result = runtime::execute_wasm(&wasm_bytes)?;
+
+        // Parse JSON to extract the numeric value
+        // The JSON will be either an integer (e.g., "42") or boolean (e.g., "true"/"false")
+        let value: serde_json::Value = serde_json::from_str(&json_result)?;
+
+        match value {
+            serde_json::Value::Number(n) => n
+                .as_i64()
+                .ok_or_else(|| anyhow::anyhow!("Expected i64, got: {}", n)),
+            serde_json::Value::Bool(b) => Ok(if b { 1 } else { 0 }),
+            _ => anyhow::bail!("Unexpected JSON value type: {}", value),
+        }
     }
 
     #[rstest]
@@ -739,6 +797,61 @@ mod tests {
             result.is_err(),
             "Subtraction resulting in positive overflow should produce an error, got: {:?}",
             result
+        );
+    }
+
+    #[test]
+    fn test_json_output_integer() {
+        // Test that integers are serialized as raw JSON numbers
+        let wasm_bytes = compile_cel_to_wasm("42").expect("Failed to compile");
+        let json_result = runtime::execute_wasm(&wasm_bytes).expect("Failed to execute");
+        assert_eq!(
+            json_result, "42",
+            "Integer should be serialized as raw JSON number"
+        );
+    }
+
+    #[test]
+    fn test_json_output_boolean_true() {
+        // Test that true is serialized as raw JSON boolean
+        let wasm_bytes = compile_cel_to_wasm("5 > 3").expect("Failed to compile");
+        let json_result = runtime::execute_wasm(&wasm_bytes).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "Boolean true should be serialized as 'true'"
+        );
+    }
+
+    #[test]
+    fn test_json_output_boolean_false() {
+        // Test that false is serialized as raw JSON boolean
+        let wasm_bytes = compile_cel_to_wasm("5 < 3").expect("Failed to compile");
+        let json_result = runtime::execute_wasm(&wasm_bytes).expect("Failed to execute");
+        assert_eq!(
+            json_result, "false",
+            "Boolean false should be serialized as 'false'"
+        );
+    }
+
+    #[test]
+    fn test_json_output_negative_integer() {
+        // Test that negative integers are properly serialized
+        let wasm_bytes = compile_cel_to_wasm("-123").expect("Failed to compile");
+        let json_result = runtime::execute_wasm(&wasm_bytes).expect("Failed to execute");
+        assert_eq!(
+            json_result, "-123",
+            "Negative integer should be serialized correctly"
+        );
+    }
+
+    #[test]
+    fn test_json_output_arithmetic_result() {
+        // Test that arithmetic results are serialized correctly
+        let wasm_bytes = compile_cel_to_wasm("10 + 20 * 2").expect("Failed to compile");
+        let json_result = runtime::execute_wasm(&wasm_bytes).expect("Failed to execute");
+        assert_eq!(
+            json_result, "50",
+            "Arithmetic result should be serialized correctly"
         );
     }
 }
