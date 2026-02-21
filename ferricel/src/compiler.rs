@@ -451,8 +451,22 @@ mod tests {
 
     #[test]
     fn test_division_by_zero() {
-        let result = compile_and_execute("10 / 0").expect("Should not panic on division by zero");
-        assert_eq!(result, 0, "Division by zero should return 0");
+        let result = compile_and_execute("10 / 0");
+        assert!(
+            result.is_err(),
+            "Division by zero should produce an error, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_modulo_by_zero() {
+        let result = compile_and_execute("10 % 0");
+        assert!(
+            result.is_err(),
+            "Modulo by zero should produce an error, got: {:?}",
+            result
+        );
     }
 
     // ===== Modulo Tests =====
@@ -632,6 +646,99 @@ mod tests {
             result, expected,
             "Expression '{}' should evaluate to {}",
             expr, expected
+        );
+    }
+
+    #[test]
+    fn test_integer_overflow_addition() {
+        let expr = "9223372036854775807 + 1"; // i64::MAX + 1
+        let result = compile_and_execute(expr);
+        assert!(
+            result.is_err(),
+            "Addition overflow should produce an error, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_integer_overflow_subtraction() {
+        let expr = "-9223372036854775808 - 1"; // i64::MIN - 1
+        let result = compile_and_execute(expr);
+        assert!(
+            result.is_err(),
+            "Subtraction overflow should produce an error, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_integer_overflow_multiplication() {
+        let expr = "9223372036854775807 * 2"; // i64::MAX * 2
+        let result = compile_and_execute(expr);
+        assert!(
+            result.is_err(),
+            "Multiplication overflow should produce an error, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_special_division_overflow() {
+        let expr = "-9223372036854775808 / -1"; // i64::MIN / -1
+        let result = compile_and_execute(expr);
+        assert!(
+            result.is_err(),
+            "Special case division overflow (i64::MIN / -1) should produce an error, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_special_modulo_overflow() {
+        let expr = "-9223372036854775808 % -1"; // i64::MIN % -1
+        let result = compile_and_execute(expr);
+        assert!(
+            result.is_err(),
+            "Special case modulo overflow (i64::MIN % -1) should produce an error, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_safe_arithmetic_at_boundaries() {
+        // These operations should work without overflow
+        let result = compile_and_execute("9223372036854775807 - 1")
+            .expect("i64::MAX - 1 should not overflow");
+        assert_eq!(result, 9223372036854775806);
+
+        let result = compile_and_execute("-9223372036854775808 + 1")
+            .expect("i64::MIN + 1 should not overflow");
+        assert_eq!(result, -9223372036854775807);
+
+        let result = compile_and_execute("4611686018427387903 * 2")
+            .expect("(i64::MAX / 2) * 2 should not overflow");
+        assert_eq!(result, 9223372036854775806);
+    }
+
+    #[test]
+    fn test_negative_overflow_addition() {
+        let expr = "-9223372036854775808 + -1"; // i64::MIN + -1
+        let result = compile_and_execute(expr);
+        assert!(
+            result.is_err(),
+            "Addition resulting in negative overflow should produce an error, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_positive_overflow_subtraction() {
+        let expr = "9223372036854775807 - -1"; // i64::MAX - (-1)
+        let result = compile_and_execute(expr);
+        assert!(
+            result.is_err(),
+            "Subtraction resulting in positive overflow should produce an error, got: {:?}",
+            result
         );
     }
 }

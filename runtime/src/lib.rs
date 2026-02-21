@@ -12,37 +12,40 @@ pub extern "C" fn cel_malloc(len: usize) -> *mut u8 {
 // 2. Helper functions for CEL logic (Exported so Walrus can find them)
 
 // Arithmetic operations
+// All operations use checked arithmetic to detect overflow and panic on error,
+// matching CEL specification behavior
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_add(a: i64, b: i64) -> i64 {
-    a + b
+    a.checked_add(b).expect("integer overflow in addition")
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_sub(a: i64, b: i64) -> i64 {
-    a - b
+    a.checked_sub(b).expect("integer overflow in subtraction")
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_mul(a: i64, b: i64) -> i64 {
-    a * b
+    a.checked_mul(b)
+        .expect("integer overflow in multiplication")
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_div(a: i64, b: i64) -> i64 {
     if b == 0 {
-        0 // Return 0 on division by zero (CEL behavior may vary)
-    } else {
-        a / b
+        panic!("division by zero");
     }
+    // checked_div also catches the special case: i64::MIN / -1
+    a.checked_div(b).expect("integer overflow in division")
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_mod(a: i64, b: i64) -> i64 {
     if b == 0 {
-        0 // Return 0 on modulo by zero
-    } else {
-        a % b
+        panic!("modulo by zero");
     }
+    // checked_rem also catches the special case: i64::MIN % -1
+    a.checked_rem(b).expect("integer overflow in modulo")
 }
 
 // Comparison operations (return i64: 1 for true, 0 for false)
