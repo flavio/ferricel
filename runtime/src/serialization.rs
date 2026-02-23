@@ -50,7 +50,7 @@ pub extern "C" fn cel_serialize_bool(value: i64) -> i64 {
 mod tests {
     use super::*;
     extern crate alloc;
-    
+
     use alloc::vec;
     use hashbrown::HashMap;
 

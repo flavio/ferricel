@@ -5,6 +5,7 @@ mod arithmetic;
 mod comparison;
 mod conversion;
 mod deserialization;
+mod field_access;
 mod globals;
 mod logical;
 mod memory;
@@ -30,3 +31,5 @@ pub use deserialization::{cel_deserialize_json, cel_free_value};
 pub use globals::{cel_get_data, cel_get_input, cel_init_data, cel_init_input, cel_reset_globals};
 
 pub use conversion::{cel_value_to_bool, cel_value_to_i64};
+
+pub use field_access::cel_get_field;

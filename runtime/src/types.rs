@@ -20,7 +20,7 @@ type CelMap = HashMap<String, CelValue, hashbrown::hash_map::DefaultHashBuilder>
 ///
 /// Note: Bytes type is not yet supported due to ser ialization complexity.
 /// It will be added in a future update.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CelValue {
     /// Null value (checked first to avoid ambiguity)

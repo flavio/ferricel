@@ -81,7 +81,6 @@ pub unsafe extern "C" fn cel_free_value(ptr: *mut CelValue) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_decode_ptr_len() {
