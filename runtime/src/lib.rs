@@ -2,6 +2,7 @@ extern crate alloc;
 
 // Module declarations
 mod arithmetic;
+mod array;
 mod comparison;
 mod conversion;
 mod deserialization;
@@ -23,7 +24,9 @@ pub use arithmetic::{cel_int_add, cel_int_div, cel_int_mod, cel_int_mul, cel_int
 
 pub use comparison::{cel_int_eq, cel_int_gt, cel_int_gte, cel_int_lt, cel_int_lte, cel_int_ne};
 
-pub use logical::{cel_bool_and, cel_bool_not, cel_bool_or};
+pub use logical::{
+    cel_bool_and, cel_bool_not, cel_bool_or, cel_conditional, cel_not_strictly_false,
+};
 
 pub use serialization::{cel_serialize_bool, cel_serialize_int, cel_serialize_value};
 
@@ -34,5 +37,7 @@ pub use globals::{cel_get_data, cel_get_input, cel_init_data, cel_init_input, ce
 pub use conversion::{cel_value_to_bool, cel_value_to_i64};
 
 pub use field_access::cel_get_field;
+
+pub use array::{cel_array_get, cel_array_len, cel_array_push, cel_create_array};
 
 pub use helpers::{cel_create_bool, cel_create_int};

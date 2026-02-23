@@ -2,7 +2,8 @@ use cel::common::ast::operators;
 use cel::common::ast::Expr;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
-use walrus::{FunctionBuilder, FunctionId, InstrSeqBuilder, ModuleConfig, ValType};
+use std::collections::HashMap;
+use walrus::{FunctionBuilder, FunctionId, InstrSeqBuilder, LocalId, ModuleConfig, ValType};
 
 // Embed the runtime WASM at compile time
 const RUNTIME_BYTES: &[u8] = include_bytes!(concat!(
@@ -31,6 +32,8 @@ pub struct CompilerEnv {
     pub and_func_id: FunctionId,
     pub or_func_id: FunctionId,
     pub not_func_id: FunctionId,
+    pub not_strictly_false_func_id: FunctionId,
+    pub conditional_func_id: FunctionId,
 
     // JSON serialization
     pub serialize_value_func_id: FunctionId,
@@ -48,12 +51,46 @@ pub struct CompilerEnv {
     pub get_field_func_id: FunctionId,
     pub has_field_func_id: FunctionId,
 
+    // Array operations
+    pub array_len_func_id: FunctionId,
+    pub array_get_func_id: FunctionId,
+    pub create_array_func_id: FunctionId,
+    pub array_push_func_id: FunctionId,
+
     // Memory allocation (for field names)
     pub malloc_func_id: FunctionId,
 
     // Value creation helpers
     pub create_int_func_id: FunctionId,
     pub create_bool_func_id: FunctionId,
+
+    // Value conversion helpers
+    pub value_to_bool_func_id: FunctionId,
+}
+
+/// Compilation context that holds state during expression compilation
+/// This includes local variable bindings for comprehensions and other scoped contexts
+pub struct CompilerContext {
+    /// Maps variable names to their local IDs in the WASM function
+    /// Used for iteration variables in comprehensions (e.g., "x" in [1,2,3].all(x, x > 0))
+    pub local_vars: HashMap<String, LocalId>,
+}
+
+impl CompilerContext {
+    /// Create a new empty compilation context
+    pub fn new() -> Self {
+        Self {
+            local_vars: HashMap::new(),
+        }
+    }
+
+    /// Create a child context with an additional local variable binding
+    /// This is used when entering a new scope (e.g., comprehension)
+    pub fn with_local(&self, name: String, local_id: LocalId) -> Self {
+        let mut local_vars = self.local_vars.clone();
+        local_vars.insert(name, local_id);
+        Self { local_vars }
+    }
 }
 
 /// Compile a CEL expression into a WebAssembly module
@@ -90,6 +127,8 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         and_func_id: module.exports.get_func("cel_bool_and")?,
         or_func_id: module.exports.get_func("cel_bool_or")?,
         not_func_id: module.exports.get_func("cel_bool_not")?,
+        not_strictly_false_func_id: module.exports.get_func("cel_not_strictly_false")?,
+        conditional_func_id: module.exports.get_func("cel_conditional")?,
 
         // JSON serialization
         serialize_value_func_id: module.exports.get_func("cel_serialize_value")?,
@@ -107,12 +146,21 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         get_field_func_id: module.exports.get_func("cel_get_field")?,
         has_field_func_id: module.exports.get_func("cel_has_field")?,
 
+        // Array operations
+        array_len_func_id: module.exports.get_func("cel_array_len")?,
+        array_get_func_id: module.exports.get_func("cel_array_get")?,
+        create_array_func_id: module.exports.get_func("cel_create_array")?,
+        array_push_func_id: module.exports.get_func("cel_array_push")?,
+
         // Memory allocation
         malloc_func_id,
 
         // Value creation helpers
         create_int_func_id: module.exports.get_func("cel_create_int")?,
         create_bool_func_id: module.exports.get_func("cel_create_bool")?,
+
+        // Value conversion helpers
+        value_to_bool_func_id: module.exports.get_func("cel_value_to_bool")?,
     };
 
     // 3. Remove the helpers from exports so the Host can't call them directly
@@ -130,6 +178,8 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     module.exports.remove("cel_bool_and")?;
     module.exports.remove("cel_bool_or")?;
     module.exports.remove("cel_bool_not")?;
+    module.exports.remove("cel_not_strictly_false")?;
+    module.exports.remove("cel_conditional")?;
     module.exports.remove("cel_serialize_value")?;
     module.exports.remove("cel_deserialize_json")?;
     module.exports.remove("cel_init_input")?;
@@ -138,8 +188,13 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     module.exports.remove("cel_get_data")?;
     module.exports.remove("cel_get_field")?;
     module.exports.remove("cel_has_field")?;
+    module.exports.remove("cel_array_len")?;
+    module.exports.remove("cel_array_get")?;
+    module.exports.remove("cel_create_array")?;
+    module.exports.remove("cel_array_push")?;
     module.exports.remove("cel_create_int")?;
     module.exports.remove("cel_create_bool")?;
+    module.exports.remove("cel_value_to_bool")?;
 
     // 4. Parse the CEL expression
     let root_ast = Parser::default()
@@ -172,7 +227,8 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
 
     // 7. Walk the AST and compile to WASM instructions
     // This leaves a *mut CelValue on the stack
-    compile_expr(&root_ast.expr, &mut body, &env, &mut module)?;
+    let ctx = CompilerContext::new();
+    compile_expr(&root_ast.expr, &mut body, &env, &ctx, &mut module)?;
 
     // 8. Serialize the result to JSON
     // The stack has a *mut CelValue, serialize it directly
@@ -197,6 +253,7 @@ pub fn compile_expr(
     expr: &Expr,
     body: &mut InstrSeqBuilder,
     env: &CompilerEnv,
+    ctx: &CompilerContext,
     module: &mut walrus::Module,
 ) -> Result<(), anyhow::Error> {
     match expr {
@@ -228,40 +285,40 @@ pub fn compile_expr(
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Add operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.add_func_id);
                 }
                 operators::SUBSTRACT => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Subtract operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.sub_func_id);
                 }
                 operators::MULTIPLY => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Multiply operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.mul_func_id);
                 }
                 operators::DIVIDE => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Divide operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.div_func_id);
                 }
                 operators::MODULO => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Modulo operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.mod_func_id);
                 }
 
@@ -270,48 +327,48 @@ pub fn compile_expr(
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Equals operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.eq_func_id);
                 }
                 operators::NOT_EQUALS => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Not equals operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.ne_func_id);
                 }
                 operators::GREATER => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Greater than operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.gt_func_id);
                 }
                 operators::LESS => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Less than operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.lt_func_id);
                 }
                 operators::GREATER_EQUALS => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Greater or equal operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.gte_func_id);
                 }
                 operators::LESS_EQUALS => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Less or equal operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.lte_func_id);
                 }
 
@@ -320,24 +377,46 @@ pub fn compile_expr(
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Logical AND operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.and_func_id);
                 }
                 operators::LOGICAL_OR => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Logical OR operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.or_func_id);
                 }
                 operators::LOGICAL_NOT => {
                     if call_expr.args.len() != 1 {
                         anyhow::bail!("Logical NOT operator expects 1 argument");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     body.call(env.not_func_id);
+                }
+
+                operators::NOT_STRICTLY_FALSE => {
+                    // @not_strictly_false is used in comprehension loop conditions
+                    // It returns true if the value is not exactly CelValue::Bool(false)
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("@not_strictly_false expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.not_strictly_false_func_id);
+                }
+
+                operators::CONDITIONAL => {
+                    // Ternary/conditional operator: condition ? true_value : false_value
+                    if call_expr.args.len() != 3 {
+                        anyhow::bail!("Conditional operator expects 3 arguments");
+                    }
+                    // Compile all three arguments
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?; // condition
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?; // true_value
+                    compile_expr(&call_expr.args[2].expr, body, env, ctx, module)?; // false_value
+                    body.call(env.conditional_func_id);
                 }
 
                 _ => anyhow::bail!("Unsupported function call: {}", call_expr.func_name),
@@ -346,23 +425,29 @@ pub fn compile_expr(
 
         // 3. Identifiers (variables)
         Expr::Ident(name) => {
-            // Support 'input' and 'data' variables
-            match name.as_str() {
-                "input" => {
-                    // Get the input variable from global storage
-                    // Returns *mut CelValue
-                    body.call(env.get_input_func_id);
-                }
-                "data" => {
-                    // Get the data variable from global storage
-                    // Returns *mut CelValue
-                    body.call(env.get_data_func_id);
-                }
-                _ => {
-                    anyhow::bail!(
-                        "Unknown variable: {}. Only 'input' and 'data' are supported.",
-                        name
-                    );
+            // First check if this is a local variable (from comprehension scope)
+            if let Some(&local_id) = ctx.local_vars.get(name) {
+                // This is a local variable, load it from the local
+                body.local_get(local_id);
+            } else {
+                // Not a local variable, check global variables
+                match name.as_str() {
+                    "input" => {
+                        // Get the input variable from global storage
+                        // Returns *mut CelValue
+                        body.call(env.get_input_func_id);
+                    }
+                    "data" => {
+                        // Get the data variable from global storage
+                        // Returns *mut CelValue
+                        body.call(env.get_data_func_id);
+                    }
+                    _ => {
+                        anyhow::bail!(
+                            "Unknown variable: {}. Only 'input' and 'data' are supported.",
+                            name
+                        );
+                    }
                 }
             }
         }
@@ -371,7 +456,7 @@ pub fn compile_expr(
         Expr::Select(select_expr) => {
             // Recursively compile the operand as a pointer (e.g., `input` or `input.user`)
             // This will leave a *mut CelValue (i32) on the stack
-            compile_expr(&select_expr.operand.expr, body, env, module)?;
+            compile_expr(&select_expr.operand.expr, body, env, ctx, module)?;
 
             // Now we need to get the field from the object
             // The operand (object pointer) is on the stack
@@ -430,6 +515,164 @@ pub fn compile_expr(
                 // Normal field access: get field value
                 body.call(env.get_field_func_id);
             }
+        }
+
+        // 5. List Literals
+        // [1, 2, 3] creates a CelValue::Array
+        Expr::List(list_expr) => {
+            // Create an empty array
+            body.call(env.create_array_func_id);
+
+            // Create a local to hold the array pointer while we push elements
+            let array_ptr_local = module.locals.add(ValType::I32);
+            body.local_set(array_ptr_local); // Pop array pointer into local
+
+            // For each element in the list
+            for element in &list_expr.elements {
+                // Compile the element expression (leaves *mut CelValue on stack)
+                compile_expr(&element.expr, body, env, ctx, module)?;
+
+                // Create a local to hold the element pointer
+                let element_ptr_local = module.locals.add(ValType::I32);
+                body.local_set(element_ptr_local); // Pop element pointer into local
+
+                // Push: cel_array_push(array_ptr, element_ptr)
+                body.local_get(array_ptr_local); // Load array pointer
+                body.local_get(element_ptr_local); // Load element pointer
+                body.call(env.array_push_func_id); // Call push (returns void)
+            }
+
+            // Leave the array pointer on the stack
+            body.local_get(array_ptr_local);
+        }
+
+        // 6. Comprehensions (e.g., [1,2,3].all(x, x > 0))
+        // The CEL parser automatically expands macros like all() into Comprehension expressions
+        Expr::Comprehension(comp_expr) => {
+            // For all() macro:
+            // - accu_var is "@result" (accumulator, starts as true)
+            // - iter_var is the iteration variable (e.g., "x")
+            // - iter_range is the array expression
+            // - loop_cond checks if we should continue (e.g., @not_strictly_false(@result))
+            // - loop_step updates the accumulator (e.g., @result && predicate)
+            // - result is what we return (e.g., @result)
+
+            // Step 1: Compile the iter_range (the array to iterate over)
+            compile_expr(&comp_expr.iter_range.expr, body, env, ctx, module)?;
+
+            // Create a local to hold the array pointer
+            let array_ptr_local = module.locals.add(ValType::I32);
+            body.local_set(array_ptr_local);
+
+            // Step 2: Get the array length
+            body.local_get(array_ptr_local);
+            body.call(env.array_len_func_id); // Returns i32 length
+
+            // Create a local to hold the length
+            let length_local = module.locals.add(ValType::I32);
+            body.local_set(length_local);
+
+            // Step 3: Initialize the accumulator variable
+            // Compile accu_init (e.g., CelValue::Bool(true) for all())
+            compile_expr(&comp_expr.accu_init.expr, body, env, ctx, module)?;
+
+            // Create a local to hold the accumulator pointer
+            let accu_local = module.locals.add(ValType::I32);
+            body.local_set(accu_local);
+
+            // Step 4: Initialize loop counter (index = 0)
+            let index_local = module.locals.add(ValType::I32);
+            body.i32_const(0);
+            body.local_set(index_local);
+
+            // Step 5: Create the loop using WASM block/loop instructions
+            // Structure: block $exit { loop $continue { ... } }
+            let exit_block = body.dangling_instr_seq(None);
+            let exit_block_id = exit_block.id();
+            let continue_loop = body.dangling_instr_seq(None);
+            let continue_loop_id = continue_loop.id();
+
+            body.instr(walrus::ir::Block { seq: exit_block_id });
+
+            // Start of exit block
+            body.instr_seq(exit_block_id).instr(walrus::ir::Loop {
+                seq: continue_loop_id,
+            });
+
+            // Start of continue loop
+            let mut loop_body = body.instr_seq(continue_loop_id);
+
+            // Check if index >= length (exit condition)
+            loop_body.local_get(index_local);
+            loop_body.local_get(length_local);
+            loop_body.binop(walrus::ir::BinaryOp::I32GeU); // index >= length?
+            loop_body.instr(walrus::ir::BrIf {
+                block: exit_block_id,
+            }); // Exit if true
+
+            // Get the current element: cel_array_get(array_ptr, index)
+            loop_body.local_get(array_ptr_local);
+            loop_body.local_get(index_local);
+            loop_body.call(env.array_get_func_id); // Returns *mut CelValue
+
+            // Create a local for the current element
+            let element_local = module.locals.add(ValType::I32);
+            loop_body.local_set(element_local);
+
+            // Create a new context with the iteration variable bound to the element
+            let inner_ctx = ctx.with_local(comp_expr.iter_var.clone(), element_local);
+
+            // Also bind the accumulator variable to the context
+            let inner_ctx = inner_ctx.with_local(comp_expr.accu_var.clone(), accu_local);
+
+            // Compile the loop_step (e.g., @result && predicate)
+            // This updates the accumulator
+            compile_expr(
+                &comp_expr.loop_step.expr,
+                &mut loop_body,
+                env,
+                &inner_ctx,
+                module,
+            )?;
+
+            // Store the new accumulator value
+            loop_body.local_set(accu_local);
+
+            // Check the loop_cond to see if we should short-circuit
+            // For all(), this is: @not_strictly_false(@result)
+            compile_expr(
+                &comp_expr.loop_cond.expr,
+                &mut loop_body,
+                env,
+                &inner_ctx,
+                module,
+            )?;
+
+            // Convert the loop condition (CelValue::Bool) to i64 (0 or 1)
+            loop_body.call(env.value_to_bool_func_id); // Returns i64: 1 if true, 0 if false
+
+            // If the condition is false (0), we should exit the loop
+            // i32.eqz checks if value is 0, returns 1 if yes, 0 if no
+            loop_body.unop(walrus::ir::UnaryOp::I64Eqz); // 1 if cond was false, 0 if true
+            loop_body.instr(walrus::ir::BrIf {
+                block: exit_block_id,
+            }); // Exit if condition was false
+
+            // Increment the index
+            loop_body.local_get(index_local);
+            loop_body.i32_const(1);
+            loop_body.binop(walrus::ir::BinaryOp::I32Add);
+            loop_body.local_set(index_local);
+
+            // Continue the loop
+            loop_body.instr(walrus::ir::Br {
+                block: continue_loop_id,
+            }); // Jump back to start of loop
+
+            // After the loop, compile the result expression
+            // For all(), this is just @result (the accumulator)
+            let result_ctx = ctx.with_local(comp_expr.accu_var.clone(), accu_local);
+            compile_expr(&comp_expr.result.expr, body, env, &result_ctx, module)?;
         }
 
         _ => anyhow::bail!("Unsupported expression type: {:?}", expr),
@@ -994,6 +1237,361 @@ mod tests {
         assert_eq!(
             json_result, "50",
             "Arithmetic result should be serialized correctly"
+        );
+    }
+
+    // ========================================
+    // List Literal Tests
+    // ========================================
+
+    #[test]
+    fn test_list_empty() {
+        // Test that empty list is serialized as []
+        let wasm_bytes = compile_cel_to_wasm("[]").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(json_result, "[]", "Empty list should be serialized as []");
+    }
+
+    #[test]
+    fn test_list_single_element() {
+        // Test list with one integer
+        let wasm_bytes = compile_cel_to_wasm("[42]").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[42]",
+            "List with single element should be serialized correctly"
+        );
+    }
+
+    #[test]
+    fn test_list_multiple_integers() {
+        // Test list with multiple integers
+        let wasm_bytes = compile_cel_to_wasm("[1, 2, 3]").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[1,2,3]",
+            "List with multiple integers should be serialized correctly"
+        );
+    }
+
+    #[test]
+    fn test_list_with_expressions() {
+        // Test list with arithmetic expressions as elements
+        let wasm_bytes = compile_cel_to_wasm("[1 + 1, 2 * 3, 10 - 5]").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[2,6,5]",
+            "List with expressions should evaluate each element"
+        );
+    }
+
+    #[test]
+    fn test_list_mixed_types() {
+        // Test list with mixed types (integers and booleans)
+        let wasm_bytes = compile_cel_to_wasm("[1, true, 3, false]").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[1,true,3,false]",
+            "List with mixed types should be serialized correctly"
+        );
+    }
+
+    #[test]
+    fn test_list_with_comparisons() {
+        // Test list with comparison results
+        let wasm_bytes =
+            compile_cel_to_wasm("[5 > 3, 2 < 1, 10 == 10]").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[true,false,true]",
+            "List with comparison results should be serialized correctly"
+        );
+    }
+
+    // ========================================
+    // all() Macro Tests
+    // ========================================
+
+    #[test]
+    fn test_all_macro_all_true() {
+        // Test all() with all elements satisfying the predicate
+        let wasm_bytes = compile_cel_to_wasm("[1, 2, 3].all(x, x > 0)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "all(x, x > 0) should return true for [1,2,3]"
+        );
+    }
+
+    #[test]
+    fn test_all_macro_some_false() {
+        // Test all() with some elements not satisfying the predicate
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, -2, 3].all(x, x > 0)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "false",
+            "all(x, x > 0) should return false for [1,-2,3]"
+        );
+    }
+
+    #[test]
+    fn test_all_macro_empty_list() {
+        // Test all() with an empty list (should return true)
+        let wasm_bytes = compile_cel_to_wasm("[].all(x, x > 0)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "all() should return true for empty list"
+        );
+    }
+
+    #[test]
+    fn test_all_macro_complex_predicate() {
+        // Test all() with a more complex predicate
+        let wasm_bytes = compile_cel_to_wasm("[10, 20, 30].all(x, x >= 10 && x <= 30)")
+            .expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "all() with complex predicate should return true"
+        );
+    }
+
+    #[test]
+    fn test_all_macro_equality() {
+        // Test all() with equality predicate
+        let wasm_bytes =
+            compile_cel_to_wasm("[5, 5, 5].all(x, x == 5)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "all(x, x == 5) should return true for [5,5,5]"
+        );
+    }
+
+    #[test]
+    fn test_all_macro_single_false() {
+        // Test all() with single element being false
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3, 0].all(x, x > 0)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "false",
+            "all() should return false when one element fails"
+        );
+    }
+
+    #[test]
+    fn test_all_macro_with_expressions() {
+        // Test all() with array of expressions
+        let wasm_bytes =
+            compile_cel_to_wasm("[1+1, 2*3, 10-5].all(x, x > 1)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "all() should work with expression elements"
+        );
+    }
+
+    // ========================================
+    // exists() Macro Tests
+    // ========================================
+
+    #[test]
+    fn test_exists_macro_one_true() {
+        // Test exists() with one element satisfying the predicate
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3].exists(x, x > 2)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "exists(x, x > 2) should return true for [1,2,3]"
+        );
+    }
+
+    #[test]
+    fn test_exists_macro_all_false() {
+        // Test exists() with no elements satisfying the predicate
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3].exists(x, x > 10)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "false",
+            "exists(x, x > 10) should return false for [1,2,3]"
+        );
+    }
+
+    #[test]
+    fn test_exists_macro_empty_list() {
+        // Test exists() with an empty list (should return false)
+        let wasm_bytes = compile_cel_to_wasm("[].exists(x, x > 0)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "false",
+            "exists() should return false for empty list"
+        );
+    }
+
+    #[test]
+    fn test_exists_macro_all_true() {
+        // Test exists() when all elements satisfy the predicate
+        let wasm_bytes =
+            compile_cel_to_wasm("[5, 10, 15].exists(x, x > 0)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "exists() should return true when at least one element satisfies predicate"
+        );
+    }
+
+    #[test]
+    fn test_exists_macro_complex_predicate() {
+        // Test exists() with a complex predicate
+        let wasm_bytes = compile_cel_to_wasm("[1, 5, 10].exists(x, x >= 5 && x <= 10)")
+            .expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "exists() with complex predicate should return true"
+        );
+    }
+
+    #[test]
+    fn test_exists_macro_first_element_true() {
+        // Test exists() short-circuits on first true
+        let wasm_bytes =
+            compile_cel_to_wasm("[10, 1, 2].exists(x, x > 5)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "exists() should return true when first element satisfies predicate"
+        );
+    }
+
+    #[test]
+    fn test_exists_macro_last_element_true() {
+        // Test exists() with only last element true
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 10].exists(x, x > 5)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "exists() should return true when last element satisfies predicate"
+        );
+    }
+
+    // ========================================
+    // exists_one() Macro Tests
+    // ========================================
+
+    #[test]
+    fn test_exists_one_macro_exactly_one() {
+        // Test exists_one() with exactly one element satisfying the predicate
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 5, 3].exists_one(x, x > 4)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "exists_one(x, x > 4) should return true for [1,5,3] (only 5 satisfies)"
+        );
+    }
+
+    #[test]
+    fn test_exists_one_macro_none() {
+        // Test exists_one() with no elements satisfying the predicate
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3].exists_one(x, x > 10)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "false",
+            "exists_one() should return false when no elements satisfy predicate"
+        );
+    }
+
+    #[test]
+    fn test_exists_one_macro_multiple() {
+        // Test exists_one() with multiple elements satisfying the predicate
+        let wasm_bytes =
+            compile_cel_to_wasm("[5, 10, 15].exists_one(x, x > 4)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "false",
+            "exists_one() should return false when multiple elements satisfy predicate"
+        );
+    }
+
+    #[test]
+    fn test_exists_one_macro_empty_list() {
+        // Test exists_one() with an empty list (should return false)
+        let wasm_bytes = compile_cel_to_wasm("[].exists_one(x, x > 0)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "false",
+            "exists_one() should return false for empty list"
+        );
+    }
+
+    #[test]
+    fn test_exists_one_macro_first_element_only() {
+        // Test exists_one() when only first element satisfies
+        let wasm_bytes =
+            compile_cel_to_wasm("[10, 1, 2].exists_one(x, x > 5)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "exists_one() should return true when only first element satisfies"
+        );
+    }
+
+    #[test]
+    fn test_exists_one_macro_last_element_only() {
+        // Test exists_one() when only last element satisfies
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 10].exists_one(x, x > 5)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "true",
+            "exists_one() should return true when only last element satisfies"
+        );
+    }
+
+    #[test]
+    fn test_exists_one_macro_two_elements() {
+        // Test exists_one() when two elements satisfy
+        let wasm_bytes =
+            compile_cel_to_wasm("[10, 20, 1].exists_one(x, x > 5)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "false",
+            "exists_one() should return false when two elements satisfy predicate"
         );
     }
 
