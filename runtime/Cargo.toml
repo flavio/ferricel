@@ -9,3 +9,5 @@ crate-type = ["cdylib"]
 [dependencies]
 serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+hashbrown = { version = "0.14", default-features = false, features = ["serde", "ahash"] }
+serde_bytes = { version = "0.11", default-features = false, features = ["alloc"] }

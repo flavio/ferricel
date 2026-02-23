@@ -35,6 +35,19 @@ pub struct CompilerEnv {
     // JSON serialization functions
     pub serialize_int_func_id: FunctionId,
     pub serialize_bool_func_id: FunctionId,
+
+    // JSON deserialization
+    pub deserialize_json_func_id: FunctionId,
+
+    // Global variable storage
+    pub init_input_func_id: FunctionId,
+    pub init_data_func_id: FunctionId,
+    pub get_input_func_id: FunctionId,
+    pub get_data_func_id: FunctionId,
+
+    // Type conversion
+    pub value_to_i64_func_id: FunctionId,
+    pub value_to_bool_func_id: FunctionId,
 }
 
 /// Determine if an expression returns a boolean value
@@ -97,6 +110,19 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         // JSON serialization functions
         serialize_int_func_id: module.exports.get_func("cel_serialize_int")?,
         serialize_bool_func_id: module.exports.get_func("cel_serialize_bool")?,
+
+        // JSON deserialization
+        deserialize_json_func_id: module.exports.get_func("cel_deserialize_json")?,
+
+        // Global variable storage
+        init_input_func_id: module.exports.get_func("cel_init_input")?,
+        init_data_func_id: module.exports.get_func("cel_init_data")?,
+        get_input_func_id: module.exports.get_func("cel_get_input")?,
+        get_data_func_id: module.exports.get_func("cel_get_data")?,
+
+        // Type conversion
+        value_to_i64_func_id: module.exports.get_func("cel_value_to_i64")?,
+        value_to_bool_func_id: module.exports.get_func("cel_value_to_bool")?,
     };
 
     // 3. Remove the helpers from exports so the Host can't call them directly
@@ -116,27 +142,47 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     module.exports.remove("cel_bool_not")?;
     module.exports.remove("cel_serialize_int")?;
     module.exports.remove("cel_serialize_bool")?;
+    module.exports.remove("cel_deserialize_json")?;
+    module.exports.remove("cel_init_input")?;
+    module.exports.remove("cel_init_data")?;
+    module.exports.remove("cel_get_input")?;
+    module.exports.remove("cel_get_data")?;
+    module.exports.remove("cel_value_to_i64")?;
+    module.exports.remove("cel_value_to_bool")?;
 
     // 4. Parse the CEL expression
     let root_ast = Parser::default()
         .parse(cel_code)
         .map_err(|e| anyhow::anyhow!("Parse error: {:?}", e))?;
 
-    // 5. Build the 'validate' function (i32, i32) -> i64
+    // 5. Build the 'validate' function (i64, i64) -> i64
+    // First i64: encoded (ptr, len) for input JSON (0 if no input)
+    // Second i64: encoded (ptr, len) for data JSON (0 if no data)
     let mut validate_func = FunctionBuilder::new(
         &mut module.types,
-        &[ValType::I32, ValType::I32],
+        &[ValType::I64, ValType::I64],
         &[ValType::I64],
     );
-    let input_ptr_arg = module.locals.add(ValType::I32);
-    let data_ptr_arg = module.locals.add(ValType::I32);
+    let input_encoded_arg = module.locals.add(ValType::I64);
+    let data_encoded_arg = module.locals.add(ValType::I64);
 
     let mut body = validate_func.func_body();
 
-    // 6. Walk the AST and compile to WASM instructions
+    // 6. Initialize global variables (input and data)
+    // Deserialize input (first parameter) and store in global
+    body.local_get(input_encoded_arg)
+        .call(env.deserialize_json_func_id) // Returns *mut CelValue
+        .call(env.init_input_func_id); // Store in INPUT_VALUE global
+
+    // Deserialize data (second parameter) and store in global
+    body.local_get(data_encoded_arg)
+        .call(env.deserialize_json_func_id) // Returns *mut CelValue
+        .call(env.init_data_func_id); // Store in DATA_VALUE global
+
+    // 7. Walk the AST and compile to WASM instructions
     compile_expr(&root_ast.expr, &mut body, &env)?;
 
-    // 7. Serialize the result to JSON
+    // 8. Serialize the result to JSON
     // Determine if the result is a boolean or integer
     let is_bool = expr_returns_bool(&root_ast.expr);
     if is_bool {
@@ -145,13 +191,14 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         body.call(env.serialize_int_func_id);
     }
 
-    // 8. Finish the function definition
-    let validate_id = validate_func.finish(vec![input_ptr_arg, data_ptr_arg], &mut module.funcs);
+    // 9. Finish the function definition
+    let validate_id =
+        validate_func.finish(vec![input_encoded_arg, data_encoded_arg], &mut module.funcs);
 
-    // 9. Export the 'validate' function for the Host
+    // 10. Export the 'validate' function for the Host
     module.exports.add("validate", validate_id);
 
-    // 10. Emit the module as bytes
+    // 11. Emit the module as bytes
     let wasm_bytes = module.emit_wasm();
 
     Ok(wasm_bytes)
@@ -308,7 +355,27 @@ pub fn compile_expr(
 
         // 3. Identifiers (variables)
         Expr::Ident(name) => {
-            anyhow::bail!("Variable access not yet implemented: {}", name);
+            // PR #4: Support 'input' and 'data' variables (integer primitives only)
+            match name.as_str() {
+                "input" => {
+                    // Get the input variable from global storage
+                    body.call(env.get_input_func_id);
+                    // Convert CelValue to i64
+                    body.call(env.value_to_i64_func_id);
+                }
+                "data" => {
+                    // Get the data variable from global storage
+                    body.call(env.get_data_func_id);
+                    // Convert CelValue to i64
+                    body.call(env.value_to_i64_func_id);
+                }
+                _ => {
+                    anyhow::bail!(
+                        "Unknown variable: {}. Only 'input' and 'data' are supported.",
+                        name
+                    );
+                }
+            }
         }
 
         // 4. Field selection (e.g., object.field)
@@ -335,6 +402,27 @@ mod tests {
 
         // Parse JSON to extract the numeric value
         // The JSON will be either an integer (e.g., "42") or boolean (e.g., "true"/"false")
+        let value: serde_json::Value = serde_json::from_str(&json_result)?;
+
+        match value {
+            serde_json::Value::Number(n) => n
+                .as_i64()
+                .ok_or_else(|| anyhow::anyhow!("Expected i64, got: {}", n)),
+            serde_json::Value::Bool(b) => Ok(if b { 1 } else { 0 }),
+            _ => anyhow::bail!("Unexpected JSON value type: {}", value),
+        }
+    }
+
+    /// Test helper: compile CEL expression with variables and execute it
+    fn compile_and_execute_with_vars(
+        cel_expr: &str,
+        input_json: Option<&str>,
+        data_json: Option<&str>,
+    ) -> Result<i64, anyhow::Error> {
+        let wasm_bytes = compile_cel_to_wasm(cel_expr)?;
+        let json_result = runtime::execute_wasm_with_vars(&wasm_bytes, input_json, data_json)?;
+
+        // Parse JSON to extract the numeric value
         let value: serde_json::Value = serde_json::from_str(&json_result)?;
 
         match value {
@@ -853,5 +941,101 @@ mod tests {
             json_result, "50",
             "Arithmetic result should be serialized correctly"
         );
+    }
+
+    // ========================================
+    // Variable Access Tests (PR #4)
+    // ========================================
+
+    #[test]
+    fn test_input_variable_positive() {
+        // Test accessing input variable with a positive integer
+        let result =
+            compile_and_execute_with_vars("input", Some("42"), None).expect("Failed to execute");
+        assert_eq!(result, 42, "input should return 42");
+    }
+
+    #[test]
+    fn test_input_variable_negative() {
+        // Test accessing input variable with a negative integer
+        let result =
+            compile_and_execute_with_vars("input", Some("-10"), None).expect("Failed to execute");
+        assert_eq!(result, -10, "input should return -10");
+    }
+
+    #[test]
+    fn test_input_variable_zero() {
+        // Test accessing input variable with zero
+        let result =
+            compile_and_execute_with_vars("input", Some("0"), None).expect("Failed to execute");
+        assert_eq!(result, 0, "input should return 0");
+    }
+
+    #[test]
+    fn test_data_variable_positive() {
+        // Test accessing data variable with a positive integer
+        let result =
+            compile_and_execute_with_vars("data", None, Some("100")).expect("Failed to execute");
+        assert_eq!(result, 100, "data should return 100");
+    }
+
+    #[test]
+    fn test_data_variable_negative() {
+        // Test accessing data variable with a negative integer
+        let result =
+            compile_and_execute_with_vars("data", None, Some("-50")).expect("Failed to execute");
+        assert_eq!(result, -50, "data should return -50");
+    }
+
+    #[test]
+    fn test_input_and_data_addition() {
+        // Test using both input and data in an expression
+        let result = compile_and_execute_with_vars("input + data", Some("10"), Some("20"))
+            .expect("Failed to execute");
+        assert_eq!(result, 30, "input + data should return 30");
+    }
+
+    #[test]
+    fn test_input_and_data_multiplication() {
+        // Test multiplication with input and data
+        let result = compile_and_execute_with_vars("input * data", Some("5"), Some("7"))
+            .expect("Failed to execute");
+        assert_eq!(result, 35, "input * data should return 35");
+    }
+
+    #[test]
+    fn test_input_in_complex_expression() {
+        // Test input in a more complex expression
+        let result = compile_and_execute_with_vars("input * 2 + 10", Some("5"), None)
+            .expect("Failed to execute");
+        assert_eq!(result, 20, "input * 2 + 10 should return 20");
+    }
+
+    #[test]
+    fn test_data_in_complex_expression() {
+        // Test data in a more complex expression
+        let result = compile_and_execute_with_vars("(data - 5) * 3", None, Some("10"))
+            .expect("Failed to execute");
+        assert_eq!(result, 15, "(data - 5) * 3 should return 15");
+    }
+
+    #[test]
+    fn test_input_variable_i64_max() {
+        // Test with i64::MAX
+        let max = i64::MAX;
+        let input_json = format!("{}", max);
+        let result = compile_and_execute_with_vars("input", Some(&input_json), None)
+            .expect("Failed to execute");
+        assert_eq!(result, max, "input should return i64::MAX");
+    }
+
+    #[test]
+    fn test_input_variable_i64_min() {
+        // Test with i64::MIN
+        let min = i64::MIN;
+        let input_json = format!("{}", min);
+        let result = compile_and_execute_with_vars("input", Some(&input_json), None)
+            .expect("Failed to execute");
+        assert_eq!(result, min, "input should return i64::MIN");
     }
 }
