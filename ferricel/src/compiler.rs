@@ -1314,6 +1314,42 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_list_concatenation() {
+        // Test array concatenation with + operator
+        let wasm_bytes = compile_cel_to_wasm("[1, 2] + [3, 4]").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[1,2,3,4]",
+            "Array concatenation should combine both arrays"
+        );
+    }
+
+    #[test]
+    fn test_list_concatenation_empty() {
+        // Test concatenating empty arrays
+        let wasm_bytes = compile_cel_to_wasm("[] + []").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[]",
+            "Concatenating empty arrays should return empty array"
+        );
+    }
+
+    #[test]
+    fn test_list_concatenation_with_empty() {
+        // Test concatenating with empty array
+        let wasm_bytes = compile_cel_to_wasm("[1, 2, 3] + []").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[1,2,3]",
+            "Concatenating with empty array should return original array"
+        );
+    }
+
     // ========================================
     // all() Macro Tests
     // ========================================
@@ -1592,6 +1628,113 @@ mod tests {
         assert_eq!(
             json_result, "false",
             "exists_one() should return false when two elements satisfy predicate"
+        );
+    }
+
+    // ========================================
+    // filter() Macro Tests
+    // ========================================
+
+    #[test]
+    fn test_filter_macro_basic() {
+        // Test filter() with basic predicate
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3, 4, 5].filter(x, x > 2)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[3,4,5]",
+            "filter(x, x > 2) should return [3,4,5]"
+        );
+    }
+
+    #[test]
+    fn test_filter_macro_none_match() {
+        // Test filter() with no elements matching
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3].filter(x, x > 10)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[]",
+            "filter() should return empty list when no elements match"
+        );
+    }
+
+    #[test]
+    fn test_filter_macro_all_match() {
+        // Test filter() with all elements matching
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3].filter(x, x > 0)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[1,2,3]",
+            "filter() should return all elements when all match"
+        );
+    }
+
+    #[test]
+    fn test_filter_macro_empty_list() {
+        // Test filter() with empty list
+        let wasm_bytes = compile_cel_to_wasm("[].filter(x, x > 0)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[]",
+            "filter() should return empty list for empty input"
+        );
+    }
+
+    #[test]
+    fn test_filter_macro_even_numbers() {
+        // Test filter() to get even numbers
+        let wasm_bytes = compile_cel_to_wasm("[1, 2, 3, 4, 5, 6].filter(x, x % 2 == 0)")
+            .expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[2,4,6]",
+            "filter() should return only even numbers"
+        );
+    }
+
+    #[test]
+    fn test_filter_macro_complex_predicate() {
+        // Test filter() with complex predicate
+        let wasm_bytes = compile_cel_to_wasm("[1, 5, 10, 15, 20].filter(x, x >= 5 && x <= 15)")
+            .expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[5,10,15]",
+            "filter() with complex predicate should work correctly"
+        );
+    }
+
+    #[test]
+    fn test_filter_macro_first_element_only() {
+        // Test filter() when only first element matches
+        let wasm_bytes =
+            compile_cel_to_wasm("[10, 1, 2, 3].filter(x, x > 5)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[10]",
+            "filter() should return only first element when it's the only match"
+        );
+    }
+
+    #[test]
+    fn test_filter_macro_last_element_only() {
+        // Test filter() when only last element matches
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3, 10].filter(x, x > 5)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[10]",
+            "filter() should return only last element when it's the only match"
         );
     }
 
