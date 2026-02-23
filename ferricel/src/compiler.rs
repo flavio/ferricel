@@ -1,5 +1,5 @@
-use cel::common::ast::operators;
 use cel::common::ast::Expr;
+use cel::common::ast::operators;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
 use std::collections::HashMap;
@@ -1735,6 +1735,148 @@ mod tests {
         assert_eq!(
             json_result, "[10]",
             "filter() should return only last element when it's the only match"
+        );
+    }
+
+    // ========================================
+    // map() Macro Tests
+    // ========================================
+
+    #[test]
+    fn test_map_macro_basic() {
+        // Test map() with basic transformation (doubling)
+        let wasm_bytes = compile_cel_to_wasm("[1, 2, 3].map(x, x * 2)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[2,4,6]",
+            "map(x, x * 2) should double all values"
+        );
+    }
+
+    #[test]
+    fn test_map_macro_empty_list() {
+        // Test map() with empty list
+        let wasm_bytes = compile_cel_to_wasm("[].map(x, x * 2)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[]",
+            "map() on empty list should return empty list"
+        );
+    }
+
+    #[test]
+    fn test_map_macro_identity() {
+        // Test map() with identity transformation
+        let wasm_bytes = compile_cel_to_wasm("[1, 2, 3].map(x, x)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[1,2,3]",
+            "map(x, x) should return the same list"
+        );
+    }
+
+    #[test]
+    fn test_map_macro_addition() {
+        // Test map() with addition transformation
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3].map(x, x + 10)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[11,12,13]",
+            "map(x, x + 10) should add 10 to each element"
+        );
+    }
+
+    #[test]
+    fn test_map_macro_square() {
+        // Test map() with squaring transformation
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3, 4].map(x, x * x)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[1,4,9,16]",
+            "map(x, x * x) should square each element"
+        );
+    }
+
+    #[test]
+    fn test_map_macro_type_change() {
+        // Test map() that changes type (int to bool)
+        let wasm_bytes = compile_cel_to_wasm("[1, 2, 3].map(x, x > 1)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[false,true,true]",
+            "map(x, x > 1) should return boolean array"
+        );
+    }
+
+    #[test]
+    fn test_map_macro_division() {
+        // Test map() with division
+        let wasm_bytes =
+            compile_cel_to_wasm("[10, 20, 30].map(x, x / 10)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[1,2,3]",
+            "map(x, x / 10) should divide each element by 10"
+        );
+    }
+
+    #[test]
+    fn test_map_macro_complex_expression() {
+        // Test map() with complex expression
+        let wasm_bytes =
+            compile_cel_to_wasm("[1, 2, 3].map(x, (x * 2) + 1)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[3,5,7]",
+            "map(x, (x * 2) + 1) should apply complex transformation"
+        );
+    }
+
+    #[test]
+    fn test_map_macro_single_element() {
+        // Test map() with single element
+        let wasm_bytes = compile_cel_to_wasm("[5].map(x, x * 2)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[10]",
+            "map() on single element should work correctly"
+        );
+    }
+
+    #[test]
+    fn test_map_macro_negative_numbers() {
+        // Test map() with negative numbers
+        let wasm_bytes =
+            compile_cel_to_wasm("[-1, -2, -3].map(x, x * -1)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[1,2,3]",
+            "map(x, x * -1) should negate negative numbers"
+        );
+    }
+
+    #[test]
+    fn test_map_macro_modulo() {
+        // Test map() with modulo operation
+        let wasm_bytes =
+            compile_cel_to_wasm("[10, 11, 12].map(x, x % 3)").expect("Failed to compile");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
+        assert_eq!(
+            json_result, "[1,2,0]",
+            "map(x, x % 3) should apply modulo to each element"
         );
     }
 
