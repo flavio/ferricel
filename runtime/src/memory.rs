@@ -2,9 +2,6 @@
 
 use std::mem;
 
-extern crate alloc;
-use alloc::vec::Vec;
-
 /// Allocates memory in WASM linear memory.
 /// Returns a pointer to the allocated buffer.
 #[unsafe(no_mangle)]

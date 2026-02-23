@@ -1,8 +1,6 @@
 //! Type conversion from CelValue to primitive types (i64, bool).
 //! These functions extract values from CelValue pointers and panic on type mismatches.
 
-extern crate alloc;
-
 use crate::types::CelValue;
 
 /// Extract i64 from a CelValue pointer.
@@ -72,7 +70,6 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::boxed::Box;
 
     #[test]
     fn test_value_to_i64_positive() {

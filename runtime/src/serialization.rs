@@ -62,10 +62,7 @@ pub extern "C" fn cel_serialize_value(value_ptr: *mut CelValue) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    extern crate alloc;
-
-    use alloc::vec;
-    use hashbrown::HashMap;
+    use std::collections::HashMap;
 
     /// Test that CelValue variants can be serialized to JSON (format verification only)
     /// Note: These tests verify JSON formatting but don't test WASM memory allocation

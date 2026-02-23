@@ -1,12 +1,8 @@
 //! Field access operations for CelValue objects.
 //! Supports accessing fields from Object-type CelValues.
 
-extern crate alloc;
-
 use crate::types::CelValue;
-use alloc::boxed::Box;
-use alloc::string::String;
-use core::slice;
+use std::slice;
 
 /// Get a field from a CelValue object.
 ///
@@ -126,7 +122,7 @@ pub unsafe extern "C" fn cel_has_field(
 #[cfg(test)]
 mod tests {
     use crate::types::CelValue;
-    use hashbrown::HashMap;
+    use std::collections::HashMap;
 
     #[test]
     fn test_field_access_logic() {

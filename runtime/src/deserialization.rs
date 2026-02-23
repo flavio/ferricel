@@ -1,10 +1,7 @@
 //! JSON deserialization from WASM memory into CelValue objects.
 //! Handles parsing JSON bytes and allocating CelValue on the heap.
 
-extern crate alloc;
-
 use crate::types::CelValue;
-use alloc::boxed::Box;
 
 /// Decode i64 into (ptr, len) tuple.
 /// Low 32 bits = pointer, High 32 bits = length.

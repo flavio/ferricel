@@ -1,11 +1,22 @@
 //! Array operations for CelValue objects.
-//! Supports creating arrays, accessing elements, and getting array length.
-
-extern crate alloc;
+//! Supports creating arrays, accessing elements, array concatenation, and getting array length.
 
 use crate::types::CelValue;
-use alloc::boxed::Box;
-use alloc::vec::Vec;
+
+/// Internal helper: Concatenate two arrays.
+///
+/// # Arguments
+/// - `a`: First array slice
+/// - `b`: Second array slice
+///
+/// # Returns
+/// A new Vec containing all elements from `a` followed by all elements from `b`
+pub(crate) fn cel_array_concat(a: &[CelValue], b: &[CelValue]) -> Vec<CelValue> {
+    let mut result = Vec::with_capacity(a.len() + b.len());
+    result.extend_from_slice(a);
+    result.extend_from_slice(b);
+    result
+}
 
 /// Get the length of a CelValue array.
 ///
@@ -135,6 +146,7 @@ pub unsafe extern "C" fn cel_array_push(array_ptr: *mut CelValue, element_ptr: *
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn test_create_array_logic() {
@@ -155,11 +167,7 @@ mod tests {
         }
 
         // Test array with elements
-        let array = CelValue::Array(alloc::vec![
-            CelValue::Int(1),
-            CelValue::Int(2),
-            CelValue::Int(3),
-        ]);
+        let array = CelValue::Array(vec![CelValue::Int(1), CelValue::Int(2), CelValue::Int(3)]);
         match array {
             CelValue::Array(ref vec) => assert_eq!(vec.len(), 3),
             _ => panic!("Expected Array"),
@@ -168,7 +176,7 @@ mod tests {
 
     #[test]
     fn test_array_get_logic() {
-        let array = CelValue::Array(alloc::vec![
+        let array = CelValue::Array(vec![
             CelValue::Int(10),
             CelValue::Int(20),
             CelValue::Int(30),
@@ -213,24 +221,8 @@ mod tests {
     }
 
     #[test]
-    fn test_array_len_ffi() {
-        let array = Box::new(CelValue::Array(alloc::vec![
-            CelValue::Int(1),
-            CelValue::Int(2),
-            CelValue::Int(3),
-        ]));
-        let array_ptr = Box::into_raw(array);
-
-        let len = unsafe { cel_array_len(array_ptr) };
-        assert_eq!(len, 3);
-
-        // Cleanup
-        unsafe { drop(Box::from_raw(array_ptr)) };
-    }
-
-    #[test]
     fn test_array_get_ffi() {
-        let array = Box::new(CelValue::Array(alloc::vec![
+        let array = Box::new(CelValue::Array(vec![
             CelValue::Int(10),
             CelValue::Int(20),
             CelValue::Int(30),
@@ -284,5 +276,21 @@ mod tests {
             drop(Box::from_raw(elem2_ptr));
             drop(Box::from_raw(array_ptr));
         }
+    }
+
+    #[rstest]
+    #[case::both_empty(&[], &[], &[])]
+    #[case::first_empty(&[], &[CelValue::Int(1)], &[CelValue::Int(1)])]
+    #[case::second_empty(&[CelValue::Int(1)], &[], &[CelValue::Int(1)])]
+    #[case::both_single(&[CelValue::Int(1)], &[CelValue::Int(2)], &[CelValue::Int(1), CelValue::Int(2)])]
+    #[case::multiple(&[CelValue::Int(1), CelValue::Int(2)], &[CelValue::Int(3), CelValue::Int(4)], &[CelValue::Int(1), CelValue::Int(2), CelValue::Int(3), CelValue::Int(4)])]
+    #[case::mixed_types(&[CelValue::Int(1), CelValue::Bool(true)], &[CelValue::Int(2)], &[CelValue::Int(1), CelValue::Bool(true), CelValue::Int(2)])]
+    fn test_array_concat(
+        #[case] a: &[CelValue],
+        #[case] b: &[CelValue],
+        #[case] expected: &[CelValue],
+    ) {
+        let result = cel_array_concat(a, b);
+        assert_eq!(result.as_slice(), expected);
     }
 }

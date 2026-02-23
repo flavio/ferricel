@@ -2,10 +2,8 @@
 //! These globals are initialized once per `validate` call and live for the duration
 //! of the expression evaluation.
 
-extern crate alloc;
-
 use crate::types::CelValue;
-use core::ptr;
+use std::ptr;
 
 /// Global storage for the `input` variable
 /// Initialized by validate() before expression evaluation
@@ -96,7 +94,6 @@ pub unsafe extern "C" fn cel_reset_globals() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::boxed::Box;
 
     #[test]
     fn test_init_and_get_input() {

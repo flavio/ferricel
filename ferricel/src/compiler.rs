@@ -63,6 +63,14 @@ pub struct CompilerEnv {
     // Value creation helpers
     pub create_int_func_id: FunctionId,
     pub create_bool_func_id: FunctionId,
+    pub create_string_func_id: FunctionId,
+
+    // String operations
+    pub string_size_func_id: FunctionId,
+    pub string_starts_with_func_id: FunctionId,
+    pub string_ends_with_func_id: FunctionId,
+    pub string_contains_func_id: FunctionId,
+    pub string_matches_func_id: FunctionId,
 
     // Value conversion helpers
     pub value_to_bool_func_id: FunctionId,
@@ -109,7 +117,7 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     // 2. Set up the compiler environment
     let env = CompilerEnv {
         // Arithmetic operations
-        add_func_id: module.exports.get_func("cel_int_add")?,
+        add_func_id: module.exports.get_func("cel_value_add")?,
         sub_func_id: module.exports.get_func("cel_int_sub")?,
         mul_func_id: module.exports.get_func("cel_int_mul")?,
         div_func_id: module.exports.get_func("cel_int_div")?,
@@ -158,13 +166,21 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         // Value creation helpers
         create_int_func_id: module.exports.get_func("cel_create_int")?,
         create_bool_func_id: module.exports.get_func("cel_create_bool")?,
+        create_string_func_id: module.exports.get_func("cel_create_string")?,
+
+        // String operations
+        string_size_func_id: module.exports.get_func("cel_string_size")?,
+        string_starts_with_func_id: module.exports.get_func("cel_string_starts_with")?,
+        string_ends_with_func_id: module.exports.get_func("cel_string_ends_with")?,
+        string_contains_func_id: module.exports.get_func("cel_string_contains")?,
+        string_matches_func_id: module.exports.get_func("cel_string_matches")?,
 
         // Value conversion helpers
         value_to_bool_func_id: module.exports.get_func("cel_value_to_bool")?,
     };
 
     // 3. Remove the helpers from exports so the Host can't call them directly
-    module.exports.remove("cel_int_add")?;
+    module.exports.remove("cel_value_add")?;
     module.exports.remove("cel_int_sub")?;
     module.exports.remove("cel_int_mul")?;
     module.exports.remove("cel_int_div")?;
@@ -270,7 +286,50 @@ pub fn compile_expr(
                     body.i64_const(if *b { 1 } else { 0 });
                     body.call(env.create_bool_func_id);
                 }
-                // String literals require memory allocation, which we haven't built yet!
+                CelVal::String(s) => {
+                    // String literals require memory allocation
+                    let string_bytes = s.as_bytes();
+                    let string_len = string_bytes.len() as i32;
+
+                    // Create a local to store the string data pointer
+                    let data_ptr_local = module.locals.add(ValType::I32);
+
+                    // Allocate memory for the string data
+                    body.i32_const(string_len)
+                        .call(env.malloc_func_id) // Returns data_ptr
+                        .local_set(data_ptr_local); // Store in local and pop from stack
+
+                    // Get memory reference
+                    let memory_id = module
+                        .memories
+                        .iter()
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("No memory found"))?
+                        .id();
+
+                    // Write each byte of the string to the allocated memory
+                    for (offset, &byte) in string_bytes.iter().enumerate() {
+                        // Load data_ptr
+                        body.local_get(data_ptr_local);
+                        // Load byte value
+                        body.i32_const(byte as i32);
+                        // Store byte at offset
+                        body.store(
+                            memory_id,
+                            walrus::ir::StoreKind::I32_8 { atomic: false },
+                            walrus::ir::MemArg {
+                                align: 1,
+                                offset: offset as u32,
+                            },
+                        );
+                    }
+
+                    // Call cel_create_string(data_ptr, len)
+                    body.local_get(data_ptr_local); // Load data_ptr
+                    body.i32_const(string_len); // Load length
+                    body.call(env.create_string_func_id); // Returns *mut CelValue
+                }
+                // Other literals not supported yet
                 _ => anyhow::bail!("Unsupported literal: {:?}", literal),
             }
         }
@@ -417,6 +476,126 @@ pub fn compile_expr(
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?; // true_value
                     compile_expr(&call_expr.args[2].expr, body, env, ctx, module)?; // false_value
                     body.call(env.conditional_func_id);
+                }
+
+                // String functions
+                "size" => {
+                    // size() can work on strings or arrays
+                    // For strings, it returns the number of Unicode codepoints
+                    // For arrays, it returns the number of elements
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("size() expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+
+                    // For now, we'll call cel_string_size which returns i64
+                    // We need to convert it to *mut CelValue::Int
+                    body.call(env.string_size_func_id); // Returns i64
+                    body.call(env.create_int_func_id); // Convert i64 to *mut CelValue
+                }
+
+                "startsWith" => {
+                    // Supports both: string.startsWith(prefix) and startsWith(string, prefix)
+                    // Method syntax: target is Some, args has 1 element (the prefix)
+                    // Function syntax: target is None, args has 2 elements (string, prefix)
+
+                    if let Some(target) = &call_expr.target {
+                        // Method syntax: "hello".startsWith("he")
+                        if call_expr.args.len() != 1 {
+                            anyhow::bail!("startsWith() method expects 1 argument");
+                        }
+                        // Compile the target string and the prefix argument
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    } else {
+                        // Function syntax: startsWith("hello", "he")
+                        if call_expr.args.len() != 2 {
+                            anyhow::bail!("startsWith() function expects 2 arguments");
+                        }
+                        // Compile the string and the prefix
+                        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                        compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+                    }
+                    // Call cel_string_starts_with which returns *mut CelValue::Bool
+                    body.call(env.string_starts_with_func_id);
+                }
+
+                "endsWith" => {
+                    // Supports both: string.endsWith(suffix) and endsWith(string, suffix)
+                    // Method syntax: target is Some, args has 1 element (the suffix)
+                    // Function syntax: target is None, args has 2 elements (string, suffix)
+
+                    if let Some(target) = &call_expr.target {
+                        // Method syntax: "hello".endsWith("lo")
+                        if call_expr.args.len() != 1 {
+                            anyhow::bail!("endsWith() method expects 1 argument");
+                        }
+                        // Compile the target string and the suffix argument
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    } else {
+                        // Function syntax: endsWith("hello", "lo")
+                        if call_expr.args.len() != 2 {
+                            anyhow::bail!("endsWith() function expects 2 arguments");
+                        }
+                        // Compile the string and the suffix
+                        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                        compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+                    }
+                    // Call cel_string_ends_with which returns *mut CelValue::Bool
+                    body.call(env.string_ends_with_func_id);
+                }
+
+                "contains" => {
+                    // Supports both: string.contains(substring) and contains(string, substring)
+                    // Method syntax: target is Some, args has 1 element (the substring)
+                    // Function syntax: target is None, args has 2 elements (string, substring)
+
+                    if let Some(target) = &call_expr.target {
+                        // Method syntax: "hello".contains("ll")
+                        if call_expr.args.len() != 1 {
+                            anyhow::bail!("contains() method expects 1 argument");
+                        }
+                        // Compile the target string and the substring argument
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    } else {
+                        // Function syntax: contains("hello", "ll")
+                        if call_expr.args.len() != 2 {
+                            anyhow::bail!("contains() function expects 2 arguments");
+                        }
+                        // Compile the string and the substring
+                        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                        compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+                    }
+                    // Call cel_string_contains which returns *mut CelValue::Bool
+                    body.call(env.string_contains_func_id);
+                }
+
+                "matches" => {
+                    // Supports both: string.matches(pattern) and matches(string, pattern)
+                    // Method syntax: target is Some, args has 1 element (the pattern)
+                    // Function syntax: target is None, args has 2 elements (string, pattern)
+
+                    if let Some(target) = &call_expr.target {
+                        // Method syntax: "foobar".matches("foo.*")
+                        if call_expr.args.len() != 1 {
+                            anyhow::bail!("matches() method expects 1 argument");
+                        }
+                        // Compile the target string and the pattern argument
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    } else {
+                        // Function syntax: matches("foobar", "foo.*")
+                        if call_expr.args.len() != 2 {
+                            anyhow::bail!("matches() function expects 2 arguments");
+                        }
+                        // Compile the string and the pattern
+                        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                        compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+                    }
+                    // Call cel_string_matches which returns *mut CelValue::Bool
+                    body.call(env.string_matches_func_id);
                 }
 
                 _ => anyhow::bail!("Unsupported function call: {}", call_expr.func_name),
@@ -1622,6 +1801,161 @@ mod tests {
             result, expected,
             "Expression '{}' with input {} should evaluate to {}",
             expr, input_json, expected
+        );
+    }
+
+    /// Test helper: compile CEL expression and execute it, returning string result
+    fn compile_and_execute_string(cel_expr: &str) -> Result<String, anyhow::Error> {
+        let wasm_bytes = compile_cel_to_wasm(cel_expr)?;
+        let json_result = runtime::execute_wasm_with_vars(&wasm_bytes, None, None)?;
+
+        // Parse JSON to extract the string value
+        let value: serde_json::Value = serde_json::from_str(&json_result)?;
+
+        match value {
+            serde_json::Value::String(s) => Ok(s),
+            _ => anyhow::bail!("Expected string, got: {}", value),
+        }
+    }
+
+    #[rstest]
+    #[case::basic(r#""hello""#, "hello")]
+    #[case::empty(r#""""#, "")]
+    #[case::with_spaces(r#""hello world""#, "hello world")]
+    #[case::unicode(r#""こんにちは""#, "こんにちは")]
+    #[case::emoji(r#""hello 👋 world""#, "hello 👋 world")]
+    #[case::special_chars(r#""!@#$%^&*()""#, "!@#$%^&*()")]
+    fn test_string_literals(#[case] expr: &str, #[case] expected: &str) {
+        let result = compile_and_execute_string(expr).expect("Failed to compile and execute");
+        assert_eq!(
+            result, expected,
+            "Expression '{}' should evaluate to '{}'",
+            expr, expected
+        );
+    }
+
+    #[rstest]
+    #[case::basic(r#""hello" + " world""#, "hello world")]
+    #[case::empty_left(r#""" + "test""#, "test")]
+    #[case::empty_right(r#""test" + """#, "test")]
+    #[case::both_empty(r#""" + """#, "")]
+    #[case::unicode(r#""Hello " + "世界""#, "Hello 世界")]
+    #[case::emoji(r#""Hello " + "👋🌍""#, "Hello 👋🌍")]
+    #[case::multiple(r#""a" + "b" + "c""#, "abc")]
+    #[case::with_spaces(r#""hello " + "beautiful " + "world""#, "hello beautiful world")]
+    fn test_string_concatenation(#[case] expr: &str, #[case] expected: &str) {
+        let result = compile_and_execute_string(expr).expect("Failed to compile and execute");
+        assert_eq!(
+            result, expected,
+            "Expression '{}' should evaluate to '{}'",
+            expr, expected
+        );
+    }
+
+    #[rstest]
+    #[case::basic(r#"size("hello")"#, 5)]
+    #[case::empty(r#"size("")"#, 0)]
+    #[case::with_spaces(r#"size("hello world")"#, 11)]
+    #[case::unicode(r#"size("こんにちは")"#, 5)]
+    #[case::emoji(r#"size("👋🌍")"#, 2)]
+    #[case::mixed(r#"size("Hello 世界")"#, 8)]
+    #[case::concatenation(r#"size("abc" + "def")"#, 6)]
+    fn test_string_size(#[case] expr: &str, #[case] expected: i64) {
+        let result = compile_and_execute(expr).expect("Failed to compile and execute");
+        assert_eq!(
+            result, expected,
+            "Expression '{}' should evaluate to {}",
+            expr, expected
+        );
+    }
+
+    #[rstest]
+    #[case::basic_true(r#""hello".startsWith("he")"#, 1)]
+    #[case::basic_false(r#""hello".startsWith("wo")"#, 0)]
+    #[case::empty_prefix(r#""hello".startsWith("")"#, 1)]
+    #[case::full_match(r#""hello".startsWith("hello")"#, 1)]
+    #[case::longer_prefix(r#""hi".startsWith("hello")"#, 0)]
+    #[case::unicode(r#""こんにちは".startsWith("こん")"#, 1)]
+    #[case::emoji(r#""👋🌍".startsWith("👋")"#, 1)]
+    #[case::case_sensitive(r#""Hello".startsWith("hello")"#, 0)]
+    fn test_string_starts_with(#[case] expr: &str, #[case] expected: i64) {
+        let result = compile_and_execute(expr).expect("Failed to compile and execute");
+        assert_eq!(
+            result, expected,
+            "Expression '{}' should evaluate to {}",
+            expr, expected
+        );
+    }
+
+    #[rstest]
+    #[case::basic_true(r#""hello".endsWith("lo")"#, 1)]
+    #[case::basic_false(r#""hello".endsWith("he")"#, 0)]
+    #[case::empty_suffix(r#""hello".endsWith("")"#, 1)]
+    #[case::full_match(r#""hello".endsWith("hello")"#, 1)]
+    #[case::longer_suffix(r#""hi".endsWith("hello")"#, 0)]
+    #[case::unicode(r#""こんにちは".endsWith("ちは")"#, 1)]
+    #[case::emoji(r#""👋🌍".endsWith("🌍")"#, 1)]
+    #[case::case_sensitive(r#""Hello".endsWith("HELLO")"#, 0)]
+    fn test_string_ends_with(#[case] expr: &str, #[case] expected: i64) {
+        let result = compile_and_execute(expr).expect("Failed to compile and execute");
+        assert_eq!(
+            result, expected,
+            "Expression '{}' should evaluate to {}",
+            expr, expected
+        );
+    }
+
+    #[rstest]
+    #[case::basic_true(r#""hello world".contains("lo wo")"#, 1)]
+    #[case::basic_false(r#""hello".contains("bye")"#, 0)]
+    #[case::empty_substring(r#""hello".contains("")"#, 1)]
+    #[case::full_match(r#""hello".contains("hello")"#, 1)]
+    #[case::at_start(r#""hello".contains("he")"#, 1)]
+    #[case::at_end(r#""hello".contains("lo")"#, 1)]
+    #[case::unicode(r#""こんにちは世界".contains("にちは")"#, 1)]
+    #[case::emoji(r#""Hello 👋 World 🌍".contains("👋")"#, 1)]
+    #[case::case_sensitive(r#""Hello".contains("hello")"#, 0)]
+    fn test_string_contains(#[case] expr: &str, #[case] expected: i64) {
+        let result = compile_and_execute(expr).expect("Failed to compile and execute");
+        assert_eq!(
+            result, expected,
+            "Expression '{}' should evaluate to {}",
+            expr, expected
+        );
+    }
+
+    #[rstest]
+    #[case::method_basic_match(r#""foobar".matches("foo.*")"#, 1)]
+    #[case::method_no_match(r#""hello".matches("world")"#, 0)]
+    #[case::function_basic_match(r#"matches("foobar", "foo.*")"#, 1)]
+    #[case::function_no_match(r#"matches("hello", "world")"#, 0)]
+    #[case::substring_match(r#""hello world".matches("wor")"#, 1)]
+    #[case::anchored_start_match(r#""foobar".matches("^foo")"#, 1)]
+    #[case::anchored_start_no_match(r#""foobar".matches("^bar")"#, 0)]
+    #[case::anchored_end_match(r#""foobar".matches("bar$")"#, 1)]
+    #[case::anchored_end_no_match(r#""foobar".matches("foo$")"#, 0)]
+    #[case::full_anchored_match(r#""foobar".matches("^foobar$")"#, 1)]
+    #[case::full_anchored_no_match(r#""foobar".matches("^foo$")"#, 0)]
+    #[case::character_class_digit(r#""abc123def".matches("[0-9]+")"#, 1)]
+    #[case::character_class_letter(r#""abc123def".matches("[a-z]+")"#, 1)]
+    #[case::quantifier_plus(r#""aaaa".matches("a+")"#, 1)]
+    #[case::quantifier_star(r#""".matches("a*")"#, 1)]
+    #[case::quantifier_question(r#""colour".matches("colou?r")"#, 1)]
+    #[case::quantifier_exact(r#""aaaa".matches("a{4}")"#, 1)]
+    #[case::quantifier_range(r#""aaaa".matches("a{3,5}")"#, 1)]
+    #[case::dot_wildcard(r#""a_b".matches("a.b")"#, 1)]
+    #[case::alternation(r#""cat".matches("cat|dog")"#, 1)]
+    #[case::unicode_pattern(r#""Hello 世界".matches("世界")"#, 1)]
+    #[case::emoji_pattern(r#""Hello 😀 World".matches("😀")"#, 1)]
+    #[case::email_pattern(r#""test@example.com".matches("[a-z]+@[a-z]+\\.[a-z]+")"#, 1)]
+    #[case::case_sensitive(r#""Hello".matches("hello")"#, 0)]
+    #[case::case_insensitive_flag(r#""Hello".matches("(?i)hello")"#, 1)]
+    fn test_string_matches(#[case] expr: &str, #[case] expected: i64) {
+        let result = compile_and_execute(expr).expect("Failed to compile and execute");
+        assert_eq!(
+            result, expected,
+            "Expression '{}' should evaluate to {}",
+            expr, expected
         );
     }
 }

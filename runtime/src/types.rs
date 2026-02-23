@@ -1,14 +1,10 @@
 //! CEL value type definitions for JSON serialization and deserialization.
 
-extern crate alloc;
-
-use alloc::string::String;
-use alloc::vec::Vec;
-use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-/// Type alias for HashMap with ahash for better no_std compatibility
-type CelMap = HashMap<String, CelValue, hashbrown::hash_map::DefaultHashBuilder>;
+/// Type alias for HashMap with String keys
+type CelMap = HashMap<String, CelValue>;
 
 /// Represents a CEL value that can be serialized to/from JSON.
 /// Uses untagged serialization for raw JSON output (e.g., `42` instead of `{"Int": 42}`).

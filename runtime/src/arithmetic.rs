@@ -1,46 +1,22 @@
 //! Arithmetic operations with overflow checking and division-by-zero protection.
 //! All operations panic on overflow or invalid operations per CEL spec.
 
-extern crate alloc;
-
 use crate::helpers::{cel_create_int, extract_int};
 use crate::types::CelValue;
-use alloc::boxed::Box;
-use alloc::vec::Vec;
 
-/// Add two CelValue objects.
-/// Supports:
-/// - Int + Int = Int
-/// - Array + Array = Array (concatenation)
-#[unsafe(no_mangle)]
-pub extern "C" fn cel_int_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot add null values");
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        match (a_val, b_val) {
-            (CelValue::Int(a), CelValue::Int(b)) => {
-                let result = a.checked_add(*b).expect("integer overflow in addition");
-                cel_create_int(result)
-            }
-            (CelValue::Array(a_vec), CelValue::Array(b_vec)) => {
-                // Concatenate two arrays
-                let mut result_vec = Vec::with_capacity(a_vec.len() + b_vec.len());
-                result_vec.extend_from_slice(a_vec);
-                result_vec.extend_from_slice(b_vec);
-                let result = CelValue::Array(result_vec);
-                Box::into_raw(Box::new(result))
-            }
-            _ => panic!(
-                "Cannot add {:?} and {:?}: unsupported types for addition",
-                a_val, b_val
-            ),
-        }
-    }
+/// Internal helper: Add two integers with overflow checking.
+///
+/// # Arguments
+/// - `a`: First integer operand
+/// - `b`: Second integer operand
+///
+/// # Returns
+/// The sum of `a` and `b`
+///
+/// # Panics
+/// Panics on integer overflow
+pub(crate) fn cel_int_add(a: i64, b: i64) -> i64 {
+    a.checked_add(b).expect("integer overflow in addition")
 }
 
 #[unsafe(no_mangle)]
@@ -83,4 +59,27 @@ pub extern "C" fn cel_int_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
     // checked_rem also catches the special case: i64::MIN % -1
     let result = a.checked_rem(b).expect("integer overflow in modulo");
     cel_create_int(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_int_add_basic() {
+        let result = cel_int_add(2, 3);
+        assert_eq!(result, 5);
+    }
+
+    #[test]
+    fn test_int_add_negative() {
+        let result = cel_int_add(-5, 3);
+        assert_eq!(result, -2);
+    }
+
+    #[test]
+    #[should_panic(expected = "integer overflow in addition")]
+    fn test_int_add_overflow() {
+        cel_int_add(i64::MAX, 1);
+    }
 }
