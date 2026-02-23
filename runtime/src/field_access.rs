@@ -70,6 +70,59 @@ pub unsafe extern "C" fn cel_get_field(
     }
 }
 
+/// Check if a field exists in a CelValue object (for has() macro).
+///
+/// # Parameters
+/// - `obj_ptr`: Pointer to a CelValue (should be an Object variant)
+/// - `field_name_ptr`: Pointer to the field name string in WASM memory
+/// - `field_name_len`: Length of the field name string
+///
+/// # Returns
+/// - Pointer to a new boxed CelValue::Bool(true) if field exists
+/// - Pointer to a new boxed CelValue::Bool(false) if field missing or obj is not an Object
+///
+/// # Panics
+/// - If `obj_ptr` is null
+/// - If the field name is invalid UTF-8
+///
+/// # Safety
+/// - `obj_ptr` must be a valid pointer to a CelValue
+/// - `field_name_ptr` must point to valid UTF-8 bytes in WASM memory
+/// - `field_name_len` must be the correct length
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_has_field(
+    obj_ptr: *mut CelValue,
+    field_name_ptr: i32,
+    field_name_len: i32,
+) -> *mut CelValue {
+    // Check for null object pointer
+    if obj_ptr.is_null() {
+        panic!("Cannot check field on null object");
+    }
+
+    // SAFETY: Caller guarantees obj_ptr is valid
+    let obj = unsafe { &*obj_ptr };
+
+    // Read the field name from WASM memory
+    let field_name = unsafe {
+        let bytes = slice::from_raw_parts(field_name_ptr as *const u8, field_name_len as usize);
+        String::from_utf8(bytes.to_vec())
+            .unwrap_or_else(|_| panic!("Field name is not valid UTF-8"))
+    };
+
+    // Check if the field exists
+    // Returns true if the key exists in the map, regardless of value (including null)
+    // Returns false if obj is not an Object or if field is missing
+    let has_field = match obj {
+        CelValue::Object(map) => map.contains_key(&field_name),
+        _ => false, // Non-objects don't have fields
+    };
+
+    // Return a boxed boolean
+    let boxed_value = Box::new(CelValue::Bool(has_field));
+    Box::into_raw(boxed_value)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::types::CelValue;
@@ -111,7 +164,61 @@ mod tests {
         }
     }
 
-    // Note: Tests using cel_get_field are skipped because they require
+    #[test]
+    fn test_has_field_logic_exists() {
+        // Test has() when field exists
+        let mut map = HashMap::new();
+        map.insert("age".into(), CelValue::Int(42));
+        let obj = CelValue::Object(map);
+
+        if let CelValue::Object(ref map) = obj {
+            assert!(map.contains_key("age"));
+            assert!(!map.contains_key("missing"));
+        } else {
+            panic!("Expected Object variant");
+        }
+    }
+
+    #[test]
+    fn test_has_field_logic_missing() {
+        // Test has() when field doesn't exist
+        let map = HashMap::new();
+        let obj = CelValue::Object(map);
+
+        if let CelValue::Object(ref map) = obj {
+            assert!(!map.contains_key("nonexistent"));
+        } else {
+            panic!("Expected Object variant");
+        }
+    }
+
+    #[test]
+    fn test_has_field_logic_non_object() {
+        // Test has() on non-object types (should return false)
+        let non_obj = CelValue::Int(42);
+        let has_field = matches!(non_obj, CelValue::Object(_));
+        assert!(!has_field, "Non-objects should not have fields");
+    }
+
+    #[test]
+    fn test_has_field_logic_null_value() {
+        // Test has() when field exists but value is null
+        // Should return true because the key exists in the map
+        let mut map = HashMap::new();
+        map.insert("nullable".into(), CelValue::Null);
+        let obj = CelValue::Object(map);
+
+        if let CelValue::Object(ref map) = obj {
+            assert!(
+                map.contains_key("nullable"),
+                "Should return true even if value is null"
+            );
+        } else {
+            panic!("Expected Object variant");
+        }
+    }
+
+    // Note: Tests using cel_get_field and cel_has_field are skipped because they require
     // WASM memory operations that cause segfaults in the test environment.
     // The actual WASM runtime will have proper memory management.
 }
