@@ -9,7 +9,11 @@ fn main() -> Result<(), anyhow::Error> {
     let cli = cli::Cli::parse();
 
     match cli.command {
-        cli::Commands::Build { expression, output } => cmd::build::run(&expression, &output),
+        cli::Commands::Build {
+            expression,
+            expression_file,
+            output,
+        } => cmd::build::run(expression, expression_file, &output),
         cli::Commands::Run {
             wasm,
             input_json,

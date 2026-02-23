@@ -25,6 +25,13 @@ fn create_json_file(content: &str) -> NamedTempFile {
     file
 }
 
+/// Helper to create a temporary CEL file with given expression
+fn create_cel_file(content: &str) -> NamedTempFile {
+    let file = NamedTempFile::new().expect("Failed to create temp CEL file");
+    fs::write(file.path(), content).expect("Failed to write CEL expression to file");
+    file
+}
+
 // ============================================================================
 // BUILD COMMAND TESTS
 // ============================================================================
@@ -83,6 +90,102 @@ fn test_build_invalid_cel_expression() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("error").or(predicate::str::contains("Parse")));
+}
+
+// ============================================================================
+// BUILD COMMAND TESTS - WITH FILE INPUT
+// ============================================================================
+
+#[test]
+fn test_build_from_file_complex_expression() {
+    // Create a CEL file with a more complex expression
+    let cel_file = create_cel_file("input.x > 10 && input.y < 20");
+    let output_file = NamedTempFile::new().unwrap();
+
+    ferricel()
+        .args(["build", "--expression-file"])
+        .arg(cel_file.path())
+        .arg("-o")
+        .arg(output_file.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Successfully compiled"));
+
+    // Verify the WASM file was created and has content
+    let metadata = fs::metadata(output_file.path()).unwrap();
+    assert!(metadata.len() > 0, "WASM file should not be empty");
+}
+
+#[test]
+fn test_build_from_file_with_custom_output() {
+    let cel_file = create_cel_file("5 + 10");
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path();
+
+    ferricel()
+        .args(["build", "--expression-file"])
+        .arg(cel_file.path())
+        .args(["-o"])
+        .arg(output_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(output_path.to_str().unwrap()));
+
+    assert!(output_path.exists(), "Custom output path should be used");
+}
+
+#[test]
+fn test_build_expression_file_not_found() {
+    let output_file = NamedTempFile::new().unwrap();
+
+    ferricel()
+        .args(["build", "--expression-file", "nonexistent-file.cel", "-o"])
+        .arg(output_file.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Failed to read CEL file"));
+}
+
+#[test]
+fn test_build_expression_file_invalid_content() {
+    let cel_file = create_cel_file("this is invalid CEL syntax !@# $$$");
+    let output_file = NamedTempFile::new().unwrap();
+
+    ferricel()
+        .args(["build", "--expression-file"])
+        .arg(cel_file.path())
+        .arg("-o")
+        .arg(output_file.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("error").or(predicate::str::contains("Parse")));
+}
+
+#[test]
+fn test_build_mutual_exclusivity_error() {
+    let cel_file = create_cel_file("42");
+    let output_file = NamedTempFile::new().unwrap();
+
+    ferricel()
+        .args(["build", "-e", "100", "--expression-file"])
+        .arg(cel_file.path())
+        .arg("-o")
+        .arg(output_file.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn test_build_missing_both_flags() {
+    let output_file = NamedTempFile::new().unwrap();
+
+    ferricel()
+        .args(["build", "-o"])
+        .arg(output_file.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("required"));
 }
 
 // ============================================================================

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Parser as ClapParser, Subcommand};
+use clap::{ArgGroup, Parser as ClapParser, Subcommand};
 
 /// Ferricel - CEL compiler to WebAssembly
 #[derive(ClapParser)]
@@ -14,10 +14,17 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Build a CEL expression into a WebAssembly module
+    #[command(group = ArgGroup::new("cel_source")
+        .required(true)
+        .args(&["expression", "expression_file"]))]
     Build {
-        /// CEL expression to compile
-        #[arg(short, long)]
-        expression: String,
+        /// CEL expression to compile (mutually exclusive with --expression-file)
+        #[arg(short, long, conflicts_with = "expression_file")]
+        expression: Option<String>,
+
+        /// Path to file containing CEL expression (mutually exclusive with --expression)
+        #[arg(long, conflicts_with = "expression")]
+        expression_file: Option<PathBuf>,
 
         /// Output file path
         #[arg(short, long, default_value = "final_cel_program.wasm")]
