@@ -46,6 +46,19 @@ pub extern "C" fn cel_serialize_bool(value: i64) -> i64 {
     serialize_to_json(&cel_value)
 }
 
+/// Serialize a CelValue pointer to JSON.
+/// Takes a *mut CelValue and serializes it to JSON.
+/// Returns encoded (ptr, len) as i64.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_serialize_value(value_ptr: *mut CelValue) -> i64 {
+    unsafe {
+        if value_ptr.is_null() {
+            panic!("Null pointer passed to cel_serialize_value");
+        }
+        serialize_to_json(&*value_ptr)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

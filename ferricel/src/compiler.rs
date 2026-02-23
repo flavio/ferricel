@@ -32,9 +32,8 @@ pub struct CompilerEnv {
     pub or_func_id: FunctionId,
     pub not_func_id: FunctionId,
 
-    // JSON serialization functions
-    pub serialize_int_func_id: FunctionId,
-    pub serialize_bool_func_id: FunctionId,
+    // JSON serialization
+    pub serialize_value_func_id: FunctionId,
 
     // JSON deserialization
     pub deserialize_json_func_id: FunctionId,
@@ -45,40 +44,15 @@ pub struct CompilerEnv {
     pub get_input_func_id: FunctionId,
     pub get_data_func_id: FunctionId,
 
-    // Type conversion
-    pub value_to_i64_func_id: FunctionId,
-    pub value_to_bool_func_id: FunctionId,
-
     // Field access
     pub get_field_func_id: FunctionId,
 
     // Memory allocation (for field names)
     pub malloc_func_id: FunctionId,
-}
 
-/// Determine if an expression returns a boolean value
-fn expr_returns_bool(expr: &Expr) -> bool {
-    match expr {
-        Expr::Literal(literal) => matches!(literal, CelVal::Boolean(_)),
-        Expr::Call(call_expr) => {
-            matches!(
-                call_expr.func_name.as_str(),
-                // Comparison operators return bool
-                operators::EQUALS
-                    | operators::NOT_EQUALS
-                    | operators::GREATER
-                    | operators::LESS
-                    | operators::GREATER_EQUALS
-                    | operators::LESS_EQUALS
-                    // Logical operators return bool
-                    | operators::LOGICAL_AND
-                    | operators::LOGICAL_OR
-                    | operators::LOGICAL_NOT
-            )
-        }
-        // Add more cases as needed for other expression types
-        _ => false,
-    }
+    // Value creation helpers
+    pub create_int_func_id: FunctionId,
+    pub create_bool_func_id: FunctionId,
 }
 
 /// Compile a CEL expression into a WebAssembly module
@@ -116,9 +90,8 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         or_func_id: module.exports.get_func("cel_bool_or")?,
         not_func_id: module.exports.get_func("cel_bool_not")?,
 
-        // JSON serialization functions
-        serialize_int_func_id: module.exports.get_func("cel_serialize_int")?,
-        serialize_bool_func_id: module.exports.get_func("cel_serialize_bool")?,
+        // JSON serialization
+        serialize_value_func_id: module.exports.get_func("cel_serialize_value")?,
 
         // JSON deserialization
         deserialize_json_func_id: module.exports.get_func("cel_deserialize_json")?,
@@ -129,15 +102,15 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         get_input_func_id: module.exports.get_func("cel_get_input")?,
         get_data_func_id: module.exports.get_func("cel_get_data")?,
 
-        // Type conversion
-        value_to_i64_func_id: module.exports.get_func("cel_value_to_i64")?,
-        value_to_bool_func_id: module.exports.get_func("cel_value_to_bool")?,
-
         // Field access
         get_field_func_id: module.exports.get_func("cel_get_field")?,
 
         // Memory allocation
         malloc_func_id,
+
+        // Value creation helpers
+        create_int_func_id: module.exports.get_func("cel_create_int")?,
+        create_bool_func_id: module.exports.get_func("cel_create_bool")?,
     };
 
     // 3. Remove the helpers from exports so the Host can't call them directly
@@ -155,16 +128,15 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     module.exports.remove("cel_bool_and")?;
     module.exports.remove("cel_bool_or")?;
     module.exports.remove("cel_bool_not")?;
-    module.exports.remove("cel_serialize_int")?;
-    module.exports.remove("cel_serialize_bool")?;
+    module.exports.remove("cel_serialize_value")?;
     module.exports.remove("cel_deserialize_json")?;
     module.exports.remove("cel_init_input")?;
     module.exports.remove("cel_init_data")?;
     module.exports.remove("cel_get_input")?;
     module.exports.remove("cel_get_data")?;
-    module.exports.remove("cel_value_to_i64")?;
-    module.exports.remove("cel_value_to_bool")?;
     module.exports.remove("cel_get_field")?;
+    module.exports.remove("cel_create_int")?;
+    module.exports.remove("cel_create_bool")?;
 
     // 4. Parse the CEL expression
     let root_ast = Parser::default()
@@ -196,16 +168,12 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         .call(env.init_data_func_id); // Store in DATA_VALUE global
 
     // 7. Walk the AST and compile to WASM instructions
-    compile_expr(&root_ast.expr, &mut body, &env, &mut module, false)?;
+    // This leaves a *mut CelValue on the stack
+    compile_expr(&root_ast.expr, &mut body, &env, &mut module)?;
 
     // 8. Serialize the result to JSON
-    // Determine if the result is a boolean or integer
-    let is_bool = expr_returns_bool(&root_ast.expr);
-    if is_bool {
-        body.call(env.serialize_bool_func_id);
-    } else {
-        body.call(env.serialize_int_func_id);
-    }
+    // The stack has a *mut CelValue, serialize it directly
+    body.call(env.serialize_value_func_id);
 
     // 9. Finish the function definition
     let validate_id =
@@ -221,26 +189,26 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
 }
 
 // We pass the inner `Expr` enum to this recursive function
-// If `as_pointer` is true, leaves a *mut CelValue (i32) on the stack
-// If `as_pointer` is false, converts CelValue pointers to their underlying values (i64)
+// This always leaves a *mut CelValue (i32) on the stack
 pub fn compile_expr(
     expr: &Expr,
     body: &mut InstrSeqBuilder,
     env: &CompilerEnv,
     module: &mut walrus::Module,
-    as_pointer: bool,
 ) -> Result<(), anyhow::Error> {
     match expr {
         // 1. Literal Values
         Expr::Literal(literal) => {
             match literal {
                 CelVal::Int(value) => {
-                    // Push the integer onto the WASM stack
+                    // Create a CelValue::Int pointer
                     body.i64_const(*value);
+                    body.call(env.create_int_func_id);
                 }
                 CelVal::Boolean(b) => {
-                    // Use i64 for consistency with all other return types
+                    // Create a CelValue::Bool pointer
                     body.i64_const(if *b { 1 } else { 0 });
+                    body.call(env.create_bool_func_id);
                 }
                 // String literals require memory allocation, which we haven't built yet!
                 _ => anyhow::bail!("Unsupported literal: {:?}", literal),
@@ -257,40 +225,40 @@ pub fn compile_expr(
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Add operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.add_func_id);
                 }
                 operators::SUBSTRACT => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Subtract operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.sub_func_id);
                 }
                 operators::MULTIPLY => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Multiply operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.mul_func_id);
                 }
                 operators::DIVIDE => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Divide operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.div_func_id);
                 }
                 operators::MODULO => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Modulo operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.mod_func_id);
                 }
 
@@ -299,48 +267,48 @@ pub fn compile_expr(
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Equals operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.eq_func_id);
                 }
                 operators::NOT_EQUALS => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Not equals operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.ne_func_id);
                 }
                 operators::GREATER => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Greater than operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.gt_func_id);
                 }
                 operators::LESS => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Less than operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.lt_func_id);
                 }
                 operators::GREATER_EQUALS => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Greater or equal operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.gte_func_id);
                 }
                 operators::LESS_EQUALS => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Less or equal operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.lte_func_id);
                 }
 
@@ -349,23 +317,23 @@ pub fn compile_expr(
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Logical AND operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.and_func_id);
                 }
                 operators::LOGICAL_OR => {
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Logical OR operator expects 2 arguments");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
+                    compile_expr(&call_expr.args[1].expr, body, env, module)?;
                     body.call(env.or_func_id);
                 }
                 operators::LOGICAL_NOT => {
                     if call_expr.args.len() != 1 {
                         anyhow::bail!("Logical NOT operator expects 1 argument");
                     }
-                    compile_expr(&call_expr.args[0].expr, body, env, module, false)?;
+                    compile_expr(&call_expr.args[0].expr, body, env, module)?;
                     body.call(env.not_func_id);
                 }
 
@@ -379,19 +347,13 @@ pub fn compile_expr(
             match name.as_str() {
                 "input" => {
                     // Get the input variable from global storage
+                    // Returns *mut CelValue
                     body.call(env.get_input_func_id);
-                    // Convert CelValue to i64 unless we need the pointer
-                    if !as_pointer {
-                        body.call(env.value_to_i64_func_id);
-                    }
                 }
                 "data" => {
                     // Get the data variable from global storage
+                    // Returns *mut CelValue
                     body.call(env.get_data_func_id);
-                    // Convert CelValue to i64 unless we need the pointer
-                    if !as_pointer {
-                        body.call(env.value_to_i64_func_id);
-                    }
                 }
                 _ => {
                     anyhow::bail!(
@@ -406,7 +368,7 @@ pub fn compile_expr(
         Expr::Select(select_expr) => {
             // Recursively compile the operand as a pointer (e.g., `input` or `input.user`)
             // This will leave a *mut CelValue (i32) on the stack
-            compile_expr(&select_expr.operand.expr, body, env, module, true)?;
+            compile_expr(&select_expr.operand.expr, body, env, module)?;
 
             // Now we need to get the field from the object
             // The operand (object pointer) is on the stack
@@ -457,14 +419,8 @@ pub fn compile_expr(
             // We need: [obj_ptr, field_name_ptr, field_len]
             body.i32_const(field_len);
 
-            // Call cel_get_field
+            // Call cel_get_field - returns *mut CelValue
             body.call(env.get_field_func_id);
-
-            // Result is *mut CelValue for the field value
-            // Convert to i64 if needed
-            if !as_pointer {
-                body.call(env.value_to_i64_func_id);
-            }
         }
 
         _ => anyhow::bail!("Unsupported expression type: {:?}", expr),

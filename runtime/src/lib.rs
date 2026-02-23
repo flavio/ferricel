@@ -7,6 +7,7 @@ mod conversion;
 mod deserialization;
 mod field_access;
 mod globals;
+mod helpers;
 mod logical;
 mod memory;
 mod serialization;
@@ -24,7 +25,7 @@ pub use comparison::{cel_int_eq, cel_int_gt, cel_int_gte, cel_int_lt, cel_int_lt
 
 pub use logical::{cel_bool_and, cel_bool_not, cel_bool_or};
 
-pub use serialization::{cel_serialize_bool, cel_serialize_int};
+pub use serialization::{cel_serialize_bool, cel_serialize_int, cel_serialize_value};
 
 pub use deserialization::{cel_deserialize_json, cel_free_value};
 
@@ -33,3 +34,5 @@ pub use globals::{cel_get_data, cel_get_input, cel_init_data, cel_init_input, ce
 pub use conversion::{cel_value_to_bool, cel_value_to_i64};
 
 pub use field_access::cel_get_field;
+
+pub use helpers::{cel_create_bool, cel_create_int};
