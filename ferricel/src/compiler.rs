@@ -438,7 +438,7 @@ mod tests {
     /// Test helper: compile CEL expression and execute it, returning the result
     fn compile_and_execute(cel_expr: &str) -> Result<i64, anyhow::Error> {
         let wasm_bytes = compile_cel_to_wasm(cel_expr)?;
-        let json_result = runtime::execute_wasm(&wasm_bytes)?;
+        let json_result = runtime::execute_wasm_with_vars(&wasm_bytes, None, None)?;
 
         // Parse JSON to extract the numeric value
         // The JSON will be either an integer (e.g., "42") or boolean (e.g., "true"/"false")
@@ -932,7 +932,8 @@ mod tests {
     fn test_json_output_integer() {
         // Test that integers are serialized as raw JSON numbers
         let wasm_bytes = compile_cel_to_wasm("42").expect("Failed to compile");
-        let json_result = runtime::execute_wasm(&wasm_bytes).expect("Failed to execute");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
         assert_eq!(
             json_result, "42",
             "Integer should be serialized as raw JSON number"
@@ -943,7 +944,8 @@ mod tests {
     fn test_json_output_boolean_true() {
         // Test that true is serialized as raw JSON boolean
         let wasm_bytes = compile_cel_to_wasm("5 > 3").expect("Failed to compile");
-        let json_result = runtime::execute_wasm(&wasm_bytes).expect("Failed to execute");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
         assert_eq!(
             json_result, "true",
             "Boolean true should be serialized as 'true'"
@@ -954,7 +956,8 @@ mod tests {
     fn test_json_output_boolean_false() {
         // Test that false is serialized as raw JSON boolean
         let wasm_bytes = compile_cel_to_wasm("5 < 3").expect("Failed to compile");
-        let json_result = runtime::execute_wasm(&wasm_bytes).expect("Failed to execute");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
         assert_eq!(
             json_result, "false",
             "Boolean false should be serialized as 'false'"
@@ -965,7 +968,8 @@ mod tests {
     fn test_json_output_negative_integer() {
         // Test that negative integers are properly serialized
         let wasm_bytes = compile_cel_to_wasm("-123").expect("Failed to compile");
-        let json_result = runtime::execute_wasm(&wasm_bytes).expect("Failed to execute");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
         assert_eq!(
             json_result, "-123",
             "Negative integer should be serialized correctly"
@@ -976,7 +980,8 @@ mod tests {
     fn test_json_output_arithmetic_result() {
         // Test that arithmetic results are serialized correctly
         let wasm_bytes = compile_cel_to_wasm("10 + 20 * 2").expect("Failed to compile");
-        let json_result = runtime::execute_wasm(&wasm_bytes).expect("Failed to execute");
+        let json_result =
+            runtime::execute_wasm_with_vars(&wasm_bytes, None, None).expect("Failed to execute");
         assert_eq!(
             json_result, "50",
             "Arithmetic result should be serialized correctly"

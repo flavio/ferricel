@@ -10,6 +10,12 @@ fn main() -> Result<(), anyhow::Error> {
 
     match cli.command {
         cli::Commands::Build { expression, output } => cmd::build::run(&expression, &output),
-        cli::Commands::Run { wasm } => cmd::run::run(&wasm),
+        cli::Commands::Run {
+            wasm,
+            input_json,
+            input_file,
+            data_json,
+            data_file,
+        } => cmd::run::run(&wasm, input_json, input_file, data_json, data_file),
     }
 }

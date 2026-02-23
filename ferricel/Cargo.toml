@@ -13,3 +13,6 @@ serde_json = "1.0"
 
 [dev-dependencies]
 rstest = "0.26"
+assert_cmd = "2.1"
+predicates = "3.1"
+tempfile = "3.25"

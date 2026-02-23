@@ -1,9 +1,15 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::runtime;
 
-pub fn run(wasm_path: &Path) -> Result<(), anyhow::Error> {
+pub fn run(
+    wasm_path: &Path,
+    input_json: Option<String>,
+    input_file: Option<PathBuf>,
+    data_json: Option<String>,
+    data_file: Option<PathBuf>,
+) -> Result<(), anyhow::Error> {
     // Check if WASM file exists
     if !wasm_path.exists() {
         anyhow::bail!("WASM file not found at {}", wasm_path.display());
@@ -14,8 +20,34 @@ pub fn run(wasm_path: &Path) -> Result<(), anyhow::Error> {
     // Read the WASM file
     let wasm_bytes = fs::read(wasm_path)?;
 
-    // Execute the WASM module
-    let result = runtime::execute_wasm(&wasm_bytes)?;
+    // Resolve input: either from --input-json or --input-file
+    let input = if let Some(json) = input_json {
+        Some(json)
+    } else if let Some(path) = input_file {
+        if !path.exists() {
+            anyhow::bail!("Input file not found at {}", path.display());
+        }
+        println!("Loading input from file: {}", path.display());
+        Some(fs::read_to_string(path)?)
+    } else {
+        None
+    };
+
+    // Resolve data: either from --data-json or --data-file
+    let data = if let Some(json) = data_json {
+        Some(json)
+    } else if let Some(path) = data_file {
+        if !path.exists() {
+            anyhow::bail!("Data file not found at {}", path.display());
+        }
+        println!("Loading data from file: {}", path.display());
+        Some(fs::read_to_string(path)?)
+    } else {
+        None
+    };
+
+    // Execute the WASM module with variables
+    let result = runtime::execute_wasm_with_vars(&wasm_bytes, input.as_deref(), data.as_deref())?;
 
     println!("Execution result: {}", result);
     Ok(())
