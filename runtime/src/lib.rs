@@ -8,6 +8,7 @@ mod field_access;
 mod globals;
 mod helpers;
 mod logical;
+mod map;
 mod membership;
 mod memory;
 mod serialization;
@@ -45,6 +46,8 @@ pub use conversion::{cel_value_to_bool, cel_value_to_i64};
 pub use field_access::cel_get_field;
 
 pub use array::{cel_array_get, cel_array_len, cel_array_push, cel_create_array};
+
+pub use map::{cel_create_map, cel_map_insert};
 
 pub use helpers::{
     cel_create_bool, cel_create_double, cel_create_int, cel_value_add, cel_value_div, cel_value_eq,

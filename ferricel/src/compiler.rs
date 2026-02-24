@@ -57,6 +57,10 @@ pub struct CompilerEnv {
     pub create_array_func_id: FunctionId,
     pub array_push_func_id: FunctionId,
 
+    // Map operations
+    pub create_map_func_id: FunctionId,
+    pub map_insert_func_id: FunctionId,
+
     // Memory allocation (for field names)
     pub malloc_func_id: FunctionId,
 
@@ -164,6 +168,10 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         create_array_func_id: module.exports.get_func("cel_create_array")?,
         array_push_func_id: module.exports.get_func("cel_array_push")?,
 
+        // Map operations
+        create_map_func_id: module.exports.get_func("cel_create_map")?,
+        map_insert_func_id: module.exports.get_func("cel_map_insert")?,
+
         // Memory allocation
         malloc_func_id,
 
@@ -237,6 +245,8 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     module.exports.remove("cel_array_get")?;
     module.exports.remove("cel_create_array")?;
     module.exports.remove("cel_array_push")?;
+    module.exports.remove("cel_create_map")?;
+    module.exports.remove("cel_map_insert")?;
     module.exports.remove("cel_create_int")?;
     module.exports.remove("cel_create_bool")?;
     module.exports.remove("cel_create_double")?;
@@ -772,6 +782,50 @@ pub fn compile_expr(
 
             // Leave the array pointer on the stack
             body.local_get(array_ptr_local);
+        }
+
+        // 5b. Map Literals
+        // {"key": "value", "other": 123} creates a CelValue::Object (HashMap)
+        Expr::Map(map_expr) => {
+            use cel::common::ast::EntryExpr;
+
+            // Create an empty map
+            body.call(env.create_map_func_id);
+
+            // Create a local to hold the map pointer while we insert entries
+            let map_ptr_local = module.locals.add(ValType::I32);
+            body.local_set(map_ptr_local); // Pop map pointer into local
+
+            // For each entry in the map
+            for entry in &map_expr.entries {
+                match &entry.expr {
+                    EntryExpr::MapEntry(map_entry) => {
+                        // Compile the key expression (leaves *mut CelValue on stack)
+                        compile_expr(&map_entry.key.expr, body, env, ctx, module)?;
+
+                        // Create a local to hold the key pointer
+                        let key_ptr_local = module.locals.add(ValType::I32);
+                        body.local_set(key_ptr_local); // Pop key pointer into local
+
+                        // Compile the value expression (leaves *mut CelValue on stack)
+                        compile_expr(&map_entry.value.expr, body, env, ctx, module)?;
+
+                        // Create a local to hold the value pointer
+                        let value_ptr_local = module.locals.add(ValType::I32);
+                        body.local_set(value_ptr_local); // Pop value pointer into local
+
+                        // Insert: cel_map_insert(map_ptr, key_ptr, value_ptr)
+                        body.local_get(map_ptr_local); // Load map pointer
+                        body.local_get(key_ptr_local); // Load key pointer
+                        body.local_get(value_ptr_local); // Load value pointer
+                        body.call(env.map_insert_func_id); // Call insert (returns void)
+                    }
+                    _ => anyhow::bail!("Unsupported map entry type: {:?}", entry.expr),
+                }
+            }
+
+            // Leave the map pointer on the stack
+            body.local_get(map_ptr_local);
         }
 
         // 6. Comprehensions (e.g., [1,2,3].all(x, x > 0))
@@ -2199,49 +2253,71 @@ mod tests {
         );
     }
 
-    // Map membership tests require JSON input with data parameter
-    // These test that keys exist in maps, regardless of value
-    #[test]
-    fn test_in_operator_map_with_data() {
-        let data = r#"{"settings": {"theme": "dark", "lang": "en"}}"#;
-
-        // Key exists
-        let result = compile_and_execute_with_vars(r#""theme" in data.settings"#, None, Some(data))
-            .expect("Execution failed");
-        assert_eq!(result, 1, "'theme' should exist in settings map");
-
-        // Key doesn't exist
-        let result = compile_and_execute_with_vars(r#""color" in data.settings"#, None, Some(data))
-            .expect("Execution failed");
-        assert_eq!(result, 0, "'color' should not exist in settings map");
-    }
-
-    #[test]
-    fn test_in_operator_map_null_value() {
-        // Key exists even when value is null
-        let data = r#"{"user": {"name": "Alice", "age": null}}"#;
-        let result = compile_and_execute_with_vars(r#""age" in data.user"#, None, Some(data))
-            .expect("Execution failed");
+    // Map membership tests with JSON data parameter (tests that keys exist in maps)
+    #[rstest]
+    #[case::key_exists(
+        r#""theme" in data.settings"#,
+        r#"{"settings": {"theme": "dark", "lang": "en"}}"#,
+        1
+    )]
+    #[case::key_missing(
+        r#""color" in data.settings"#,
+        r#"{"settings": {"theme": "dark", "lang": "en"}}"#,
+        0
+    )]
+    #[case::key_with_null_value(
+        r#""age" in data.user"#,
+        r#"{"user": {"name": "Alice", "age": null}}"#,
+        1
+    )]
+    #[case::key_with_string_value(
+        r#""name" in data.user"#,
+        r#"{"user": {"name": "Alice", "age": null}}"#,
+        1
+    )]
+    fn test_in_operator_maps_with_data(
+        #[case] expr: &str,
+        #[case] data_json: &str,
+        #[case] expected: i64,
+    ) {
+        let result = compile_and_execute_with_vars(expr, None, Some(data_json))
+            .expect("Failed to compile and execute");
         assert_eq!(
-            result, 1,
-            "'age' key should exist in map even though value is null"
+            result, expected,
+            "Expression '{}' with data should evaluate to {}",
+            expr, expected
         );
-
-        // Verify we're not matching the value
-        let result = compile_and_execute_with_vars(r#""name" in data.user"#, None, Some(data))
-            .expect("Execution failed");
-        assert_eq!(result, 1, "'name' key should exist in map");
     }
 
+    // Map literal tests - testing both map literal creation and 'in' operator
+    #[rstest]
+    #[case::key_exists(r#""key" in {"key": "value", "other": 123}"#, 1)]
+    #[case::key_missing(r#""missing" in {"key": "value"}"#, 0)]
+    #[case::empty_map(r#""key" in {}"#, 0)]
+    #[case::multiple_types_name(r#""name" in {"name": "Alice", "age": 30, "active": true}"#, 1)]
+    #[case::multiple_types_age(r#""age" in {"name": "Alice", "age": 30, "active": true}"#, 1)]
+    #[case::multiple_types_missing(r#""score" in {"name": "Alice", "age": 30, "active": true}"#, 0)]
+    #[case::computed_values(r#""key" in {"key": 1 + 2, "other": 10 * 5}"#, 1)]
+    fn test_in_operator_map_literals(#[case] expr: &str, #[case] expected: i64) {
+        let result = compile_and_execute(expr).expect("Failed to compile and execute");
+        assert_eq!(
+            result, expected,
+            "Expression '{}' should evaluate to {}",
+            expr, expected
+        );
+    }
+
+    // Complex expressions with 'in' operator combined with input/data and logical operators
     #[test]
-    fn test_in_operator_complex_expression() {
-        // Test 'in' with field access on input
+    fn test_in_operator_with_input_and_logical_ops() {
         let input = r#"{"items": [1, 2, 3, 4, 5]}"#;
+
+        // Single membership test
         let result = compile_and_execute_with_vars(r#"3 in input.items"#, Some(input), None)
             .expect("Execution failed");
         assert_eq!(result, 1, "3 should be in input.items");
 
-        // Test 'in' combined with other operators
+        // Combined with AND
         let result = compile_and_execute_with_vars(
             r#"(2 in input.items) && (6 in input.items)"#,
             Some(input),
@@ -2253,6 +2329,7 @@ mod tests {
             "2 is in list but 6 is not, so AND should be false"
         );
 
+        // Combined with OR
         let result = compile_and_execute_with_vars(
             r#"(2 in input.items) || (6 in input.items)"#,
             Some(input),
