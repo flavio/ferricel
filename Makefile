@@ -32,7 +32,7 @@ clean:
 	cargo clean
 
 # Run only unit tests (tests within src/)
-unit-tests:
+unit-tests: $(RUNTIME_TARGET)
 	@echo "Running unit tests..."
 	cargo test --package runtime --lib
 	cargo test --package ferricel --bins
