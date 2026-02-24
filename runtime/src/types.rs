@@ -28,6 +28,9 @@ pub enum CelValue {
     /// 64-bit signed integer
     Int(i64),
 
+    /// 64-bit unsigned integer
+    UInt(u64),
+
     /// 64-bit floating point number
     Double(f64),
 

@@ -6,7 +6,7 @@
 //!   - NaN != NaN is true (per IEEE 754)
 //!   - NaN comparisons with other values return false (except !=)
 
-use crate::helpers::{cel_create_bool, extract_double, extract_int};
+use crate::helpers::{cel_create_bool, extract_double, extract_int, extract_uint};
 use crate::types::CelValue;
 
 #[unsafe(no_mangle)]
@@ -48,6 +48,50 @@ pub extern "C" fn cel_int_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
 pub extern "C" fn cel_int_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
+    cel_create_bool(if a <= b { 1 } else { 0 })
+}
+
+// Unsigned integer comparison operations
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_uint_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_uint(a_ptr);
+    let b = extract_uint(b_ptr);
+    cel_create_bool(if a == b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_uint_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_uint(a_ptr);
+    let b = extract_uint(b_ptr);
+    cel_create_bool(if a != b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_uint_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_uint(a_ptr);
+    let b = extract_uint(b_ptr);
+    cel_create_bool(if a > b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_uint_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_uint(a_ptr);
+    let b = extract_uint(b_ptr);
+    cel_create_bool(if a < b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_uint_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_uint(a_ptr);
+    let b = extract_uint(b_ptr);
+    cel_create_bool(if a >= b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_uint_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_uint(a_ptr);
+    let b = extract_uint(b_ptr);
     cel_create_bool(if a <= b { 1 } else { 0 })
 }
 
@@ -179,5 +223,81 @@ mod tests {
     #[case::lte_greater(5.0, 3.0, false)]
     fn test_double_lte(#[case] a: f64, #[case] b: f64, #[case] expected: bool) {
         assert_double_comparison(a, b, cel_double_lte, expected);
+    }
+
+    // Uint comparison tests
+
+    fn assert_uint_comparison(
+        a: u64,
+        b: u64,
+        op: unsafe extern "C" fn(*mut CelValue, *mut CelValue) -> *mut CelValue,
+        expected: bool,
+    ) {
+        let a_ptr = crate::helpers::cel_create_uint(a);
+        let b_ptr = crate::helpers::cel_create_uint(b);
+
+        unsafe {
+            let result_ptr = op(a_ptr, b_ptr);
+            let result = match &*result_ptr {
+                CelValue::Bool(b) => *b,
+                _ => panic!("Expected Bool"),
+            };
+            assert_eq!(result, expected);
+
+            let _ = Box::from_raw(a_ptr);
+            let _ = Box::from_raw(b_ptr);
+            let _ = Box::from_raw(result_ptr);
+        }
+    }
+
+    #[rstest]
+    #[case::eq_same(100, 100, true)]
+    #[case::eq_different(100, 200, false)]
+    #[case::eq_zero(0, 0, true)]
+    #[case::eq_max(u64::MAX, u64::MAX, true)]
+    fn test_uint_eq(#[case] a: u64, #[case] b: u64, #[case] expected: bool) {
+        assert_uint_comparison(a, b, cel_uint_eq, expected);
+    }
+
+    #[rstest]
+    #[case::ne_same(100, 100, false)]
+    #[case::ne_different(100, 200, true)]
+    #[case::ne_zero_one(0, 1, true)]
+    fn test_uint_ne(#[case] a: u64, #[case] b: u64, #[case] expected: bool) {
+        assert_uint_comparison(a, b, cel_uint_ne, expected);
+    }
+
+    #[rstest]
+    #[case::gt_true(100, 50, true)]
+    #[case::gt_false(50, 100, false)]
+    #[case::gt_equal(100, 100, false)]
+    #[case::gt_max(u64::MAX, 0, true)]
+    fn test_uint_gt(#[case] a: u64, #[case] b: u64, #[case] expected: bool) {
+        assert_uint_comparison(a, b, cel_uint_gt, expected);
+    }
+
+    #[rstest]
+    #[case::lt_true(50, 100, true)]
+    #[case::lt_false(100, 50, false)]
+    #[case::lt_equal(100, 100, false)]
+    #[case::lt_zero_max(0, u64::MAX, true)]
+    fn test_uint_lt(#[case] a: u64, #[case] b: u64, #[case] expected: bool) {
+        assert_uint_comparison(a, b, cel_uint_lt, expected);
+    }
+
+    #[rstest]
+    #[case::gte_greater(100, 50, true)]
+    #[case::gte_equal(100, 100, true)]
+    #[case::gte_less(50, 100, false)]
+    fn test_uint_gte(#[case] a: u64, #[case] b: u64, #[case] expected: bool) {
+        assert_uint_comparison(a, b, cel_uint_gte, expected);
+    }
+
+    #[rstest]
+    #[case::lte_less(50, 100, true)]
+    #[case::lte_equal(100, 100, true)]
+    #[case::lte_greater(100, 50, false)]
+    fn test_uint_lte(#[case] a: u64, #[case] b: u64, #[case] expected: bool) {
+        assert_uint_comparison(a, b, cel_uint_lte, expected);
     }
 }

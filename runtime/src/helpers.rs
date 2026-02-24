@@ -12,6 +12,13 @@ pub extern "C" fn cel_create_int(value: i64) -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::Int(value)))
 }
 
+/// Creates a CelValue::UInt on the heap and returns a pointer to it.
+/// The caller is responsible for freeing the memory using cel_free_value.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_create_uint(value: u64) -> *mut CelValue {
+    Box::into_raw(Box::new(CelValue::UInt(value)))
+}
+
 /// Creates a CelValue::Bool on the heap and returns a pointer to it.
 /// Input: i64 where 0 = false, non-zero = true
 /// The caller is responsible for freeing the memory using cel_free_value.
@@ -37,6 +44,20 @@ pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
         match &*ptr {
             CelValue::Int(i) => *i,
             other => panic!("Type error: expected Int, got {:?}", other),
+        }
+    }
+}
+
+/// Internal helper: Extracts u64 from CelValue or panics with type error.
+/// This is not exported - it's used by arithmetic and comparison operations.
+pub(crate) fn extract_uint(ptr: *mut CelValue) -> u64 {
+    unsafe {
+        if ptr.is_null() {
+            panic!("Null pointer passed to extract_uint");
+        }
+        match &*ptr {
+            CelValue::UInt(u) => *u,
+            other => panic!("Type error: expected UInt, got {:?}", other),
         }
     }
 }
@@ -109,6 +130,12 @@ pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                 let result = arithmetic::cel_int_add(*a, *b);
                 cel_create_int(result)
             }
+            (CelValue::UInt(a), CelValue::UInt(b)) => {
+                let result = a
+                    .checked_add(*b)
+                    .expect("unsigned integer overflow in addition");
+                cel_create_uint(result)
+            }
             (CelValue::Double(a), CelValue::Double(b)) => {
                 let result = arithmetic::double_add(*a, *b);
                 cel_create_double(result)
@@ -148,6 +175,12 @@ pub extern "C" fn cel_value_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                 let result = a.checked_sub(*b).expect("integer overflow in subtraction");
                 cel_create_int(result)
             }
+            (CelValue::UInt(a), CelValue::UInt(b)) => {
+                let result = a
+                    .checked_sub(*b)
+                    .expect("unsigned integer underflow in subtraction");
+                cel_create_uint(result)
+            }
             (CelValue::Double(a), CelValue::Double(b)) => {
                 let result = arithmetic::double_sub(*a, *b);
                 cel_create_double(result)
@@ -177,6 +210,12 @@ pub extern "C" fn cel_value_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                     .checked_mul(*b)
                     .expect("integer overflow in multiplication");
                 cel_create_int(result)
+            }
+            (CelValue::UInt(a), CelValue::UInt(b)) => {
+                let result = a
+                    .checked_mul(*b)
+                    .expect("unsigned integer overflow in multiplication");
+                cel_create_uint(result)
             }
             (CelValue::Double(a), CelValue::Double(b)) => {
                 let result = arithmetic::double_mul(*a, *b);
@@ -209,6 +248,12 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                 let result = a.checked_div(*b).expect("integer overflow in division");
                 cel_create_int(result)
             }
+            (CelValue::UInt(a), CelValue::UInt(b)) => {
+                if *b == 0 {
+                    panic!("division by zero");
+                }
+                cel_create_uint(a / b)
+            }
             (CelValue::Double(a), CelValue::Double(b)) => {
                 let result = arithmetic::double_div(*a, *b);
                 cel_create_double(result)
@@ -222,7 +267,7 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 }
 
 /// Polymorphic modulo operator for CelValue objects.
-/// Note: Per CEL spec, modulo is only defined for integers.
+/// Note: Per CEL spec, modulo is only defined for int and uint.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     unsafe {
@@ -241,8 +286,14 @@ pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                 let result = a.checked_rem(*b).expect("integer overflow in modulo");
                 cel_create_int(result)
             }
+            (CelValue::UInt(a), CelValue::UInt(b)) => {
+                if *b == 0 {
+                    panic!("modulo by zero");
+                }
+                cel_create_uint(a % b)
+            }
             _ => panic!(
-                "Modulo is only defined for integers, got {:?} and {:?}",
+                "Modulo is only defined for int and uint, got {:?} and {:?}",
                 a_val, b_val
             ),
         }
@@ -250,6 +301,8 @@ pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 }
 
 /// Polymorphic equality operator for CelValue objects.
+/// Implements CEL spec cross-type numeric equality: int, uint, and double
+/// are compared as if they exist on a continuous number line.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     unsafe {
@@ -261,8 +314,31 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
         let b_val = &*b_ptr;
 
         let result = match (a_val, b_val) {
+            // Same-type comparisons
             (CelValue::Int(a), CelValue::Int(b)) => a == b,
+            (CelValue::UInt(a), CelValue::UInt(b)) => a == b,
             (CelValue::Double(a), CelValue::Double(b)) => a == b,
+
+            // Cross-type numeric equality (CEL spec: x == y if !(x < y || x > y))
+            (CelValue::Int(a), CelValue::UInt(b)) => {
+                if *a < 0 {
+                    false
+                } else {
+                    (*a as u64) == *b
+                }
+            }
+            (CelValue::UInt(a), CelValue::Int(b)) => {
+                if *b < 0 {
+                    false
+                } else {
+                    *a == (*b as u64)
+                }
+            }
+            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) == *b,
+            (CelValue::Double(a), CelValue::Int(b)) => *a == (*b as f64),
+            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) == *b,
+            (CelValue::Double(a), CelValue::UInt(b)) => *a == (*b as f64),
+
             _ => panic!(
                 "Cannot compare {:?} and {:?}: unsupported types for equality",
                 a_val, b_val
@@ -273,6 +349,7 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 }
 
 /// Polymorphic inequality operator for CelValue objects.
+/// Implements CEL spec cross-type numeric inequality (negation of equality).
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     unsafe {
@@ -284,8 +361,31 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
         let b_val = &*b_ptr;
 
         let result = match (a_val, b_val) {
+            // Same-type comparisons
             (CelValue::Int(a), CelValue::Int(b)) => a != b,
+            (CelValue::UInt(a), CelValue::UInt(b)) => a != b,
             (CelValue::Double(a), CelValue::Double(b)) => a != b,
+
+            // Cross-type numeric inequality
+            (CelValue::Int(a), CelValue::UInt(b)) => {
+                if *a < 0 {
+                    true
+                } else {
+                    (*a as u64) != *b
+                }
+            }
+            (CelValue::UInt(a), CelValue::Int(b)) => {
+                if *b < 0 {
+                    true
+                } else {
+                    *a != (*b as u64)
+                }
+            }
+            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) != *b,
+            (CelValue::Double(a), CelValue::Int(b)) => *a != (*b as f64),
+            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) != *b,
+            (CelValue::Double(a), CelValue::UInt(b)) => *a != (*b as f64),
+
             _ => panic!(
                 "Cannot compare {:?} and {:?}: unsupported types for inequality",
                 a_val, b_val
@@ -296,6 +396,7 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 }
 
 /// Polymorphic greater-than operator for CelValue objects.
+/// Implements CEL spec cross-type numeric ordering.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     unsafe {
@@ -307,8 +408,31 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
         let b_val = &*b_ptr;
 
         let result = match (a_val, b_val) {
+            // Same-type comparisons
             (CelValue::Int(a), CelValue::Int(b)) => a > b,
+            (CelValue::UInt(a), CelValue::UInt(b)) => a > b,
             (CelValue::Double(a), CelValue::Double(b)) => a > b,
+
+            // Cross-type numeric ordering
+            (CelValue::Int(a), CelValue::UInt(b)) => {
+                if *a < 0 {
+                    false
+                } else {
+                    (*a as u64) > *b
+                }
+            }
+            (CelValue::UInt(a), CelValue::Int(b)) => {
+                if *b < 0 {
+                    true
+                } else {
+                    *a > (*b as u64)
+                }
+            }
+            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) > *b,
+            (CelValue::Double(a), CelValue::Int(b)) => *a > (*b as f64),
+            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) > *b,
+            (CelValue::Double(a), CelValue::UInt(b)) => *a > (*b as f64),
+
             _ => panic!(
                 "Cannot compare {:?} and {:?}: unsupported types for greater-than",
                 a_val, b_val
@@ -319,6 +443,7 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 }
 
 /// Polymorphic less-than operator for CelValue objects.
+/// Implements CEL spec cross-type numeric ordering.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     unsafe {
@@ -330,8 +455,31 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
         let b_val = &*b_ptr;
 
         let result = match (a_val, b_val) {
+            // Same-type comparisons
             (CelValue::Int(a), CelValue::Int(b)) => a < b,
+            (CelValue::UInt(a), CelValue::UInt(b)) => a < b,
             (CelValue::Double(a), CelValue::Double(b)) => a < b,
+
+            // Cross-type numeric ordering
+            (CelValue::Int(a), CelValue::UInt(b)) => {
+                if *a < 0 {
+                    true
+                } else {
+                    (*a as u64) < *b
+                }
+            }
+            (CelValue::UInt(a), CelValue::Int(b)) => {
+                if *b < 0 {
+                    false
+                } else {
+                    *a < (*b as u64)
+                }
+            }
+            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) < *b,
+            (CelValue::Double(a), CelValue::Int(b)) => *a < (*b as f64),
+            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) < *b,
+            (CelValue::Double(a), CelValue::UInt(b)) => *a < (*b as f64),
+
             _ => panic!(
                 "Cannot compare {:?} and {:?}: unsupported types for less-than",
                 a_val, b_val
@@ -342,6 +490,7 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 }
 
 /// Polymorphic greater-than-or-equal operator for CelValue objects.
+/// Implements CEL spec cross-type numeric ordering.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     unsafe {
@@ -353,8 +502,31 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
         let b_val = &*b_ptr;
 
         let result = match (a_val, b_val) {
+            // Same-type comparisons
             (CelValue::Int(a), CelValue::Int(b)) => a >= b,
+            (CelValue::UInt(a), CelValue::UInt(b)) => a >= b,
             (CelValue::Double(a), CelValue::Double(b)) => a >= b,
+
+            // Cross-type numeric ordering
+            (CelValue::Int(a), CelValue::UInt(b)) => {
+                if *a < 0 {
+                    false
+                } else {
+                    (*a as u64) >= *b
+                }
+            }
+            (CelValue::UInt(a), CelValue::Int(b)) => {
+                if *b < 0 {
+                    true
+                } else {
+                    *a >= (*b as u64)
+                }
+            }
+            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) >= *b,
+            (CelValue::Double(a), CelValue::Int(b)) => *a >= (*b as f64),
+            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) >= *b,
+            (CelValue::Double(a), CelValue::UInt(b)) => *a >= (*b as f64),
+
             _ => panic!(
                 "Cannot compare {:?} and {:?}: unsupported types for greater-than-or-equal",
                 a_val, b_val
@@ -365,6 +537,7 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 }
 
 /// Polymorphic less-than-or-equal operator for CelValue objects.
+/// Implements CEL spec cross-type numeric ordering.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     unsafe {
@@ -376,8 +549,31 @@ pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
         let b_val = &*b_ptr;
 
         let result = match (a_val, b_val) {
+            // Same-type comparisons
             (CelValue::Int(a), CelValue::Int(b)) => a <= b,
+            (CelValue::UInt(a), CelValue::UInt(b)) => a <= b,
             (CelValue::Double(a), CelValue::Double(b)) => a <= b,
+
+            // Cross-type numeric ordering
+            (CelValue::Int(a), CelValue::UInt(b)) => {
+                if *a < 0 {
+                    true
+                } else {
+                    (*a as u64) <= *b
+                }
+            }
+            (CelValue::UInt(a), CelValue::Int(b)) => {
+                if *b < 0 {
+                    false
+                } else {
+                    *a <= (*b as u64)
+                }
+            }
+            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) <= *b,
+            (CelValue::Double(a), CelValue::Int(b)) => *a <= (*b as f64),
+            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) <= *b,
+            (CelValue::Double(a), CelValue::UInt(b)) => *a <= (*b as f64),
+
             _ => panic!(
                 "Cannot compare {:?} and {:?}: unsupported types for less-than-or-equal",
                 a_val, b_val
@@ -493,6 +689,8 @@ mod tests {
     #[rstest]
     #[case::int_add(CelValue::Int(2), CelValue::Int(3), CelValue::Int(5))]
     #[case::int_negative(CelValue::Int(-5), CelValue::Int(3), CelValue::Int(-2))]
+    #[case::uint_add(CelValue::UInt(10), CelValue::UInt(20), CelValue::UInt(30))]
+    #[case::uint_large(CelValue::UInt(u64::MAX - 100), CelValue::UInt(50), CelValue::UInt(u64::MAX - 50))]
     #[case::double_add(CelValue::Double(2.5), CelValue::Double(3.5), CelValue::Double(6.0))]
     #[case::double_negative(CelValue::Double(-5.5), CelValue::Double(3.0), CelValue::Double(-2.5))]
     #[case::string_basic(
@@ -536,6 +734,133 @@ mod tests {
 
         unsafe {
             let result_ptr = cel_value_add(a_ptr, b_ptr);
+            let result = &*result_ptr;
+
+            assert_eq!(result, &expected);
+
+            // Clean up
+            cel_free_value(a_ptr);
+            cel_free_value(b_ptr);
+            cel_free_value(result_ptr);
+        }
+    }
+
+    // Uint creation and extraction tests
+
+    #[test]
+    fn test_create_uint() {
+        let ptr = cel_create_uint(123);
+        unsafe {
+            assert_eq!(*ptr, CelValue::UInt(123));
+            let _ = Box::from_raw(ptr);
+        }
+    }
+
+    #[test]
+    fn test_create_uint_max() {
+        let ptr = cel_create_uint(u64::MAX);
+        unsafe {
+            assert_eq!(*ptr, CelValue::UInt(u64::MAX));
+            let _ = Box::from_raw(ptr);
+        }
+    }
+
+    #[test]
+    fn test_extract_uint() {
+        let ptr = cel_create_uint(12345);
+        let value = extract_uint(ptr);
+        assert_eq!(value, 12345);
+        unsafe {
+            let _ = Box::from_raw(ptr);
+        }
+    }
+
+    // Cross-type equality tests
+
+    #[rstest]
+    #[case::int_uint_equal(CelValue::Int(1), CelValue::UInt(1), CelValue::Bool(true))]
+    #[case::int_uint_different(CelValue::Int(1), CelValue::UInt(2), CelValue::Bool(false))]
+    #[case::int_negative_uint(CelValue::Int(-1), CelValue::UInt(1), CelValue::Bool(false))]
+    #[case::int_double_equal(CelValue::Int(5), CelValue::Double(5.0), CelValue::Bool(true))]
+    #[case::int_double_different(CelValue::Int(5), CelValue::Double(5.5), CelValue::Bool(false))]
+    #[case::uint_double_equal(CelValue::UInt(10), CelValue::Double(10.0), CelValue::Bool(true))]
+    #[case::uint_double_different(
+        CelValue::UInt(10),
+        CelValue::Double(10.5),
+        CelValue::Bool(false)
+    )]
+    #[case::uint_uint_equal(CelValue::UInt(100), CelValue::UInt(100), CelValue::Bool(true))]
+    #[case::uint_uint_different(CelValue::UInt(100), CelValue::UInt(200), CelValue::Bool(false))]
+    fn test_cross_type_equality(
+        #[case] a: CelValue,
+        #[case] b: CelValue,
+        #[case] expected: CelValue,
+    ) {
+        let a_ptr = Box::into_raw(Box::new(a));
+        let b_ptr = Box::into_raw(Box::new(b));
+
+        unsafe {
+            let result_ptr = cel_value_eq(a_ptr, b_ptr);
+            let result = &*result_ptr;
+
+            assert_eq!(result, &expected);
+
+            // Clean up
+            cel_free_value(a_ptr);
+            cel_free_value(b_ptr);
+            cel_free_value(result_ptr);
+        }
+    }
+
+    // Cross-type ordering tests
+
+    #[rstest]
+    #[case::int_negative_lt_uint(CelValue::Int(-1), CelValue::UInt(1), CelValue::Bool(true))]
+    #[case::int_positive_lt_uint(CelValue::Int(5), CelValue::UInt(10), CelValue::Bool(true))]
+    #[case::int_gt_uint(CelValue::Int(10), CelValue::UInt(5), CelValue::Bool(false))]
+    #[case::int_lt_double(CelValue::Int(5), CelValue::Double(10.0), CelValue::Bool(true))]
+    #[case::uint_lt_double(CelValue::UInt(5), CelValue::Double(10.0), CelValue::Bool(true))]
+    #[case::uint_gt_double(CelValue::UInt(100), CelValue::Double(50.0), CelValue::Bool(false))]
+    #[case::uint_lt_uint(CelValue::UInt(50), CelValue::UInt(100), CelValue::Bool(true))]
+    fn test_cross_type_less_than(
+        #[case] a: CelValue,
+        #[case] b: CelValue,
+        #[case] expected: CelValue,
+    ) {
+        let a_ptr = Box::into_raw(Box::new(a));
+        let b_ptr = Box::into_raw(Box::new(b));
+
+        unsafe {
+            let result_ptr = cel_value_lt(a_ptr, b_ptr);
+            let result = &*result_ptr;
+
+            assert_eq!(result, &expected);
+
+            // Clean up
+            cel_free_value(a_ptr);
+            cel_free_value(b_ptr);
+            cel_free_value(result_ptr);
+        }
+    }
+
+    #[rstest]
+    #[case::int_negative_lt_uint(CelValue::Int(-1), CelValue::UInt(1), CelValue::Bool(false))]
+    #[case::int_positive_gt_uint(CelValue::Int(10), CelValue::UInt(5), CelValue::Bool(true))]
+    #[case::int_lt_uint(CelValue::Int(5), CelValue::UInt(10), CelValue::Bool(false))]
+    #[case::int_gt_double(CelValue::Int(10), CelValue::Double(5.0), CelValue::Bool(true))]
+    #[case::uint_gt_double(CelValue::UInt(100), CelValue::Double(50.0), CelValue::Bool(true))]
+    #[case::uint_lt_double(CelValue::UInt(5), CelValue::Double(10.0), CelValue::Bool(false))]
+    #[case::uint_gt_uint(CelValue::UInt(100), CelValue::UInt(50), CelValue::Bool(true))]
+    fn test_cross_type_greater_than(
+        #[case] a: CelValue,
+        #[case] b: CelValue,
+        #[case] expected: CelValue,
+    ) {
+        let a_ptr = Box::into_raw(Box::new(a));
+        let b_ptr = Box::into_raw(Box::new(b));
+
+        unsafe {
+            let result_ptr = cel_value_gt(a_ptr, b_ptr);
             let result = &*result_ptr;
 
             assert_eq!(result, &expected);
