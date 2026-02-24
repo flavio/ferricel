@@ -19,9 +19,15 @@ pub use types::CelValue;
 // Re-export all WASM-callable functions
 pub use memory::{cel_free, cel_malloc};
 
-pub use arithmetic::{cel_int_div, cel_int_mod, cel_int_mul, cel_int_sub};
+pub use arithmetic::{
+    cel_double_add, cel_double_div, cel_double_mul, cel_double_sub, cel_int_div, cel_int_mod,
+    cel_int_mul, cel_int_sub,
+};
 
-pub use comparison::{cel_int_eq, cel_int_gt, cel_int_gte, cel_int_lt, cel_int_lte, cel_int_ne};
+pub use comparison::{
+    cel_double_eq, cel_double_gt, cel_double_gte, cel_double_lt, cel_double_lte, cel_double_ne,
+    cel_int_eq, cel_int_gt, cel_int_gte, cel_int_lt, cel_int_lte, cel_int_ne,
+};
 
 pub use logical::{
     cel_bool_and, cel_bool_not, cel_bool_or, cel_conditional, cel_not_strictly_false,
@@ -39,7 +45,11 @@ pub use field_access::cel_get_field;
 
 pub use array::{cel_array_get, cel_array_len, cel_array_push, cel_create_array};
 
-pub use helpers::{cel_create_bool, cel_create_int, cel_value_add};
+pub use helpers::{
+    cel_create_bool, cel_create_double, cel_create_int, cel_value_add, cel_value_div, cel_value_eq,
+    cel_value_gt, cel_value_gte, cel_value_lt, cel_value_lte, cel_value_mod, cel_value_mul,
+    cel_value_ne, cel_value_sub,
+};
 
 pub use string::{
     cel_create_string, cel_string_contains, cel_string_ends_with, cel_string_matches,

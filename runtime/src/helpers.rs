@@ -20,6 +20,13 @@ pub extern "C" fn cel_create_bool(value: i64) -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::Bool(value != 0)))
 }
 
+/// Creates a CelValue::Double on the heap and returns a pointer to it.
+/// The caller is responsible for freeing the memory using cel_free_value.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_create_double(value: f64) -> *mut CelValue {
+    Box::into_raw(Box::new(CelValue::Double(value)))
+}
+
 /// Internal helper: Extracts i64 from CelValue or panics with type error.
 /// This is not exported - it's used by arithmetic and comparison operations.
 pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
@@ -48,11 +55,29 @@ pub(crate) fn extract_bool(ptr: *mut CelValue) -> bool {
     }
 }
 
+/// Internal helper: Extracts f64 from CelValue or panics with type error.
+/// This is not exported - it's used by arithmetic and comparison operations.
+pub(crate) fn extract_double(ptr: *mut CelValue) -> f64 {
+    unsafe {
+        if ptr.is_null() {
+            panic!("Null pointer passed to extract_double");
+        }
+        match &*ptr {
+            CelValue::Double(d) => *d,
+            other => panic!("Type error: expected Double, got {:?}", other),
+        }
+    }
+}
+
 /// Polymorphic addition operator for CelValue objects.
 /// Dispatches to type-specific implementations:
 /// - Int + Int = Int (arithmetic addition)
+/// - Double + Double = Double (arithmetic addition)
 /// - String + String = String (concatenation)
 /// - Array + Array = Array (concatenation)
+///
+/// Note: Following CEL spec, there is NO automatic type coercion.
+/// Mixed-type arithmetic (e.g., Int + Double) will panic.
 ///
 /// # Safety
 /// - Both pointers must be valid, non-null CelValue pointers
@@ -84,6 +109,10 @@ pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                 let result = arithmetic::cel_int_add(*a, *b);
                 cel_create_int(result)
             }
+            (CelValue::Double(a), CelValue::Double(b)) => {
+                let result = arithmetic::double_add(*a, *b);
+                cel_create_double(result)
+            }
             (CelValue::String(a_str), CelValue::String(b_str)) => {
                 let result = string::cel_string_concat(a_str, b_str);
                 Box::into_raw(Box::new(CelValue::String(result)))
@@ -97,6 +126,264 @@ pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                 a_val, b_val
             ),
         }
+    }
+}
+
+/// Polymorphic subtraction operator for CelValue objects.
+/// Dispatches to type-specific implementations based on operand types.
+///
+/// Note: Following CEL spec, there is NO automatic type coercion.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    unsafe {
+        if a_ptr.is_null() || b_ptr.is_null() {
+            panic!("Cannot subtract null values");
+        }
+
+        let a_val = &*a_ptr;
+        let b_val = &*b_ptr;
+
+        match (a_val, b_val) {
+            (CelValue::Int(a), CelValue::Int(b)) => {
+                let result = a.checked_sub(*b).expect("integer overflow in subtraction");
+                cel_create_int(result)
+            }
+            (CelValue::Double(a), CelValue::Double(b)) => {
+                let result = arithmetic::double_sub(*a, *b);
+                cel_create_double(result)
+            }
+            _ => panic!(
+                "Cannot subtract {:?} and {:?}: unsupported types for subtraction",
+                a_val, b_val
+            ),
+        }
+    }
+}
+
+/// Polymorphic multiplication operator for CelValue objects.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    unsafe {
+        if a_ptr.is_null() || b_ptr.is_null() {
+            panic!("Cannot multiply null values");
+        }
+
+        let a_val = &*a_ptr;
+        let b_val = &*b_ptr;
+
+        match (a_val, b_val) {
+            (CelValue::Int(a), CelValue::Int(b)) => {
+                let result = a
+                    .checked_mul(*b)
+                    .expect("integer overflow in multiplication");
+                cel_create_int(result)
+            }
+            (CelValue::Double(a), CelValue::Double(b)) => {
+                let result = arithmetic::double_mul(*a, *b);
+                cel_create_double(result)
+            }
+            _ => panic!(
+                "Cannot multiply {:?} and {:?}: unsupported types for multiplication",
+                a_val, b_val
+            ),
+        }
+    }
+}
+
+/// Polymorphic division operator for CelValue objects.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    unsafe {
+        if a_ptr.is_null() || b_ptr.is_null() {
+            panic!("Cannot divide null values");
+        }
+
+        let a_val = &*a_ptr;
+        let b_val = &*b_ptr;
+
+        match (a_val, b_val) {
+            (CelValue::Int(a), CelValue::Int(b)) => {
+                if *b == 0 {
+                    panic!("division by zero");
+                }
+                let result = a.checked_div(*b).expect("integer overflow in division");
+                cel_create_int(result)
+            }
+            (CelValue::Double(a), CelValue::Double(b)) => {
+                let result = arithmetic::double_div(*a, *b);
+                cel_create_double(result)
+            }
+            _ => panic!(
+                "Cannot divide {:?} and {:?}: unsupported types for division",
+                a_val, b_val
+            ),
+        }
+    }
+}
+
+/// Polymorphic modulo operator for CelValue objects.
+/// Note: Per CEL spec, modulo is only defined for integers.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    unsafe {
+        if a_ptr.is_null() || b_ptr.is_null() {
+            panic!("Cannot modulo null values");
+        }
+
+        let a_val = &*a_ptr;
+        let b_val = &*b_ptr;
+
+        match (a_val, b_val) {
+            (CelValue::Int(a), CelValue::Int(b)) => {
+                if *b == 0 {
+                    panic!("modulo by zero");
+                }
+                let result = a.checked_rem(*b).expect("integer overflow in modulo");
+                cel_create_int(result)
+            }
+            _ => panic!(
+                "Modulo is only defined for integers, got {:?} and {:?}",
+                a_val, b_val
+            ),
+        }
+    }
+}
+
+/// Polymorphic equality operator for CelValue objects.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    unsafe {
+        if a_ptr.is_null() || b_ptr.is_null() {
+            panic!("Cannot compare null values");
+        }
+
+        let a_val = &*a_ptr;
+        let b_val = &*b_ptr;
+
+        let result = match (a_val, b_val) {
+            (CelValue::Int(a), CelValue::Int(b)) => a == b,
+            (CelValue::Double(a), CelValue::Double(b)) => a == b,
+            _ => panic!(
+                "Cannot compare {:?} and {:?}: unsupported types for equality",
+                a_val, b_val
+            ),
+        };
+        cel_create_bool(if result { 1 } else { 0 })
+    }
+}
+
+/// Polymorphic inequality operator for CelValue objects.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    unsafe {
+        if a_ptr.is_null() || b_ptr.is_null() {
+            panic!("Cannot compare null values");
+        }
+
+        let a_val = &*a_ptr;
+        let b_val = &*b_ptr;
+
+        let result = match (a_val, b_val) {
+            (CelValue::Int(a), CelValue::Int(b)) => a != b,
+            (CelValue::Double(a), CelValue::Double(b)) => a != b,
+            _ => panic!(
+                "Cannot compare {:?} and {:?}: unsupported types for inequality",
+                a_val, b_val
+            ),
+        };
+        cel_create_bool(if result { 1 } else { 0 })
+    }
+}
+
+/// Polymorphic greater-than operator for CelValue objects.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    unsafe {
+        if a_ptr.is_null() || b_ptr.is_null() {
+            panic!("Cannot compare null values");
+        }
+
+        let a_val = &*a_ptr;
+        let b_val = &*b_ptr;
+
+        let result = match (a_val, b_val) {
+            (CelValue::Int(a), CelValue::Int(b)) => a > b,
+            (CelValue::Double(a), CelValue::Double(b)) => a > b,
+            _ => panic!(
+                "Cannot compare {:?} and {:?}: unsupported types for greater-than",
+                a_val, b_val
+            ),
+        };
+        cel_create_bool(if result { 1 } else { 0 })
+    }
+}
+
+/// Polymorphic less-than operator for CelValue objects.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    unsafe {
+        if a_ptr.is_null() || b_ptr.is_null() {
+            panic!("Cannot compare null values");
+        }
+
+        let a_val = &*a_ptr;
+        let b_val = &*b_ptr;
+
+        let result = match (a_val, b_val) {
+            (CelValue::Int(a), CelValue::Int(b)) => a < b,
+            (CelValue::Double(a), CelValue::Double(b)) => a < b,
+            _ => panic!(
+                "Cannot compare {:?} and {:?}: unsupported types for less-than",
+                a_val, b_val
+            ),
+        };
+        cel_create_bool(if result { 1 } else { 0 })
+    }
+}
+
+/// Polymorphic greater-than-or-equal operator for CelValue objects.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    unsafe {
+        if a_ptr.is_null() || b_ptr.is_null() {
+            panic!("Cannot compare null values");
+        }
+
+        let a_val = &*a_ptr;
+        let b_val = &*b_ptr;
+
+        let result = match (a_val, b_val) {
+            (CelValue::Int(a), CelValue::Int(b)) => a >= b,
+            (CelValue::Double(a), CelValue::Double(b)) => a >= b,
+            _ => panic!(
+                "Cannot compare {:?} and {:?}: unsupported types for greater-than-or-equal",
+                a_val, b_val
+            ),
+        };
+        cel_create_bool(if result { 1 } else { 0 })
+    }
+}
+
+/// Polymorphic less-than-or-equal operator for CelValue objects.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    unsafe {
+        if a_ptr.is_null() || b_ptr.is_null() {
+            panic!("Cannot compare null values");
+        }
+
+        let a_val = &*a_ptr;
+        let b_val = &*b_ptr;
+
+        let result = match (a_val, b_val) {
+            (CelValue::Int(a), CelValue::Int(b)) => a <= b,
+            (CelValue::Double(a), CelValue::Double(b)) => a <= b,
+            _ => panic!(
+                "Cannot compare {:?} and {:?}: unsupported types for less-than-or-equal",
+                a_val, b_val
+            ),
+        };
+        cel_create_bool(if result { 1 } else { 0 })
     }
 }
 
@@ -173,11 +460,41 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_create_double() {
+        let ptr = cel_create_double(3.14);
+        unsafe {
+            assert_eq!(*ptr, CelValue::Double(3.14));
+            let _ = Box::from_raw(ptr);
+        }
+    }
+
+    #[test]
+    fn test_create_double_negative() {
+        let ptr = cel_create_double(-2.5);
+        unsafe {
+            assert_eq!(*ptr, CelValue::Double(-2.5));
+            let _ = Box::from_raw(ptr);
+        }
+    }
+
+    #[test]
+    fn test_extract_double() {
+        let ptr = cel_create_double(123.456);
+        let value = extract_double(ptr);
+        assert_eq!(value, 123.456);
+        unsafe {
+            let _ = Box::from_raw(ptr);
+        }
+    }
+
     // Integration tests for cel_value_add dispatcher
 
     #[rstest]
     #[case::int_add(CelValue::Int(2), CelValue::Int(3), CelValue::Int(5))]
     #[case::int_negative(CelValue::Int(-5), CelValue::Int(3), CelValue::Int(-2))]
+    #[case::double_add(CelValue::Double(2.5), CelValue::Double(3.5), CelValue::Double(6.0))]
+    #[case::double_negative(CelValue::Double(-5.5), CelValue::Double(3.0), CelValue::Double(-2.5))]
     #[case::string_basic(
         CelValue::String("hello".to_string()),
         CelValue::String(" world".to_string()),
