@@ -73,6 +73,9 @@ pub struct CompilerEnv {
     pub string_contains_func_id: FunctionId,
     pub string_matches_func_id: FunctionId,
 
+    // Membership testing
+    pub in_func_id: FunctionId,
+
     // Value conversion helpers
     pub value_to_bool_func_id: FunctionId,
 }
@@ -177,6 +180,9 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         string_contains_func_id: module.exports.get_func("cel_string_contains")?,
         string_matches_func_id: module.exports.get_func("cel_string_matches")?,
 
+        // Membership testing
+        in_func_id: module.exports.get_func("cel_value_in")?,
+
         // Value conversion helpers
         value_to_bool_func_id: module.exports.get_func("cel_value_to_bool")?,
     };
@@ -235,6 +241,7 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     module.exports.remove("cel_create_bool")?;
     module.exports.remove("cel_create_double")?;
     module.exports.remove("cel_value_to_bool")?;
+    module.exports.remove("cel_value_in")?;
 
     // 4. Parse the CEL expression
     let root_ast = Parser::default()
@@ -458,6 +465,19 @@ pub fn compile_expr(
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.lte_func_id);
+                }
+
+                // Membership operator
+                operators::IN => {
+                    if call_expr.args.len() != 2 {
+                        anyhow::bail!("'in' operator expects 2 arguments");
+                    }
+                    // Left operand: element to search for
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    // Right operand: container (list or map)
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+                    // Call runtime function
+                    body.call(env.in_func_id);
                 }
 
                 // Logical operators
@@ -2154,5 +2174,91 @@ mod tests {
             "Expression '{}' should evaluate to {}",
             expr, expected
         );
+    }
+
+    // ===== 'in' Operator Tests =====
+
+    #[rstest]
+    #[case::int_in_list(r#"2 in [1, 2, 3]"#, 1)]
+    #[case::int_not_in_list(r#"5 in [1, 2, 3]"#, 0)]
+    #[case::string_in_list(r#""b" in ["a", "b", "c"]"#, 1)]
+    #[case::string_not_in_list(r#""d" in ["a", "b"]"#, 0)]
+    #[case::bool_in_list(r#"true in [false, true]"#, 1)]
+    #[case::bool_not_in_list(r#"false in [true, true]"#, 0)]
+    #[case::empty_list(r#"1 in []"#, 0)]
+    #[case::double_in_list(r#"3.14 in [1.0, 2.0, 3.14]"#, 1)]
+    #[case::double_not_in_list(r#"3.14 in [1.0, 2.0]"#, 0)]
+    #[case::negative_int_in_list(r#"-5 in [-10, -5, 0, 5]"#, 1)]
+    #[case::nested_search(r#"2 in [1, 2, 3] in [true, false]"#, 1)]
+    fn test_in_operator_lists(#[case] expr: &str, #[case] expected: i64) {
+        let result = compile_and_execute(expr).expect("Failed to compile and execute");
+        assert_eq!(
+            result, expected,
+            "Expression '{}' should evaluate to {}",
+            expr, expected
+        );
+    }
+
+    // Map membership tests require JSON input with data parameter
+    // These test that keys exist in maps, regardless of value
+    #[test]
+    fn test_in_operator_map_with_data() {
+        let data = r#"{"settings": {"theme": "dark", "lang": "en"}}"#;
+
+        // Key exists
+        let result = compile_and_execute_with_vars(r#""theme" in data.settings"#, None, Some(data))
+            .expect("Execution failed");
+        assert_eq!(result, 1, "'theme' should exist in settings map");
+
+        // Key doesn't exist
+        let result = compile_and_execute_with_vars(r#""color" in data.settings"#, None, Some(data))
+            .expect("Execution failed");
+        assert_eq!(result, 0, "'color' should not exist in settings map");
+    }
+
+    #[test]
+    fn test_in_operator_map_null_value() {
+        // Key exists even when value is null
+        let data = r#"{"user": {"name": "Alice", "age": null}}"#;
+        let result = compile_and_execute_with_vars(r#""age" in data.user"#, None, Some(data))
+            .expect("Execution failed");
+        assert_eq!(
+            result, 1,
+            "'age' key should exist in map even though value is null"
+        );
+
+        // Verify we're not matching the value
+        let result = compile_and_execute_with_vars(r#""name" in data.user"#, None, Some(data))
+            .expect("Execution failed");
+        assert_eq!(result, 1, "'name' key should exist in map");
+    }
+
+    #[test]
+    fn test_in_operator_complex_expression() {
+        // Test 'in' with field access on input
+        let input = r#"{"items": [1, 2, 3, 4, 5]}"#;
+        let result = compile_and_execute_with_vars(r#"3 in input.items"#, Some(input), None)
+            .expect("Execution failed");
+        assert_eq!(result, 1, "3 should be in input.items");
+
+        // Test 'in' combined with other operators
+        let result = compile_and_execute_with_vars(
+            r#"(2 in input.items) && (6 in input.items)"#,
+            Some(input),
+            None,
+        )
+        .expect("Execution failed");
+        assert_eq!(
+            result, 0,
+            "2 is in list but 6 is not, so AND should be false"
+        );
+
+        let result = compile_and_execute_with_vars(
+            r#"(2 in input.items) || (6 in input.items)"#,
+            Some(input),
+            None,
+        )
+        .expect("Execution failed");
+        assert_eq!(result, 1, "2 is in list, so OR should be true");
     }
 }

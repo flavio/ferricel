@@ -8,6 +8,7 @@ mod field_access;
 mod globals;
 mod helpers;
 mod logical;
+mod membership;
 mod memory;
 mod serialization;
 mod string;
@@ -55,3 +56,5 @@ pub use string::{
     cel_create_string, cel_string_contains, cel_string_ends_with, cel_string_matches,
     cel_string_size, cel_string_starts_with,
 };
+
+pub use membership::cel_value_in;
