@@ -13,6 +13,7 @@ A file for [guiding coding agents](https://agents.md/).
 
 ## Components
 
+- ferricel-types: contains Rust types shared by the wasm guest and the host
 - runtime: provide functions that the CEL program will use at runtime. This is compiled
   to wasm32-unknown-unknown and embedded into the final WASM module.
 - ferricel: CLI program with two major subcommand:
