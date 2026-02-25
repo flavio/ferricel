@@ -317,7 +317,10 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     // 10. Export the 'validate' function for the Host
     module.exports.add("validate", validate_id);
 
-    // 11. Emit the module as bytes
+    // 11. Run garbage collection to remove unreferenced items (dead code elimination)
+    walrus::passes::gc::run(&mut module);
+
+    // 12. Emit the module as bytes
     let wasm_bytes = module.emit_wasm();
 
     Ok(wasm_bytes)
