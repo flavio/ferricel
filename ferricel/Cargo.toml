@@ -12,7 +12,7 @@ serde_json     = { workspace = true }
 slog           = { workspace = true }
 slog-term      = "2.9"
 walrus         = "0.25"
-wasmtime       = "41.0"
+wasmtime       = "42.0"
 
 
 [dev-dependencies]
