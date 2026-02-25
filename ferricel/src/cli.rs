@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use clap::{ArgGroup, Parser as ClapParser, Subcommand};
+use clap::{ArgGroup, Parser as ClapParser, Subcommand, ValueEnum};
+use ferricel_types::LogLevel;
 
 /// Ferricel - CEL compiler to WebAssembly
 #[derive(ClapParser)]
@@ -9,6 +10,30 @@ use clap::{ArgGroup, Parser as ClapParser, Subcommand};
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+}
+
+/// CLI-friendly wrapper for LogLevel that implements ValueEnum
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum LogLevelArg {
+    /// Debug level (most verbose)
+    Debug,
+    /// Info level (default)
+    Info,
+    /// Warning level
+    Warn,
+    /// Error level (least verbose)
+    Error,
+}
+
+impl From<LogLevelArg> for LogLevel {
+    fn from(arg: LogLevelArg) -> Self {
+        match arg {
+            LogLevelArg::Debug => LogLevel::Debug,
+            LogLevelArg::Info => LogLevel::Info,
+            LogLevelArg::Warn => LogLevel::Warn,
+            LogLevelArg::Error => LogLevel::Error,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -50,5 +75,9 @@ pub enum Commands {
         /// Path to data JSON file (mutually exclusive with --data-json)
         #[arg(long, conflicts_with = "data_json")]
         data_file: Option<PathBuf>,
+
+        /// Minimum log level for runtime logging
+        #[arg(short = 'l', long, value_enum, default_value = "info")]
+        log_level: LogLevelArg,
     },
 }

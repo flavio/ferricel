@@ -7,6 +7,7 @@ mod deserialization;
 mod field_access;
 mod globals;
 mod helpers;
+pub mod logging;
 mod logical;
 mod map;
 mod membership;
@@ -64,3 +65,6 @@ pub use string::{
 };
 
 pub use membership::cel_value_in;
+
+// Re-export logging functions
+pub use logging::cel_set_log_level;

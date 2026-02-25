@@ -2,7 +2,9 @@
 //! These functions extract values from CelValue pointers and panic on type mismatches.
 //! Also provides CEL type conversion functions (uint(), int(), double(), string()).
 
+use crate::cel_panic;
 use crate::helpers::{cel_create_double, cel_create_int, cel_create_uint};
+use crate::logging::macros::cel_debug;
 use crate::types::CelValue;
 
 /// Extract i64 from a CelValue pointer.
@@ -21,16 +23,25 @@ use crate::types::CelValue;
 /// - `ptr` must be a valid pointer to a CelValue
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_to_i64(ptr: *mut CelValue) -> i64 {
+    let log = crate::logging::get_logger();
+
     if ptr.is_null() {
-        panic!("Attempted to convert null CelValue pointer to i64");
+        cel_panic!(log, "Attempted to convert null CelValue pointer to i64";
+            "function" => "cel_value_to_i64");
     }
 
     // SAFETY: Caller guarantees ptr is valid
     let value = unsafe { &*ptr };
 
     match value {
-        CelValue::Int(n) => *n,
-        other => panic!("Type mismatch: expected Int, got {:?}", other),
+        CelValue::Int(n) => {
+            cel_debug!(log, "Converting CelValue to i64"; "value" => *n);
+            *n
+        }
+        other => cel_panic!(log, "Type mismatch in conversion";
+            "function" => "cel_value_to_i64",
+            "expected" => "Int",
+            "actual" => format!("{:?}", other)),
     }
 }
 
@@ -50,16 +61,25 @@ pub unsafe extern "C" fn cel_value_to_i64(ptr: *mut CelValue) -> i64 {
 /// - `ptr` must be a valid pointer to a CelValue
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_to_u64(ptr: *mut CelValue) -> u64 {
+    let log = crate::logging::get_logger();
+
     if ptr.is_null() {
-        panic!("Attempted to convert null CelValue pointer to u64");
+        cel_panic!(log, "Attempted to convert null CelValue pointer to u64";
+            "function" => "cel_value_to_u64");
     }
 
     // SAFETY: Caller guarantees ptr is valid
     let value = unsafe { &*ptr };
 
     match value {
-        CelValue::UInt(n) => *n,
-        other => panic!("Type mismatch: expected UInt, got {:?}", other),
+        CelValue::UInt(n) => {
+            cel_debug!(log, "Converting CelValue to u64"; "value" => *n);
+            *n
+        }
+        other => cel_panic!(log, "Type mismatch in conversion";
+            "function" => "cel_value_to_u64",
+            "expected" => "UInt",
+            "actual" => format!("{:?}", other)),
     }
 }
 
@@ -79,8 +99,11 @@ pub unsafe extern "C" fn cel_value_to_u64(ptr: *mut CelValue) -> u64 {
 /// - `ptr` must be a valid pointer to a CelValue
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
+    let log = crate::logging::get_logger();
+
     if ptr.is_null() {
-        panic!("Attempted to convert null CelValue pointer to bool");
+        cel_panic!(log, "Attempted to convert null CelValue pointer to bool";
+            "function" => "cel_value_to_bool");
     }
 
     // SAFETY: Caller guarantees ptr is valid
@@ -88,13 +111,13 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
 
     match value {
         CelValue::Bool(b) => {
-            if *b {
-                1
-            } else {
-                0
-            }
+            cel_debug!(log, "Converting CelValue to bool"; "value" => *b);
+            if *b { 1 } else { 0 }
         }
-        other => panic!("Type mismatch: expected Bool, got {:?}", other),
+        other => cel_panic!(log, "Type mismatch in conversion";
+            "function" => "cel_value_to_bool",
+            "expected" => "Bool",
+            "actual" => format!("{:?}", other)),
     }
 }
 
@@ -109,36 +132,56 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
 /// - uint(string) -> uint (parses decimal string, panics on error)
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if ptr.is_null() {
-            panic!("Cannot convert null to uint");
+            cel_panic!(log, "Cannot convert null to uint";
+                "function" => "cel_uint");
         }
 
         match &*ptr {
             CelValue::UInt(u) => cel_create_uint(*u),
             CelValue::Int(i) => {
                 if *i < 0 {
-                    panic!("Cannot convert negative int to uint: {}", i);
+                    cel_panic!(log, "Cannot convert negative value to uint";
+                        "function" => "cel_uint",
+                        "from_type" => "Int",
+                        "value" => *i);
                 }
                 cel_create_uint(*i as u64)
             }
             CelValue::Double(d) => {
                 if d.is_nan() || d.is_infinite() {
-                    panic!("Cannot convert NaN or Infinity to uint");
+                    cel_panic!(log, "Cannot convert NaN or Infinity to uint";
+                        "function" => "cel_uint",
+                        "from_type" => "Double",
+                        "value" => format!("{}", d));
                 }
                 if *d < 0.0 {
-                    panic!("Cannot convert negative double to uint: {}", d);
+                    cel_panic!(log, "Cannot convert negative value to uint";
+                        "function" => "cel_uint",
+                        "from_type" => "Double",
+                        "value" => *d);
                 }
                 if *d > u64::MAX as f64 {
-                    panic!("Double value too large for uint: {}", d);
+                    cel_panic!(log, "Value too large for uint";
+                        "function" => "cel_uint",
+                        "from_type" => "Double",
+                        "value" => *d,
+                        "max" => u64::MAX);
                 }
                 cel_create_uint(d.trunc() as u64)
             }
             CelValue::String(s) => match s.parse::<u64>() {
                 Ok(u) => cel_create_uint(u),
-                Err(_) => panic!("Cannot parse string as uint: {}", s),
+                Err(_) => cel_panic!(log, "Cannot parse string as uint";
+                    "function" => "cel_uint",
+                    "value" => s),
             },
-            other => panic!("Cannot convert {:?} to uint", other),
+            other => cel_panic!(log, "Cannot convert type to uint";
+                "function" => "cel_uint",
+                "from_type" => format!("{:?}", other)),
         }
     }
 }
@@ -151,33 +194,52 @@ pub extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
 /// - int(string) -> int (parses decimal string, panics on error)
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if ptr.is_null() {
-            panic!("Cannot convert null to int");
+            cel_panic!(log, "Cannot convert null to int";
+                "function" => "cel_int");
         }
 
         match &*ptr {
             CelValue::Int(i) => cel_create_int(*i),
             CelValue::UInt(u) => {
                 if *u > i64::MAX as u64 {
-                    panic!("UInt value too large for int: {}", u);
+                    cel_panic!(log, "Value too large for int";
+                        "function" => "cel_int",
+                        "from_type" => "UInt",
+                        "value" => *u,
+                        "max" => i64::MAX);
                 }
                 cel_create_int(*u as i64)
             }
             CelValue::Double(d) => {
                 if d.is_nan() || d.is_infinite() {
-                    panic!("Cannot convert NaN or Infinity to int");
+                    cel_panic!(log, "Cannot convert NaN or Infinity to int";
+                        "function" => "cel_int",
+                        "from_type" => "Double",
+                        "value" => format!("{}", d));
                 }
                 if *d < i64::MIN as f64 || *d > i64::MAX as f64 {
-                    panic!("Double value out of range for int: {}", d);
+                    cel_panic!(log, "Value out of range for int";
+                        "function" => "cel_int",
+                        "from_type" => "Double",
+                        "value" => *d,
+                        "min" => i64::MIN,
+                        "max" => i64::MAX);
                 }
                 cel_create_int(d.trunc() as i64)
             }
             CelValue::String(s) => match s.parse::<i64>() {
                 Ok(i) => cel_create_int(i),
-                Err(_) => panic!("Cannot parse string as int: {}", s),
+                Err(_) => cel_panic!(log, "Cannot parse string as int";
+                    "function" => "cel_int",
+                    "value" => s),
             },
-            other => panic!("Cannot convert {:?} to int", other),
+            other => cel_panic!(log, "Cannot convert type to int";
+                "function" => "cel_int",
+                "from_type" => format!("{:?}", other)),
         }
     }
 }
@@ -190,9 +252,12 @@ pub extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
 /// - double(string) -> double (parses string, panics on error)
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if ptr.is_null() {
-            panic!("Cannot convert null to double");
+            cel_panic!(log, "Cannot convert null to double";
+                "function" => "cel_double");
         }
 
         match &*ptr {
@@ -201,9 +266,13 @@ pub extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
             CelValue::UInt(u) => cel_create_double(*u as f64),
             CelValue::String(s) => match s.parse::<f64>() {
                 Ok(d) => cel_create_double(d),
-                Err(_) => panic!("Cannot parse string as double: {}", s),
+                Err(_) => cel_panic!(log, "Cannot parse string as double";
+                    "function" => "cel_double",
+                    "value" => s),
             },
-            other => panic!("Cannot convert {:?} to double", other),
+            other => cel_panic!(log, "Cannot convert type to double";
+                "function" => "cel_double",
+                "from_type" => format!("{:?}", other)),
         }
     }
 }

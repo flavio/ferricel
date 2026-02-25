@@ -7,9 +7,11 @@
 //! - NO automatic type coercion between Int and Double
 
 use crate::helpers::{
-    cel_create_double, cel_create_int, cel_create_uint, extract_double, extract_int, extract_uint,
+    cel_create_double, cel_create_int, cel_create_uint, extract_double, extract_int,
+    extract_int_with_log, extract_uint,
 };
 use crate::types::CelValue;
+use crate::{cel_panic, logging::macros::cel_warn};
 
 /// Internal helper: Add two integers with overflow checking.
 ///
@@ -76,26 +78,48 @@ pub extern "C" fn cel_int_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = extract_int(a_ptr);
-    let b = extract_int(b_ptr);
+    let log = crate::logging::get_logger();
+    let a = extract_int_with_log(a_ptr, &log);
+    let b = extract_int_with_log(b_ptr, &log);
+
     if b == 0 {
-        panic!("division by zero");
+        cel_panic!(log, "Division by zero";
+            "operation" => "cel_int_div",
+            "dividend" => a,
+            "divisor" => b);
     }
+
     // checked_div also catches the special case: i64::MIN / -1
-    let result = a.checked_div(b).expect("integer overflow in division");
-    cel_create_int(result)
+    match a.checked_div(b) {
+        Some(result) => cel_create_int(result),
+        None => cel_panic!(log, "Integer overflow in division";
+            "operation" => "cel_int_div",
+            "dividend" => a,
+            "divisor" => b),
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = extract_int(a_ptr);
-    let b = extract_int(b_ptr);
+    let log = crate::logging::get_logger();
+    let a = extract_int_with_log(a_ptr, &log);
+    let b = extract_int_with_log(b_ptr, &log);
+
     if b == 0 {
-        panic!("modulo by zero");
+        cel_panic!(log, "Modulo by zero";
+            "operation" => "cel_int_mod",
+            "dividend" => a,
+            "divisor" => b);
     }
+
     // checked_rem also catches the special case: i64::MIN % -1
-    let result = a.checked_rem(b).expect("integer overflow in modulo");
-    cel_create_int(result)
+    match a.checked_rem(b) {
+        Some(result) => cel_create_int(result),
+        None => cel_panic!(log, "Integer overflow in modulo";
+            "operation" => "cel_int_mod",
+            "dividend" => a,
+            "divisor" => b),
+    }
 }
 
 // Unsigned integer arithmetic operations (FFI wrappers)
@@ -133,20 +157,30 @@ pub extern "C" fn cel_uint_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_uint_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     if b == 0 {
-        panic!("division by zero");
+        cel_panic!(log, "Division by zero";
+            "operation" => "cel_uint_div",
+            "type" => "UInt",
+            "dividend" => a,
+            "divisor" => b);
     }
     cel_create_uint(a / b)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_uint_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     if b == 0 {
-        panic!("modulo by zero");
+        cel_panic!(log, "Modulo by zero";
+            "operation" => "cel_uint_mod",
+            "type" => "UInt",
+            "dividend" => a,
+            "divisor" => b);
     }
     cel_create_uint(a % b)
 }
@@ -180,9 +214,25 @@ pub extern "C" fn cel_double_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> 
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_double_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
     let result = double_div(a, b);
+
+    // Warn about special IEEE 754 results
+    if result.is_infinite() {
+        cel_warn!(log, "Division resulted in Infinity";
+            "operation" => "cel_double_div",
+            "dividend" => a,
+            "divisor" => b,
+            "result" => format!("{}", result));
+    } else if result.is_nan() {
+        cel_warn!(log, "Division resulted in NaN";
+            "operation" => "cel_double_div",
+            "dividend" => a,
+            "divisor" => b);
+    }
+
     cel_create_double(result)
 }
 

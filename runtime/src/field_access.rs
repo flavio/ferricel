@@ -1,6 +1,8 @@
 //! Field access operations for CelValue objects.
 //! Supports accessing fields from Object-type CelValues.
 
+use crate::cel_panic;
+use crate::logging::macros::{cel_debug, cel_info};
 use crate::types::CelValue;
 use std::slice;
 
@@ -30,9 +32,12 @@ pub unsafe extern "C" fn cel_get_field(
     field_name_ptr: i32,
     field_name_len: i32,
 ) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     // Check for null object pointer
     if obj_ptr.is_null() {
-        panic!("Cannot access field on null object");
+        cel_panic!(log, "Cannot access field on null object";
+            "function" => "cel_get_field");
     }
 
     // SAFETY: Caller guarantees obj_ptr is valid
@@ -41,27 +46,39 @@ pub unsafe extern "C" fn cel_get_field(
     // Read the field name from WASM memory
     let field_name = unsafe {
         let bytes = slice::from_raw_parts(field_name_ptr as *const u8, field_name_len as usize);
-        String::from_utf8(bytes.to_vec())
-            .unwrap_or_else(|_| panic!("Field name is not valid UTF-8"))
+        String::from_utf8(bytes.to_vec()).unwrap_or_else(|_| {
+            cel_panic!(log, "Field name is not valid UTF-8";
+                "function" => "cel_get_field",
+                "bytes_len" => field_name_len)
+        })
     };
 
     // Extract the field from the object
     match obj {
         CelValue::Object(map) => {
+            cel_debug!(log, "Accessing field from object"; 
+                "field" => field_name.as_str(),
+                "num_fields" => map.len());
             // Look up the field in the hashmap
             match map.get(&field_name) {
                 Some(value) => {
+                    cel_info!(log, "Field found"; "field" => field_name.as_str());
                     // Clone the value and return a new boxed pointer
                     let boxed_value = Box::new(value.clone());
                     Box::into_raw(boxed_value)
                 }
                 None => {
-                    panic!("Field '{}' not found in object", field_name);
+                    let available_fields: Vec<&String> = map.keys().collect();
+                    cel_panic!(log, "Field not found in object";
+                        "field" => field_name,
+                        "available_fields" => format!("{:?}", available_fields));
                 }
             }
         }
         _ => {
-            panic!("Cannot access field '{}' on non-object value", field_name);
+            cel_panic!(log, "Cannot access field on non-object value";
+                "field" => field_name,
+                "actual_type" => format!("{:?}", obj));
         }
     }
 }
@@ -91,9 +108,12 @@ pub unsafe extern "C" fn cel_has_field(
     field_name_ptr: i32,
     field_name_len: i32,
 ) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     // Check for null object pointer
     if obj_ptr.is_null() {
-        panic!("Cannot check field on null object");
+        cel_panic!(log, "Cannot check field on null object";
+            "function" => "cel_has_field");
     }
 
     // SAFETY: Caller guarantees obj_ptr is valid
@@ -102,8 +122,11 @@ pub unsafe extern "C" fn cel_has_field(
     // Read the field name from WASM memory
     let field_name = unsafe {
         let bytes = slice::from_raw_parts(field_name_ptr as *const u8, field_name_len as usize);
-        String::from_utf8(bytes.to_vec())
-            .unwrap_or_else(|_| panic!("Field name is not valid UTF-8"))
+        String::from_utf8(bytes.to_vec()).unwrap_or_else(|_| {
+            cel_panic!(log, "Field name is not valid UTF-8";
+                "function" => "cel_has_field",
+                "bytes_len" => field_name_len)
+        })
     };
 
     // Check if the field exists

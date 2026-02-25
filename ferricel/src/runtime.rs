@@ -1,3 +1,4 @@
+use ferricel_types::LogLevel;
 use wasmtime::*;
 
 /// Execute a compiled WASM module with input and data variables
@@ -9,6 +10,8 @@ pub fn execute_wasm_with_vars(
     wasm_bytes: &[u8],
     input_json: Option<&str>,
     data_json: Option<&str>,
+    log_level: LogLevel,
+    logger: slog::Logger,
 ) -> Result<String, anyhow::Error> {
     // Create a Wasmtime engine and store
     let engine = Engine::default();
@@ -17,8 +20,72 @@ pub fn execute_wasm_with_vars(
     // Load and compile the WASM module from bytes
     let module = Module::from_binary(&engine, wasm_bytes)?;
 
-    // Create an instance
-    let instance = Instance::new(&mut store, &module, &[])?;
+    // Create a linker and add the cel_log host function
+    let mut linker = Linker::new(&engine);
+
+    // Clone logger to move into closure
+    // let logger_clone = logger.clone();
+
+    // Add cel_log host function for structured logging
+    linker.func_wrap(
+        "env",
+        "cel_log",
+        move |mut caller: Caller<'_, ()>, ptr: i32, len: i32| -> Result<(), anyhow::Error> {
+            // Get the WASM memory
+            let memory = caller
+                .get_export("memory")
+                .and_then(|e| e.into_memory())
+                .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+
+            // Read the JSON log event from WASM memory
+            let mut buffer = vec![0u8; len as usize];
+            memory.read(&caller, ptr as usize, &mut buffer)?;
+
+            // Deserialize the log event using the shared LogEvent type
+            let event: ferricel_types::LogEvent = serde_json::from_slice(&buffer)
+                .map_err(|e| anyhow::anyhow!("Failed to deserialize log event: {}", e))?;
+
+            // Serialize extra KV pairs to JSON string
+            let extra_json =
+                serde_json::to_string(&event.extra).unwrap_or_else(|_| "{}".to_string());
+
+            // Create child logger with base KV pairs (file, line, column, extra)
+            let child_logger = logger.new(slog::o!(
+                "file" => event.file,
+                "line" => event.line,
+                "column" => event.column,
+                "extra" => extra_json
+            ));
+
+            // Log with appropriate level
+            match event.level {
+                ferricel_types::LogLevel::Error => {
+                    slog::error!(child_logger, "{}", event.message)
+                }
+                ferricel_types::LogLevel::Warn => {
+                    slog::warn!(child_logger, "{}", event.message)
+                }
+                ferricel_types::LogLevel::Info => {
+                    slog::info!(child_logger, "{}", event.message)
+                }
+                ferricel_types::LogLevel::Debug => {
+                    slog::debug!(child_logger, "{}", event.message)
+                }
+            }
+
+            Ok(())
+        },
+    )?;
+
+    // Create an instance using the linker
+    let instance = linker.instantiate(&mut store, &module)?;
+
+    // Set the log level in the WASM runtime before execution
+    let cel_set_log_level = instance
+        .get_typed_func::<i32, ()>(&mut store, "cel_set_log_level")
+        .map_err(|e| anyhow::anyhow!("Failed to get 'cel_set_log_level' function: {}", e))?;
+
+    cel_set_log_level.call(&mut store, log_level.as_i32())?;
 
     // Get the cel_malloc function to allocate memory in WASM
     let cel_malloc = instance

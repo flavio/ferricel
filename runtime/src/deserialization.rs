@@ -1,6 +1,8 @@
 //! JSON deserialization from WASM memory into CelValue objects.
 //! Handles parsing JSON bytes and allocating CelValue on the heap.
 
+use crate::cel_panic;
+use crate::logging::macros::cel_info;
 use crate::types::CelValue;
 
 /// Decode i64 into (ptr, len) tuple.
@@ -28,8 +30,11 @@ pub fn decode_ptr_len(encoded: i64) -> (i32, i32) {
 /// - Caller must ensure the memory region [ptr, ptr+len) is valid
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_deserialize_json(encoded: i64) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     // Handle null/absent input
     if encoded == 0 {
+        cel_info!(log, "Deserializing null input");
         return core::ptr::null_mut();
     }
 
@@ -38,8 +43,14 @@ pub unsafe extern "C" fn cel_deserialize_json(encoded: i64) -> *mut CelValue {
 
     // Validate length
     if len < 0 {
-        panic!("Invalid length in encoded parameter: {}", len);
+        cel_panic!(log, "Invalid length in encoded parameter";
+            "function" => "cel_deserialize_json",
+            "length" => len);
     }
+
+    cel_info!(log, "Deserializing JSON input";
+        "ptr" => ptr,
+        "len" => len);
 
     // Read JSON bytes from memory
     // SAFETY: Caller guarantees memory region [ptr, ptr+len) is valid
@@ -54,7 +65,9 @@ pub unsafe extern "C" fn cel_deserialize_json(encoded: i64) -> *mut CelValue {
         }
         Err(err) => {
             // JSON parsing failed - panic with error message
-            panic!("Failed to parse JSON: {:?}", err);
+            cel_panic!(log, "Failed to parse JSON";
+                "function" => "cel_deserialize_json",
+                "error" => format!("{:?}", err));
         }
     }
 }

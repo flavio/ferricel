@@ -1,6 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use slog::{o, Drain, Logger};
+
+use crate::cli::LogLevelArg;
 use crate::runtime;
 
 pub fn run(
@@ -9,6 +12,7 @@ pub fn run(
     input_file: Option<PathBuf>,
     data_json: Option<String>,
     data_file: Option<PathBuf>,
+    log_level: LogLevelArg,
 ) -> Result<(), anyhow::Error> {
     // Check if WASM file exists
     if !wasm_path.exists() {
@@ -47,7 +51,20 @@ pub fn run(
     };
 
     // Execute the WASM module with variables
-    let result = runtime::execute_wasm_with_vars(&wasm_bytes, input.as_deref(), data.as_deref())?;
+    let log_level = log_level.into();
+
+    // Create simple logger with PlainSyncDecorator (no Mutex needed with FullFormat)
+    let decorator = slog_term::PlainSyncDecorator::new(std::io::stderr());
+    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let logger = Logger::root(drain, o!());
+
+    let result = runtime::execute_wasm_with_vars(
+        &wasm_bytes,
+        input.as_deref(),
+        data.as_deref(),
+        log_level,
+        logger,
+    )?;
 
     println!("Execution result: {}", result);
     Ok(())

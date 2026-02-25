@@ -2,8 +2,9 @@
 //! These are used internally by other runtime functions and exported for compiler use.
 //! Also includes polymorphic operators that dispatch to type-specific implementations.
 
+use crate::logging::macros::cel_debug;
 use crate::types::CelValue;
-use crate::{arithmetic, array, string};
+use crate::{arithmetic, array, cel_panic, string};
 
 /// Creates a CelValue::Int on the heap and returns a pointer to it.
 /// The caller is responsible for freeing the memory using cel_free_value.
@@ -37,13 +38,24 @@ pub extern "C" fn cel_create_double(value: f64) -> *mut CelValue {
 /// Internal helper: Extracts i64 from CelValue or panics with type error.
 /// This is not exported - it's used by arithmetic and comparison operations.
 pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
+    let log = crate::logging::get_logger();
+    extract_int_with_log(ptr, &log)
+}
+
+/// Internal helper with logger: Extracts i64 from CelValue or panics with structured error.
+pub(crate) fn extract_int_with_log(ptr: *mut CelValue, log: &slog::Logger) -> i64 {
     unsafe {
         if ptr.is_null() {
-            panic!("Null pointer passed to extract_int");
+            cel_panic!(log, "Null pointer in extract operation";
+                "function" => "extract_int",
+                "pointer" => "null");
         }
         match &*ptr {
             CelValue::Int(i) => *i,
-            other => panic!("Type error: expected Int, got {:?}", other),
+            other => cel_panic!(log, "Type mismatch in extraction";
+                "function" => "extract_int",
+                "expected" => "Int",
+                "actual" => format!("{:?}", other)),
         }
     }
 }
@@ -51,13 +63,24 @@ pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
 /// Internal helper: Extracts u64 from CelValue or panics with type error.
 /// This is not exported - it's used by arithmetic and comparison operations.
 pub(crate) fn extract_uint(ptr: *mut CelValue) -> u64 {
+    let log = crate::logging::get_logger();
+    extract_uint_with_log(ptr, &log)
+}
+
+/// Internal helper with logger: Extracts u64 from CelValue or panics with structured error.
+pub(crate) fn extract_uint_with_log(ptr: *mut CelValue, log: &slog::Logger) -> u64 {
     unsafe {
         if ptr.is_null() {
-            panic!("Null pointer passed to extract_uint");
+            cel_panic!(log, "Null pointer in extract operation";
+                "function" => "extract_uint",
+                "pointer" => "null");
         }
         match &*ptr {
             CelValue::UInt(u) => *u,
-            other => panic!("Type error: expected UInt, got {:?}", other),
+            other => cel_panic!(log, "Type mismatch in extraction";
+                "function" => "extract_uint",
+                "expected" => "UInt",
+                "actual" => format!("{:?}", other)),
         }
     }
 }
@@ -65,13 +88,24 @@ pub(crate) fn extract_uint(ptr: *mut CelValue) -> u64 {
 /// Internal helper: Extracts bool from CelValue or panics with type error.
 /// This is not exported - it's used by logical operations.
 pub(crate) fn extract_bool(ptr: *mut CelValue) -> bool {
+    let log = crate::logging::get_logger();
+    extract_bool_with_log(ptr, &log)
+}
+
+/// Internal helper with logger: Extracts bool from CelValue or panics with structured error.
+pub(crate) fn extract_bool_with_log(ptr: *mut CelValue, log: &slog::Logger) -> bool {
     unsafe {
         if ptr.is_null() {
-            panic!("Null pointer passed to extract_bool");
+            cel_panic!(log, "Null pointer in extract operation";
+                "function" => "extract_bool",
+                "pointer" => "null");
         }
         match &*ptr {
             CelValue::Bool(b) => *b,
-            other => panic!("Type error: expected Bool, got {:?}", other),
+            other => cel_panic!(log, "Type mismatch in extraction";
+                "function" => "extract_bool",
+                "expected" => "Bool",
+                "actual" => format!("{:?}", other)),
         }
     }
 }
@@ -79,13 +113,24 @@ pub(crate) fn extract_bool(ptr: *mut CelValue) -> bool {
 /// Internal helper: Extracts f64 from CelValue or panics with type error.
 /// This is not exported - it's used by arithmetic and comparison operations.
 pub(crate) fn extract_double(ptr: *mut CelValue) -> f64 {
+    let log = crate::logging::get_logger();
+    extract_double_with_log(ptr, &log)
+}
+
+/// Internal helper with logger: Extracts f64 from CelValue or panics with structured error.
+pub(crate) fn extract_double_with_log(ptr: *mut CelValue, log: &slog::Logger) -> f64 {
     unsafe {
         if ptr.is_null() {
-            panic!("Null pointer passed to extract_double");
+            cel_panic!(log, "Null pointer in extract operation";
+                "function" => "extract_double",
+                "pointer" => "null");
         }
         match &*ptr {
             CelValue::Double(d) => *d,
-            other => panic!("Type error: expected Double, got {:?}", other),
+            other => cel_panic!(log, "Type mismatch in extraction";
+                "function" => "extract_double",
+                "expected" => "Double",
+                "actual" => format!("{:?}", other)),
         }
     }
 }
@@ -117,9 +162,12 @@ pub(crate) fn extract_double(ptr: *mut CelValue) -> f64 {
 /// - On integer overflow (for Int addition)
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot add null values");
+            cel_panic!(log, "Cannot add null values";
+                "function" => "cel_value_add");
         }
 
         let a_val = &*a_ptr;
@@ -127,31 +175,42 @@ pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
+                cel_debug!(log, "Performing Int addition"; "left" => *a, "right" => *b);
                 let result = arithmetic::cel_int_add(*a, *b);
                 cel_create_int(result)
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
-                let result = a
-                    .checked_add(*b)
-                    .expect("unsigned integer overflow in addition");
+                cel_debug!(log, "Performing UInt addition"; "left" => *a, "right" => *b);
+                let result = a.checked_add(*b).unwrap_or_else(|| {
+                    cel_panic!(log, "Unsigned integer overflow in addition";
+                        "operation" => "cel_value_add",
+                        "type" => "UInt",
+                        "left" => *a,
+                        "right" => *b)
+                });
                 cel_create_uint(result)
             }
             (CelValue::Double(a), CelValue::Double(b)) => {
+                cel_debug!(log, "Performing Double addition"; "left" => *a, "right" => *b);
                 let result = arithmetic::double_add(*a, *b);
                 cel_create_double(result)
             }
             (CelValue::String(a_str), CelValue::String(b_str)) => {
+                cel_debug!(log, "Performing String concatenation"; 
+                    "left_len" => a_str.len(), "right_len" => b_str.len());
                 let result = string::cel_string_concat(a_str, b_str);
                 Box::into_raw(Box::new(CelValue::String(result)))
             }
             (CelValue::Array(a_vec), CelValue::Array(b_vec)) => {
+                cel_debug!(log, "Performing Array concatenation"; 
+                    "left_len" => a_vec.len(), "right_len" => b_vec.len());
                 let result = array::cel_array_concat(a_vec, b_vec);
                 Box::into_raw(Box::new(CelValue::Array(result)))
             }
-            _ => panic!(
-                "Cannot add {:?} and {:?}: unsupported types for addition",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Cannot add incompatible types";
+                "operation" => "cel_value_add",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         }
     }
 }
@@ -162,9 +221,12 @@ pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 /// Note: Following CEL spec, there is NO automatic type coercion.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot subtract null values");
+            cel_panic!(log, "Cannot subtract null values";
+                "function" => "cel_value_sub");
         }
 
         let a_val = &*a_ptr;
@@ -172,23 +234,36 @@ pub extern "C" fn cel_value_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
-                let result = a.checked_sub(*b).expect("integer overflow in subtraction");
+                cel_debug!(log, "Performing Int subtraction"; "left" => *a, "right" => *b);
+                let result = a.checked_sub(*b).unwrap_or_else(|| {
+                    cel_panic!(log, "Integer overflow in subtraction";
+                        "operation" => "cel_value_sub",
+                        "type" => "Int",
+                        "left" => *a,
+                        "right" => *b)
+                });
                 cel_create_int(result)
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
-                let result = a
-                    .checked_sub(*b)
-                    .expect("unsigned integer underflow in subtraction");
+                cel_debug!(log, "Performing UInt subtraction"; "left" => *a, "right" => *b);
+                let result = a.checked_sub(*b).unwrap_or_else(|| {
+                    cel_panic!(log, "Unsigned integer underflow in subtraction";
+                        "operation" => "cel_value_sub",
+                        "type" => "UInt",
+                        "left" => *a,
+                        "right" => *b)
+                });
                 cel_create_uint(result)
             }
             (CelValue::Double(a), CelValue::Double(b)) => {
+                cel_debug!(log, "Performing Double subtraction"; "left" => *a, "right" => *b);
                 let result = arithmetic::double_sub(*a, *b);
                 cel_create_double(result)
             }
-            _ => panic!(
-                "Cannot subtract {:?} and {:?}: unsupported types for subtraction",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Cannot subtract incompatible types";
+                "operation" => "cel_value_sub",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         }
     }
 }
@@ -196,9 +271,12 @@ pub extern "C" fn cel_value_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 /// Polymorphic multiplication operator for CelValue objects.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot multiply null values");
+            cel_panic!(log, "Cannot multiply null values";
+                "function" => "cel_value_mul");
         }
 
         let a_val = &*a_ptr;
@@ -206,25 +284,36 @@ pub extern "C" fn cel_value_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
-                let result = a
-                    .checked_mul(*b)
-                    .expect("integer overflow in multiplication");
+                cel_debug!(log, "Performing Int multiplication"; "left" => *a, "right" => *b);
+                let result = a.checked_mul(*b).unwrap_or_else(|| {
+                    cel_panic!(log, "Integer overflow in multiplication";
+                        "operation" => "cel_value_mul",
+                        "type" => "Int",
+                        "left" => *a,
+                        "right" => *b)
+                });
                 cel_create_int(result)
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
-                let result = a
-                    .checked_mul(*b)
-                    .expect("unsigned integer overflow in multiplication");
+                cel_debug!(log, "Performing UInt multiplication"; "left" => *a, "right" => *b);
+                let result = a.checked_mul(*b).unwrap_or_else(|| {
+                    cel_panic!(log, "Unsigned integer overflow in multiplication";
+                        "operation" => "cel_value_mul",
+                        "type" => "UInt",
+                        "left" => *a,
+                        "right" => *b)
+                });
                 cel_create_uint(result)
             }
             (CelValue::Double(a), CelValue::Double(b)) => {
+                cel_debug!(log, "Performing Double multiplication"; "left" => *a, "right" => *b);
                 let result = arithmetic::double_mul(*a, *b);
                 cel_create_double(result)
             }
-            _ => panic!(
-                "Cannot multiply {:?} and {:?}: unsupported types for multiplication",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Cannot multiply incompatible types";
+                "operation" => "cel_value_mul",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         }
     }
 }
@@ -232,9 +321,12 @@ pub extern "C" fn cel_value_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 /// Polymorphic division operator for CelValue objects.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot divide null values");
+            cel_panic!(log, "Cannot divide null values";
+                "function" => "cel_value_div");
         }
 
         let a_val = &*a_ptr;
@@ -242,26 +334,42 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
+                cel_debug!(log, "Performing Int division"; "dividend" => *a, "divisor" => *b);
                 if *b == 0 {
-                    panic!("division by zero");
+                    cel_panic!(log, "Division by zero";
+                        "operation" => "cel_value_div",
+                        "type" => "Int",
+                        "dividend" => *a,
+                        "divisor" => *b);
                 }
-                let result = a.checked_div(*b).expect("integer overflow in division");
+                let result = a.checked_div(*b).unwrap_or_else(|| {
+                    cel_panic!(log, "Integer overflow in division";
+                        "operation" => "cel_value_div",
+                        "dividend" => *a,
+                        "divisor" => *b)
+                });
                 cel_create_int(result)
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
+                cel_debug!(log, "Performing UInt division"; "dividend" => *a, "divisor" => *b);
                 if *b == 0 {
-                    panic!("division by zero");
+                    cel_panic!(log, "Division by zero";
+                        "operation" => "cel_value_div",
+                        "type" => "UInt",
+                        "dividend" => *a,
+                        "divisor" => *b);
                 }
                 cel_create_uint(a / b)
             }
             (CelValue::Double(a), CelValue::Double(b)) => {
+                cel_debug!(log, "Performing Double division"; "dividend" => *a, "divisor" => *b);
                 let result = arithmetic::double_div(*a, *b);
                 cel_create_double(result)
             }
-            _ => panic!(
-                "Cannot divide {:?} and {:?}: unsupported types for division",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Cannot divide incompatible types";
+                "operation" => "cel_value_div",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         }
     }
 }
@@ -270,9 +378,12 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 /// Note: Per CEL spec, modulo is only defined for int and uint.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot modulo null values");
+            cel_panic!(log, "Cannot modulo null values";
+                "function" => "cel_value_mod");
         }
 
         let a_val = &*a_ptr;
@@ -280,22 +391,38 @@ pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
+                cel_debug!(log, "Performing Int modulo"; "dividend" => *a, "divisor" => *b);
                 if *b == 0 {
-                    panic!("modulo by zero");
+                    cel_panic!(log, "Modulo by zero";
+                        "operation" => "cel_value_mod",
+                        "type" => "Int",
+                        "dividend" => *a,
+                        "divisor" => *b);
                 }
-                let result = a.checked_rem(*b).expect("integer overflow in modulo");
+                let result = a.checked_rem(*b).unwrap_or_else(|| {
+                    cel_panic!(log, "Integer overflow in modulo";
+                        "operation" => "cel_value_mod",
+                        "type" => "Int",
+                        "dividend" => *a,
+                        "divisor" => *b)
+                });
                 cel_create_int(result)
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
+                cel_debug!(log, "Performing UInt modulo"; "dividend" => *a, "divisor" => *b);
                 if *b == 0 {
-                    panic!("modulo by zero");
+                    cel_panic!(log, "Modulo by zero";
+                        "operation" => "cel_value_mod",
+                        "type" => "UInt",
+                        "dividend" => *a,
+                        "divisor" => *b);
                 }
                 cel_create_uint(a % b)
             }
-            _ => panic!(
-                "Modulo is only defined for int and uint, got {:?} and {:?}",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Modulo is only defined for int and uint";
+                "operation" => "cel_value_mod",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         }
     }
 }
@@ -305,9 +432,12 @@ pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 /// are compared as if they exist on a continuous number line.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot compare null values");
+            cel_panic!(log, "Cannot compare null values";
+                "function" => "cel_value_eq");
         }
 
         let a_val = &*a_ptr;
@@ -339,10 +469,10 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) == *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a == (*b as f64),
 
-            _ => panic!(
-                "Cannot compare {:?} and {:?}: unsupported types for equality",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Cannot compare incompatible types for equality";
+                "operation" => "cel_value_eq",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
@@ -352,9 +482,12 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 /// Implements CEL spec cross-type numeric inequality (negation of equality).
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot compare null values");
+            cel_panic!(log, "Cannot compare null values";
+                "function" => "cel_value_ne");
         }
 
         let a_val = &*a_ptr;
@@ -386,10 +519,10 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) != *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a != (*b as f64),
 
-            _ => panic!(
-                "Cannot compare {:?} and {:?}: unsupported types for inequality",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Cannot compare incompatible types for inequality";
+                "operation" => "cel_value_ne",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
@@ -399,9 +532,12 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 /// Implements CEL spec cross-type numeric ordering.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot compare null values");
+            cel_panic!(log, "Cannot compare null values";
+                "function" => "cel_value_gt");
         }
 
         let a_val = &*a_ptr;
@@ -433,10 +569,10 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) > *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a > (*b as f64),
 
-            _ => panic!(
-                "Cannot compare {:?} and {:?}: unsupported types for greater-than",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Cannot compare incompatible types for greater-than";
+                "operation" => "cel_value_gt",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
@@ -446,9 +582,12 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 /// Implements CEL spec cross-type numeric ordering.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot compare null values");
+            cel_panic!(log, "Cannot compare null values";
+                "function" => "cel_value_lt");
         }
 
         let a_val = &*a_ptr;
@@ -480,10 +619,10 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) < *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a < (*b as f64),
 
-            _ => panic!(
-                "Cannot compare {:?} and {:?}: unsupported types for less-than",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Cannot compare incompatible types for less-than";
+                "operation" => "cel_value_lt",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
@@ -493,9 +632,12 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 /// Implements CEL spec cross-type numeric ordering.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot compare null values");
+            cel_panic!(log, "Cannot compare null values";
+                "function" => "cel_value_gte");
         }
 
         let a_val = &*a_ptr;
@@ -527,10 +669,10 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) >= *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a >= (*b as f64),
 
-            _ => panic!(
-                "Cannot compare {:?} and {:?}: unsupported types for greater-than-or-equal",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Cannot compare incompatible types for greater-than-or-equal";
+                "operation" => "cel_value_gte",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
@@ -540,9 +682,12 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 /// Implements CEL spec cross-type numeric ordering.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            panic!("Cannot compare null values");
+            cel_panic!(log, "Cannot compare null values";
+                "function" => "cel_value_lte");
         }
 
         let a_val = &*a_ptr;
@@ -574,10 +719,10 @@ pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) <= *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a <= (*b as f64),
 
-            _ => panic!(
-                "Cannot compare {:?} and {:?}: unsupported types for less-than-or-equal",
-                a_val, b_val
-            ),
+            _ => cel_panic!(log, "Cannot compare incompatible types for less-than-or-equal";
+                "operation" => "cel_value_lte",
+                "left_type" => format!("{:?}", a_val),
+                "right_type" => format!("{:?}", b_val)),
         };
         cel_create_bool(if result { 1 } else { 0 })
     }

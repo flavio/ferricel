@@ -1,18 +1,22 @@
 [package]
-name = "ferricel"
-version = "0.1.0"
 edition = "2024"
+name    = "ferricel"
+version = "0.1.0"
 
 [dependencies]
-anyhow = "1.0"
-cel = "0.12"
-walrus = "0.25"
-clap = { version = "4.5", features = ["derive"] }
-wasmtime = "41.0"
-serde_json = "1.0"
+anyhow         = { workspace = true }
+cel            = "0.12"
+clap           = { version = "4.5", features = ["derive"] }
+ferricel-types = { path = "../ferricel-types" }
+serde_json     = { workspace = true }
+slog           = { workspace = true }
+slog-term      = "2.9"
+walrus         = "0.25"
+wasmtime       = "41.0"
+
 
 [dev-dependencies]
-rstest = "0.26"
 assert_cmd = "2.1"
 predicates = "3.1"
-tempfile = "3.25"
+rstest     = { workspace = true }
+tempfile   = "3.25"

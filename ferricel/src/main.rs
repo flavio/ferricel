@@ -20,6 +20,9 @@ fn main() -> Result<(), anyhow::Error> {
             input_file,
             data_json,
             data_file,
-        } => cmd::run::run(&wasm, input_json, input_file, data_json, data_file),
+            log_level,
+        } => cmd::run::run(
+            &wasm, input_json, input_file, data_json, data_file, log_level,
+        ),
     }
 }

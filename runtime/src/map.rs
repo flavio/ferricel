@@ -2,6 +2,8 @@
 //!
 //! Provides functions for creating and populating map literals.
 
+use crate::cel_panic;
+use crate::logging::macros::cel_debug;
 use crate::types::CelValue;
 use std::collections::HashMap;
 
@@ -42,15 +44,23 @@ pub unsafe extern "C" fn cel_map_insert(
     key_ptr: *mut CelValue,
     value_ptr: *mut CelValue,
 ) {
+    let log = crate::logging::get_logger();
+
     // Check for null pointers
     if map_ptr.is_null() {
-        panic!("cel_map_insert: map_ptr is null");
+        cel_panic!(log, "Map pointer is null";
+            "function" => "cel_map_insert",
+            "parameter" => "map_ptr");
     }
     if key_ptr.is_null() {
-        panic!("cel_map_insert: key_ptr is null");
+        cel_panic!(log, "Key pointer is null";
+            "function" => "cel_map_insert",
+            "parameter" => "key_ptr");
     }
     if value_ptr.is_null() {
-        panic!("cel_map_insert: value_ptr is null");
+        cel_panic!(log, "Value pointer is null";
+            "function" => "cel_map_insert",
+            "parameter" => "value_ptr");
     }
 
     // SAFETY: Caller guarantees all pointers are valid
@@ -61,15 +71,24 @@ pub unsafe extern "C" fn cel_map_insert(
     // Extract the key string
     let key_string = match key {
         CelValue::String(s) => s.clone(),
-        _ => panic!("cel_map_insert: key must be a String, got {:?}", key),
+        _ => cel_panic!(log, "Map key must be a String";
+            "function" => "cel_map_insert",
+            "expected_key_type" => "String",
+            "actual_key_type" => format!("{:?}", key)),
     };
 
     // Insert the key-value pair into the map
     match map_value {
         CelValue::Object(hash_map) => {
+            cel_debug!(log, "Inserting into map"; 
+                "key" => key_string.as_str(),
+                "current_size" => hash_map.len());
             hash_map.insert(key_string, value.clone());
         }
-        _ => panic!("cel_map_insert: Expected Object, got {:?}", map_value),
+        _ => cel_panic!(log, "Type mismatch in map operation";
+            "function" => "cel_map_insert",
+            "expected" => "Object",
+            "actual" => format!("{:?}", map_value)),
     }
 }
 

@@ -8,7 +8,9 @@
 //! - Time cost for lists: O(n×m) where n is list size, m is element size
 //! - Time cost for maps: O(1) expected (implementation may vary)
 
+use crate::cel_panic;
 use crate::helpers::cel_create_bool;
+use crate::logging::macros::{cel_debug, cel_info};
 use crate::types::CelValue;
 
 /// Check if an element exists in a container (list or map).
@@ -31,11 +33,17 @@ pub unsafe extern "C" fn cel_value_in(
     element_ptr: *mut CelValue,
     container_ptr: *mut CelValue,
 ) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     if element_ptr.is_null() {
-        panic!("cel_value_in: element_ptr is null");
+        cel_panic!(log, "Element pointer is null";
+            "function" => "cel_value_in",
+            "parameter" => "element_ptr");
     }
     if container_ptr.is_null() {
-        panic!("cel_value_in: container_ptr is null");
+        cel_panic!(log, "Container pointer is null";
+            "function" => "cel_value_in",
+            "parameter" => "container_ptr");
     }
 
     let element = unsafe { &*element_ptr };
@@ -44,8 +52,10 @@ pub unsafe extern "C" fn cel_value_in(
     match container {
         // List membership: A in list(A)
         CelValue::Array(arr) => {
+            cel_debug!(log, "Checking list membership"; "list_size" => arr.len());
             // Linear search through array for equality
             let found = arr.iter().any(|item| item == element);
+            cel_info!(log, "List membership check complete"; "found" => found);
             cel_create_bool(if found { 1 } else { 0 })
         }
 
@@ -53,21 +63,28 @@ pub unsafe extern "C" fn cel_value_in(
         // Only checks key existence, not values
         CelValue::Object(map) => match element {
             CelValue::String(key) => {
+                cel_debug!(log, "Checking map key membership"; 
+                    "key" => key.as_str(),
+                    "map_size" => map.len());
                 // Maps in CEL must have string keys
                 let found = map.contains_key(key);
+                cel_info!(log, "Map membership check complete"; "found" => found);
                 cel_create_bool(if found { 1 } else { 0 })
             }
             _ => {
-                panic!("cel_value_in: maps require string keys, got {:?}", element);
+                cel_panic!(log, "Maps require string keys for membership test";
+                    "function" => "cel_value_in",
+                    "expected_key_type" => "String",
+                    "actual_key_type" => format!("{:?}", element));
             }
         },
 
         // Type mismatch - no matching overload
         _ => {
-            panic!(
-                "cel_value_in: no matching overload for {:?} in {:?}",
-                element, container
-            );
+            cel_panic!(log, "No matching overload for membership test";
+                "function" => "cel_value_in",
+                "element_type" => format!("{:?}", element),
+                "container_type" => format!("{:?}", container));
         }
     }
 }

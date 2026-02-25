@@ -1,6 +1,8 @@
 //! Array operations for CelValue objects.
 //! Supports creating arrays, accessing elements, array concatenation, and getting array length.
 
+use crate::cel_panic;
+use crate::logging::macros::cel_debug;
 use crate::types::CelValue;
 
 /// Internal helper: Concatenate two arrays.
@@ -34,9 +36,12 @@ pub(crate) fn cel_array_concat(a: &[CelValue], b: &[CelValue]) -> Vec<CelValue> 
 /// - `array_ptr` must be a valid pointer to a CelValue
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_array_len(array_ptr: *mut CelValue) -> i32 {
+    let log = crate::logging::get_logger();
+
     // Check for null array pointer
     if array_ptr.is_null() {
-        panic!("Cannot get length of null array");
+        cel_panic!(log, "Cannot get length of null array";
+            "function" => "cel_array_len");
     }
 
     // SAFETY: Caller guarantees array_ptr is valid
@@ -44,8 +49,14 @@ pub unsafe extern "C" fn cel_array_len(array_ptr: *mut CelValue) -> i32 {
 
     // Extract the length from the array
     match array_value {
-        CelValue::Array(vec) => vec.len() as i32,
-        _ => panic!("cel_array_len: Expected Array, got {:?}", array_value),
+        CelValue::Array(vec) => {
+            cel_debug!(log, "Getting array length"; "length" => vec.len());
+            vec.len() as i32
+        }
+        _ => cel_panic!(log, "Type mismatch in array operation";
+            "function" => "cel_array_len",
+            "expected" => "Array",
+            "actual" => format!("{:?}", array_value)),
     }
 }
 
@@ -67,9 +78,12 @@ pub unsafe extern "C" fn cel_array_len(array_ptr: *mut CelValue) -> i32 {
 /// - `array_ptr` must be a valid pointer to a CelValue
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_array_get(array_ptr: *mut CelValue, index: i32) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
     // Check for null array pointer
     if array_ptr.is_null() {
-        panic!("Cannot get element from null array");
+        cel_panic!(log, "Cannot get element from null array";
+            "function" => "cel_array_get");
     }
 
     // SAFETY: Caller guarantees array_ptr is valid
@@ -78,19 +92,22 @@ pub unsafe extern "C" fn cel_array_get(array_ptr: *mut CelValue, index: i32) -> 
     // Extract the element from the array
     match array_value {
         CelValue::Array(vec) => {
+            cel_debug!(log, "Accessing array element"; "index" => index, "length" => vec.len());
             let idx = index as usize;
             if idx >= vec.len() {
-                panic!(
-                    "Array index out of bounds: index {} >= length {}",
-                    index,
-                    vec.len()
-                );
+                cel_panic!(log, "Array index out of bounds";
+                    "function" => "cel_array_get",
+                    "index" => index,
+                    "length" => vec.len());
             }
             // Clone the element and return a new boxed pointer
             let boxed_value = Box::new(vec[idx].clone());
             Box::into_raw(boxed_value)
         }
-        _ => panic!("cel_array_get: Expected Array, got {:?}", array_value),
+        _ => cel_panic!(log, "Type mismatch in array operation";
+            "function" => "cel_array_get",
+            "expected" => "Array",
+            "actual" => format!("{:?}", array_value)),
     }
 }
 
@@ -122,12 +139,16 @@ pub unsafe extern "C" fn cel_create_array() -> *mut CelValue {
 /// - This function mutates the array in place
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_array_push(array_ptr: *mut CelValue, element_ptr: *mut CelValue) {
+    let log = crate::logging::get_logger();
+
     // Check for null pointers
     if array_ptr.is_null() {
-        panic!("Cannot push to null array");
+        cel_panic!(log, "Cannot push to null array";
+            "function" => "cel_array_push");
     }
     if element_ptr.is_null() {
-        panic!("Cannot push null element to array");
+        cel_panic!(log, "Cannot push null element to array";
+            "function" => "cel_array_push");
     }
 
     // SAFETY: Caller guarantees both pointers are valid
@@ -137,9 +158,13 @@ pub unsafe extern "C" fn cel_array_push(array_ptr: *mut CelValue, element_ptr: *
     // Push the element to the array
     match array_value {
         CelValue::Array(vec) => {
+            cel_debug!(log, "Pushing element to array"; "current_length" => vec.len());
             vec.push(element.clone());
         }
-        _ => panic!("cel_array_push: Expected Array, got {:?}", array_value),
+        _ => cel_panic!(log, "Type mismatch in array operation";
+            "function" => "cel_array_push",
+            "expected" => "Array",
+            "actual" => format!("{:?}", array_value)),
     }
 }
 
