@@ -48,6 +48,26 @@ tests: $(RUNTIME_TARGET)
 	cargo test --package runtime
 	cargo test --package ferricel
 
+# Check code formatting (does not modify files)
+.PHONY: fmt
+fmt:
+	cargo fmt --all -- --check
+
+# Run clippy lints with warnings treated as errors
+.PHONY: lint
+lint:
+	cargo clippy --workspace -- -D warnings
+
+# Auto-fix clippy warnings where possible
+.PHONY: lint-fix
+lint-fix:
+	cargo clippy --workspace --fix --allow-dirty --allow-staged
+
+# Check that the code compiles without building artifacts
+.PHONY: check
+check:
+	cargo check --workspace
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -58,6 +78,10 @@ help:
 	@echo "  unit-tests - Run only unit tests (tests within src/)"
 	@echo "  e2e-tests  - Run only end-to-end CLI tests (tests/ directory)"
 	@echo "  tests      - Run all tests (unit + e2e)"
+	@echo "  fmt        - Check code formatting (does not modify files)"
+	@echo "  lint       - Run clippy lints with warnings as errors"
+	@echo "  lint-fix   - Auto-fix clippy warnings where possible"
+	@echo "  check      - Check that code compiles without building"
 	@echo "  help       - Show this help message"
 	@echo ""
 	@echo "Note: The runtime WASM must be built before ferricel, as it's embedded using include_bytes!"
