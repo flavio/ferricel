@@ -4,8 +4,8 @@
 
 use anyhow::Result;
 use ferricel_types::{LogEvent, LogLevel};
-use serde_json::{Map, Value, json};
-use slog::{KV, OwnedKVList, Record};
+use serde_json::{json, Map, Value};
+use slog::{OwnedKVList, Record, KV};
 
 /// Serializer for extracting key-value pairs from slog records
 struct SimpleSerializer {

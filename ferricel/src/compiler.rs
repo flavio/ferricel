@@ -1,5 +1,5 @@
-use cel::common::ast::operators;
 use cel::common::ast::Expr;
+use cel::common::ast::operators;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
 use std::collections::HashMap;
@@ -83,6 +83,13 @@ pub struct CompilerEnv {
 
     // Value conversion helpers
     pub value_to_bool_func_id: FunctionId,
+
+    // Temporal operations
+    pub timestamp_func_id: FunctionId,
+    pub duration_func_id: FunctionId,
+
+    // Value conversion helpers
+    pub string_func_id: FunctionId,
 }
 
 /// Compilation context that holds state during expression compilation
@@ -195,6 +202,11 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
 
         // Value conversion helpers
         value_to_bool_func_id: module.exports.get_func("cel_value_to_bool")?,
+
+        // Temporal operations
+        timestamp_func_id: module.exports.get_func("cel_timestamp")?,
+        duration_func_id: module.exports.get_func("cel_duration")?,
+        string_func_id: module.exports.get_func("cel_string")?,
     };
 
     // 3. Remove the helpers from exports so the Host can't call them directly
@@ -685,6 +697,37 @@ pub fn compile_expr(
                     body.call(env.string_matches_func_id);
                 }
 
+                // Temporal conversion functions
+                "timestamp" => {
+                    // timestamp(string) - parses RFC3339 timestamp string
+                    // Returns *mut CelValue::Timestamp or Error
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("timestamp() expects 1 argument (RFC3339 string)");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.timestamp_func_id);
+                }
+
+                "duration" => {
+                    // duration(string) - parses CEL duration format string
+                    // Returns *mut CelValue::Duration or Error
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("duration() expects 1 argument (duration string)");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.duration_func_id);
+                }
+
+                "string" => {
+                    // string(value) - converts any CelValue to string representation
+                    // Returns *mut CelValue::String
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("string() expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.string_func_id);
+                }
+
                 _ => anyhow::bail!("Unsupported function call: {}", call_expr.func_name),
             }
         }
@@ -997,7 +1040,7 @@ mod tests {
     use crate::runtime;
     use ferricel_types::LogLevel;
     use rstest::rstest;
-    use slog::{o, Drain, Logger};
+    use slog::{Drain, Logger, o};
 
     /// Test helper: create a logger for tests
     fn create_test_logger() -> Logger {

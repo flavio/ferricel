@@ -52,7 +52,11 @@ pub extern "C" fn cel_conditional(
     false_ptr: *mut CelValue,
 ) -> *mut CelValue {
     let cond = extract_bool(cond_ptr);
-    if cond { true_ptr } else { false_ptr }
+    if cond {
+        true_ptr
+    } else {
+        false_ptr
+    }
 }
 
 #[cfg(test)]

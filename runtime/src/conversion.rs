@@ -1,9 +1,9 @@
 //! Type conversion from CelValue to primitive types (i64, u64, bool).
 //! These functions extract values from CelValue pointers and panic on type mismatches.
-//! Also provides CEL type conversion functions (uint(), int(), double(), string()).
+//! Also provides CEL type conversion functions (uint(), int(), double(), string(), timestamp(), duration()).
 
 use crate::cel_panic;
-use crate::helpers::{cel_create_double, cel_create_int, cel_create_uint};
+use crate::helpers::{cel_create_double, cel_create_duration, cel_create_int, cel_create_uint};
 use crate::logging::macros::cel_debug;
 use crate::types::CelValue;
 
@@ -112,7 +112,11 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
     match value {
         CelValue::Bool(b) => {
             cel_debug!(log, "Converting CelValue to bool"; "value" => *b);
-            if *b { 1 } else { 0 }
+            if *b {
+                1
+            } else {
+                0
+            }
         }
         other => cel_panic!(log, "Type mismatch in conversion";
             "function" => "cel_value_to_bool",
@@ -272,6 +276,145 @@ pub extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
             },
             other => cel_panic!(log, "Cannot convert type to double";
                 "function" => "cel_double",
+                "from_type" => format!("{:?}", other)),
+        }
+    }
+}
+
+/// CEL timestamp() function - converts values to timestamp.
+/// Signatures per CEL spec:
+/// - timestamp(timestamp) -> timestamp (identity)
+/// - timestamp(string) -> timestamp (parses RFC3339 format)
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_timestamp(ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Cannot convert null to timestamp";
+                "function" => "cel_timestamp");
+        }
+
+        match &*ptr {
+            CelValue::Timestamp(_) => {
+                // Already a timestamp - return as-is (identity conversion)
+                cel_debug!(log, "Timestamp identity conversion");
+                ptr
+            }
+            CelValue::String(s) => {
+                cel_debug!(log, "Parsing string to timestamp"; "value" => s);
+                // Parse RFC3339 - preserves timezone from string, assumes UTC if missing
+                let dt = crate::chrono_helpers::parse_rfc3339(s)
+                    .or_else(|_| {
+                        // If parse fails, try appending 'Z' for UTC assumption
+                        // This handles strings like "2024-01-15T10:30:00" without timezone
+                        let s_with_utc = format!("{}Z", s);
+                        crate::chrono_helpers::parse_rfc3339(&s_with_utc)
+                    })
+                    .unwrap_or_else(|e| {
+                        cel_panic!(log, "Cannot parse string as timestamp";
+                            "function" => "cel_timestamp",
+                            "value" => s,
+                            "error" => e)
+                    });
+
+                // Create CelValue::Timestamp directly - preserves timezone!
+                Box::into_raw(Box::new(CelValue::Timestamp(dt)))
+            }
+            other => cel_panic!(log, "Cannot convert type to timestamp";
+                "function" => "cel_timestamp",
+                "from_type" => format!("{:?}", other)),
+        }
+    }
+}
+
+/// CEL duration() function - converts values to duration.
+/// Signatures per CEL spec:
+/// - duration(duration) -> duration (identity)
+/// - duration(string) -> duration (parses CEL duration format like "1h30m")
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_duration(ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Cannot convert null to duration";
+                "function" => "cel_duration");
+        }
+
+        match &*ptr {
+            CelValue::Duration(d) => {
+                cel_debug!(log, "Duration identity conversion");
+                let (seconds, nanos) = crate::chrono_helpers::duration_to_parts(d);
+                cel_create_duration(seconds, nanos as i64)
+            }
+            CelValue::String(s) => {
+                cel_debug!(log, "Parsing string to duration"; "value" => s);
+                let d = crate::chrono_helpers::parse_duration(s).unwrap_or_else(|e| {
+                    cel_panic!(log, "Cannot parse string as duration";
+                            "function" => "cel_duration",
+                            "value" => s,
+                            "error" => e)
+                });
+                let (seconds, nanos) = crate::chrono_helpers::duration_to_parts(&d);
+                cel_create_duration(seconds, nanos as i64)
+            }
+            other => cel_panic!(log, "Cannot convert type to duration";
+                "function" => "cel_duration",
+                "from_type" => format!("{:?}", other)),
+        }
+    }
+}
+
+/// CEL string() function - converts values to string.
+/// Handles all CEL types including timestamp and duration formatting.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Cannot convert null to string";
+                "function" => "cel_string");
+        }
+
+        match &*ptr {
+            CelValue::String(s) => {
+                cel_debug!(log, "String identity conversion");
+                Box::into_raw(Box::new(CelValue::String(s.clone())))
+            }
+            CelValue::Int(i) => {
+                cel_debug!(log, "Converting Int to string"; "value" => *i);
+                Box::into_raw(Box::new(CelValue::String(i.to_string())))
+            }
+            CelValue::UInt(u) => {
+                cel_debug!(log, "Converting UInt to string"; "value" => *u);
+                Box::into_raw(Box::new(CelValue::String(u.to_string())))
+            }
+            CelValue::Double(d) => {
+                cel_debug!(log, "Converting Double to string"; "value" => *d);
+                Box::into_raw(Box::new(CelValue::String(d.to_string())))
+            }
+            CelValue::Bool(b) => {
+                cel_debug!(log, "Converting Bool to string"; "value" => *b);
+                Box::into_raw(Box::new(CelValue::String(if *b {
+                    "true".to_string()
+                } else {
+                    "false".to_string()
+                })))
+            }
+            CelValue::Timestamp(dt) => {
+                cel_debug!(log, "Converting Timestamp to string");
+                let s = dt.to_rfc3339();
+                Box::into_raw(Box::new(CelValue::String(s)))
+            }
+            CelValue::Duration(d) => {
+                cel_debug!(log, "Converting Duration to string");
+                let s = crate::chrono_helpers::format_duration(d);
+                Box::into_raw(Box::new(CelValue::String(s)))
+            }
+            other => cel_panic!(log, "Cannot convert type to string";
+                "function" => "cel_string",
                 "from_type" => format!("{:?}", other)),
         }
     }

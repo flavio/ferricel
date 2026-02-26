@@ -4,7 +4,7 @@
 
 use crate::logging::macros::cel_debug;
 use crate::types::CelValue;
-use crate::{arithmetic, array, cel_panic, string};
+use crate::{arithmetic, array, cel_panic, string, temporal};
 
 /// Creates a CelValue::Int on the heap and returns a pointer to it.
 /// The caller is responsible for freeing the memory using cel_free_value.
@@ -33,6 +33,30 @@ pub extern "C" fn cel_create_bool(value: i64) -> *mut CelValue {
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_create_double(value: f64) -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::Double(value)))
+}
+
+/// Creates a CelValue::Timestamp on the heap and returns a pointer to it.
+/// The caller is responsible for freeing the memory using cel_free_value.
+///
+/// # Arguments
+/// * `seconds` - Seconds since Unix epoch (1970-01-01T00:00:00Z)
+/// * `nanos` - Nanoseconds component (0-999,999,999)
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_create_timestamp(seconds: i64, nanos: i64) -> *mut CelValue {
+    let dt = crate::chrono_helpers::parts_to_datetime(seconds, nanos);
+    Box::into_raw(Box::new(CelValue::Timestamp(dt)))
+}
+
+/// Creates a CelValue::Duration on the heap and returns a pointer to it.
+/// The caller is responsible for freeing the memory using cel_free_value.
+///
+/// # Arguments
+/// * `seconds` - Number of seconds (can be negative)
+/// * `nanos` - Nanoseconds component (0-999,999,999 or negative)
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_create_duration(seconds: i64, nanos: i64) -> *mut CelValue {
+    let duration = crate::chrono_helpers::parts_to_duration(seconds, nanos);
+    Box::into_raw(Box::new(CelValue::Duration(duration)))
 }
 
 /// Internal helper: Extracts i64 from CelValue or panics with type error.
@@ -135,6 +159,112 @@ pub(crate) fn extract_double_with_log(ptr: *mut CelValue, log: &slog::Logger) ->
     }
 }
 
+/// Internal helper: Extracts (seconds, nanos) from CelValue::Duration or panics with type error.
+/// This is not exported - it's used by temporal operations.
+pub(crate) fn extract_duration(ptr: *mut CelValue) -> (i64, i32) {
+    let log = crate::logging::get_logger();
+    extract_duration_with_log(ptr, &log)
+}
+
+/// Internal helper with logger: Extracts (seconds, nanos) from CelValue::Duration.
+pub(crate) fn extract_duration_with_log(ptr: *mut CelValue, log: &slog::Logger) -> (i64, i32) {
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Null pointer in extract operation";
+                "function" => "extract_duration",
+                "pointer" => "null");
+        }
+        match &*ptr {
+            CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(d),
+            other => cel_panic!(log, "Type mismatch in extraction";
+                "function" => "extract_duration",
+                "expected" => "Duration",
+                "actual" => format!("{:?}", other)),
+        }
+    }
+}
+
+/// Internal helper: Extracts DateTime<FixedOffset> directly from CelValue::Timestamp.
+/// This is not exported - it's used by temporal accessor operations.
+pub(crate) fn extract_datetime(ptr: *mut CelValue) -> chrono::DateTime<chrono::FixedOffset> {
+    let log = crate::logging::get_logger();
+    extract_datetime_with_log(ptr, &log)
+}
+
+/// Internal helper with logger: Extracts DateTime<FixedOffset> from CelValue::Timestamp.
+pub(crate) fn extract_datetime_with_log(
+    ptr: *mut CelValue,
+    log: &slog::Logger,
+) -> chrono::DateTime<chrono::FixedOffset> {
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Null pointer in extract operation";
+                "function" => "extract_datetime",
+                "pointer" => "null");
+        }
+        match &*ptr {
+            CelValue::Timestamp(dt) => *dt,
+            other => cel_panic!(log, "Type mismatch in extraction";
+                "function" => "extract_datetime",
+                "expected" => "Timestamp",
+                "actual" => format!("{:?}", other)),
+        }
+    }
+}
+
+/// Internal helper: Extracts String from CelValue::String.
+/// This is not exported - it's used by timezone-aware temporal operations.
+pub(crate) fn extract_string(ptr: *mut CelValue) -> String {
+    let log = crate::logging::get_logger();
+    extract_string_with_log(ptr, &log)
+}
+
+/// Internal helper with logger: Extracts String from CelValue::String.
+pub(crate) fn extract_string_with_log(ptr: *mut CelValue, log: &slog::Logger) -> String {
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Null pointer in extract operation";
+                "function" => "extract_string",
+                "pointer" => "null");
+        }
+        match &*ptr {
+            CelValue::String(s) => s.clone(),
+            other => cel_panic!(log, "Type mismatch in extraction";
+                "function" => "extract_string",
+                "expected" => "String",
+                "actual" => format!("{:?}", other)),
+        }
+    }
+}
+
+/// Internal helper: Extracts chrono::Duration directly from CelValue::Duration.
+/// This is not exported - it's used by temporal arithmetic operations.
+pub(crate) fn extract_duration_chrono(ptr: *mut CelValue) -> chrono::Duration {
+    let log = crate::logging::get_logger();
+    extract_duration_chrono_with_log(ptr, &log)
+}
+
+/// Internal helper with logger: Extracts chrono::Duration from CelValue::Duration.
+pub(crate) fn extract_duration_chrono_with_log(
+    ptr: *mut CelValue,
+    log: &slog::Logger,
+) -> chrono::Duration {
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Null pointer in extract operation";
+                "function" => "extract_duration_chrono",
+                "pointer" => "null");
+        }
+        match &*ptr {
+            CelValue::Duration(d) => *d,
+            other => cel_panic!(log, "Type mismatch in extraction";
+                "function" => "extract_duration_chrono",
+                "expected" => "Duration",
+                "actual" => format!("{:?}", other)),
+        }
+    }
+}
+
 /// Polymorphic addition operator for CelValue objects.
 /// Dispatches to type-specific implementations:
 /// - Int + Int = Int (arithmetic addition)
@@ -207,6 +337,18 @@ pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                 let result = array::cel_array_concat(a_vec, b_vec);
                 Box::into_raw(Box::new(CelValue::Array(result)))
             }
+            (CelValue::Timestamp(_), CelValue::Duration(_)) => {
+                cel_debug!(log, "Performing Timestamp + Duration");
+                temporal::cel_timestamp_add_duration(a_ptr, b_ptr)
+            }
+            (CelValue::Duration(_), CelValue::Timestamp(_)) => {
+                cel_debug!(log, "Performing Duration + Timestamp");
+                temporal::cel_timestamp_add_duration(b_ptr, a_ptr)
+            }
+            (CelValue::Duration(_), CelValue::Duration(_)) => {
+                cel_debug!(log, "Performing Duration + Duration");
+                temporal::cel_duration_add(a_ptr, b_ptr)
+            }
             _ => cel_panic!(log, "Cannot add incompatible types";
                 "operation" => "cel_value_add",
                 "left_type" => format!("{:?}", a_val),
@@ -259,6 +401,18 @@ pub extern "C" fn cel_value_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                 cel_debug!(log, "Performing Double subtraction"; "left" => *a, "right" => *b);
                 let result = arithmetic::double_sub(*a, *b);
                 cel_create_double(result)
+            }
+            (CelValue::Timestamp(_), CelValue::Duration(_)) => {
+                cel_debug!(log, "Performing Timestamp - Duration");
+                temporal::cel_timestamp_sub_duration(a_ptr, b_ptr)
+            }
+            (CelValue::Timestamp(_), CelValue::Timestamp(_)) => {
+                cel_debug!(log, "Performing Timestamp - Timestamp");
+                temporal::cel_timestamp_diff(a_ptr, b_ptr)
+            }
+            (CelValue::Duration(_), CelValue::Duration(_)) => {
+                cel_debug!(log, "Performing Duration - Duration");
+                temporal::cel_duration_sub(a_ptr, b_ptr)
             }
             _ => cel_panic!(log, "Cannot subtract incompatible types";
                 "operation" => "cel_value_sub",

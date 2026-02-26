@@ -1,6 +1,7 @@
 // Module declarations
 mod arithmetic;
 mod array;
+mod chrono_helpers;
 mod comparison;
 mod conversion;
 mod deserialization;
@@ -14,6 +15,7 @@ mod membership;
 mod memory;
 mod serialization;
 mod string;
+mod temporal;
 mod types;
 
 // Re-export public types
@@ -44,7 +46,8 @@ pub use deserialization::{cel_deserialize_json, cel_free_value};
 pub use globals::{cel_get_data, cel_get_input, cel_init_data, cel_init_input, cel_reset_globals};
 
 pub use conversion::{
-    cel_double, cel_int, cel_uint, cel_value_to_bool, cel_value_to_i64, cel_value_to_u64,
+    cel_double, cel_duration, cel_int, cel_string, cel_timestamp, cel_uint, cel_value_to_bool,
+    cel_value_to_i64, cel_value_to_u64,
 };
 
 pub use field_access::cel_get_field;
@@ -54,9 +57,9 @@ pub use array::{cel_array_get, cel_array_len, cel_array_push, cel_create_array};
 pub use map::{cel_create_map, cel_map_insert};
 
 pub use helpers::{
-    cel_create_bool, cel_create_double, cel_create_int, cel_create_uint, cel_value_add,
-    cel_value_div, cel_value_eq, cel_value_gt, cel_value_gte, cel_value_lt, cel_value_lte,
-    cel_value_mod, cel_value_mul, cel_value_ne, cel_value_sub,
+    cel_create_bool, cel_create_double, cel_create_duration, cel_create_int, cel_create_timestamp,
+    cel_create_uint, cel_value_add, cel_value_div, cel_value_eq, cel_value_gt, cel_value_gte,
+    cel_value_lt, cel_value_lte, cel_value_mod, cel_value_mul, cel_value_ne, cel_value_sub,
 };
 
 pub use string::{
@@ -65,6 +68,18 @@ pub use string::{
 };
 
 pub use membership::cel_value_in;
+
+pub use temporal::{
+    cel_duration_add, cel_duration_negate, cel_duration_sub, cel_timestamp_add_duration,
+    cel_timestamp_diff, cel_timestamp_get_date, cel_timestamp_get_date_tz,
+    cel_timestamp_get_day_of_month, cel_timestamp_get_day_of_month_tz,
+    cel_timestamp_get_day_of_week, cel_timestamp_get_day_of_week_tz, cel_timestamp_get_day_of_year,
+    cel_timestamp_get_day_of_year_tz, cel_timestamp_get_full_year, cel_timestamp_get_full_year_tz,
+    cel_timestamp_get_hours, cel_timestamp_get_hours_tz, cel_timestamp_get_milliseconds,
+    cel_timestamp_get_milliseconds_tz, cel_timestamp_get_minutes, cel_timestamp_get_minutes_tz,
+    cel_timestamp_get_month, cel_timestamp_get_month_tz, cel_timestamp_get_seconds,
+    cel_timestamp_get_seconds_tz, cel_timestamp_sub_duration,
+};
 
 // Re-export logging functions
 pub use logging::cel_set_log_level;
