@@ -13,7 +13,7 @@ pub mod macros;
 
 use ferricel_types::LogLevel;
 use once_cell::sync::OnceCell;
-use slog::{o, Drain, Logger};
+use slog::{Drain, Logger, o};
 use std::sync::atomic::{AtomicU8, Ordering};
 
 // Global log level (0=Debug, 1=Info, 2=Warn, 3=Error)

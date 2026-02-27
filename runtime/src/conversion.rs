@@ -112,11 +112,7 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
     match value {
         CelValue::Bool(b) => {
             cel_debug!(log, "Converting CelValue to bool"; "value" => *b);
-            if *b {
-                1
-            } else {
-                0
-            }
+            if *b { 1 } else { 0 }
         }
         other => cel_panic!(log, "Type mismatch in conversion";
             "function" => "cel_value_to_bool",
@@ -366,8 +362,40 @@ pub extern "C" fn cel_duration(ptr: *mut CelValue) -> *mut CelValue {
     }
 }
 
+/// CEL bytes() function - converts values to bytes.
+/// Signatures per CEL spec:
+/// - bytes(bytes) -> bytes (identity)
+/// - bytes(string) -> bytes (UTF-8 encode string to bytes)
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_bytes(ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Cannot convert null to bytes";
+                "function" => "cel_bytes");
+        }
+
+        match &*ptr {
+            CelValue::Bytes(b) => {
+                cel_debug!(log, "Bytes identity conversion");
+                Box::into_raw(Box::new(CelValue::Bytes(b.clone())))
+            }
+            CelValue::String(s) => {
+                cel_debug!(log, "Converting String to bytes"; "length" => s.len());
+                // Convert string to UTF-8 bytes
+                Box::into_raw(Box::new(CelValue::Bytes(s.as_bytes().to_vec())))
+            }
+            other => cel_panic!(log, "Cannot convert type to bytes";
+                "function" => "cel_bytes",
+                "from_type" => format!("{:?}", other)),
+        }
+    }
+}
+
 /// CEL string() function - converts values to string.
-/// Handles all CEL types including timestamp and duration formatting.
+/// Handles all CEL types including timestamp, duration, and bytes formatting.
+/// For bytes, validates UTF-8 and panics on invalid sequences per CEL spec.
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
@@ -412,6 +440,16 @@ pub extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
                 cel_debug!(log, "Converting Duration to string");
                 let s = crate::chrono_helpers::format_duration(d);
                 Box::into_raw(Box::new(CelValue::String(s)))
+            }
+            CelValue::Bytes(bytes) => {
+                cel_debug!(log, "Converting Bytes to string");
+                // Convert bytes to UTF-8 string, error on invalid UTF-8 per CEL spec
+                match std::str::from_utf8(bytes) {
+                    Ok(s) => Box::into_raw(Box::new(CelValue::String(s.to_string()))),
+                    Err(_) => cel_panic!(log, "Invalid UTF-8 in bytes-to-string conversion";
+                        "function" => "cel_string",
+                        "from_type" => "Bytes"),
+                }
             }
             other => cel_panic!(log, "Cannot convert type to string";
                 "function" => "cel_string",

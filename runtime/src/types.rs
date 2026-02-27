@@ -10,13 +10,10 @@ type CelMap = HashMap<String, CelValue>;
 /// Uses untagged serialization for raw JSON output (e.g., `42` instead of `{"Int": 42}`).
 ///
 /// Supports all JSON types:
-/// - Primitives: Int, UInt, Bool, Double, String
+/// - Primitives: Int, UInt, Bool, Double, String, Bytes
 /// - Collections: Array, Object
 /// - Temporal: Timestamp, Duration
 /// - Special: Null
-///
-/// Note: Bytes type is not yet supported due to serialization complexity.
-/// It will be added in a future update.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(untagged)]
 pub enum CelValue {
@@ -40,6 +37,12 @@ pub enum CelValue {
 
     /// UTF-8 string
     String(String),
+
+    /// Bytes - arbitrary sequence of octets
+    /// Serializes to base64-encoded string per CEL specification
+    /// Note: Cannot be deserialized from JSON. Created via bytes literals or bytes() function.
+    #[serde(skip_deserializing)]
+    Bytes(Vec<u8>),
 
     /// Array of CelValues
     Array(Vec<CelValue>),
@@ -80,6 +83,11 @@ impl Serialize for CelValue {
             CelValue::UInt(u) => serializer.serialize_u64(*u),
             CelValue::Double(d) => serializer.serialize_f64(*d),
             CelValue::String(s) => serializer.serialize_str(s),
+            CelValue::Bytes(bytes) => {
+                use base64::{Engine as _, engine::general_purpose};
+                let encoded = general_purpose::STANDARD.encode(bytes);
+                serializer.serialize_str(&encoded)
+            }
             CelValue::Array(arr) => arr.serialize(serializer),
             CelValue::Object(obj) => obj.serialize(serializer),
             CelValue::Timestamp(dt) => serializer.serialize_str(&dt.to_rfc3339()),

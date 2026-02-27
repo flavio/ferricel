@@ -164,6 +164,23 @@ mod tests {
         CelValue::Array(vec![CelValue::Double(1.0), CelValue::Double(2.0), CelValue::Double(3.14)]),
         true
     )]
+    #[case::bytes_in_list(
+        CelValue::Bytes(vec![0x68, 0x69]),  // "hi"
+        CelValue::Array(vec![
+            CelValue::Bytes(vec![0x61, 0x62]),  // "ab"
+            CelValue::Bytes(vec![0x68, 0x69]),  // "hi"
+            CelValue::Bytes(vec![0x78, 0x79]),  // "xy"
+        ]),
+        true
+    )]
+    #[case::bytes_not_in_list(
+        CelValue::Bytes(vec![0xFF, 0xFE]),
+        CelValue::Array(vec![
+            CelValue::Bytes(vec![0x00, 0x01]),
+            CelValue::Bytes(vec![0x02, 0x03]),
+        ]),
+        false
+    )]
     fn test_list_membership(
         #[case] element: CelValue,
         #[case] container: CelValue,

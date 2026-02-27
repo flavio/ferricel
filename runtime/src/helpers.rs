@@ -4,7 +4,7 @@
 
 use crate::logging::macros::cel_debug;
 use crate::types::CelValue;
-use crate::{arithmetic, array, cel_panic, string, temporal};
+use crate::{arithmetic, array, bytes, cel_panic, string, temporal};
 
 /// Creates a CelValue::Int on the heap and returns a pointer to it.
 /// The caller is responsible for freeing the memory using cel_free_value.
@@ -331,6 +331,12 @@ pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                 let result = string::cel_string_concat(a_str, b_str);
                 Box::into_raw(Box::new(CelValue::String(result)))
             }
+            (CelValue::Bytes(a_bytes), CelValue::Bytes(b_bytes)) => {
+                cel_debug!(log, "Performing Bytes concatenation"; 
+                    "left_len" => a_bytes.len(), "right_len" => b_bytes.len());
+                let result = bytes::cel_bytes_concat_internal(a_bytes, b_bytes);
+                Box::into_raw(Box::new(CelValue::Bytes(result)))
+            }
             (CelValue::Array(a_vec), CelValue::Array(b_vec)) => {
                 cel_debug!(log, "Performing Array concatenation"; 
                     "left_len" => a_vec.len(), "right_len" => b_vec.len());
@@ -602,6 +608,7 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::Int(a), CelValue::Int(b)) => a == b,
             (CelValue::UInt(a), CelValue::UInt(b)) => a == b,
             (CelValue::Double(a), CelValue::Double(b)) => a == b,
+            (CelValue::Bytes(a), CelValue::Bytes(b)) => a == b,
 
             // Cross-type numeric equality (CEL spec: x == y if !(x < y || x > y))
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -652,6 +659,7 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::Int(a), CelValue::Int(b)) => a != b,
             (CelValue::UInt(a), CelValue::UInt(b)) => a != b,
             (CelValue::Double(a), CelValue::Double(b)) => a != b,
+            (CelValue::Bytes(a), CelValue::Bytes(b)) => a != b,
 
             // Cross-type numeric inequality
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -702,6 +710,7 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::Int(a), CelValue::Int(b)) => a > b,
             (CelValue::UInt(a), CelValue::UInt(b)) => a > b,
             (CelValue::Double(a), CelValue::Double(b)) => a > b,
+            (CelValue::Bytes(a), CelValue::Bytes(b)) => a > b,
 
             // Cross-type numeric ordering
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -752,6 +761,7 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::Int(a), CelValue::Int(b)) => a < b,
             (CelValue::UInt(a), CelValue::UInt(b)) => a < b,
             (CelValue::Double(a), CelValue::Double(b)) => a < b,
+            (CelValue::Bytes(a), CelValue::Bytes(b)) => a < b,
 
             // Cross-type numeric ordering
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -802,6 +812,7 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             (CelValue::Int(a), CelValue::Int(b)) => a >= b,
             (CelValue::UInt(a), CelValue::UInt(b)) => a >= b,
             (CelValue::Double(a), CelValue::Double(b)) => a >= b,
+            (CelValue::Bytes(a), CelValue::Bytes(b)) => a >= b,
 
             // Cross-type numeric ordering
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -852,6 +863,7 @@ pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             (CelValue::Int(a), CelValue::Int(b)) => a <= b,
             (CelValue::UInt(a), CelValue::UInt(b)) => a <= b,
             (CelValue::Double(a), CelValue::Double(b)) => a <= b,
+            (CelValue::Bytes(a), CelValue::Bytes(b)) => a <= b,
 
             // Cross-type numeric ordering
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -879,6 +891,49 @@ pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                 "right_type" => format!("{:?}", b_val)),
         };
         cel_create_bool(if result { 1 } else { 0 })
+    }
+}
+
+/// Polymorphic size function for CelValue objects.
+/// Returns the size/length of the value:
+/// - String: number of Unicode codepoints
+/// - Bytes: number of bytes
+/// - Array: number of elements
+/// - Map: number of keys
+///
+/// # Safety
+/// - `ptr` must be a valid, non-null CelValue pointer
+///
+/// # Arguments
+/// - `ptr`: Pointer to the value
+///
+/// # Returns
+/// The size as i64
+///
+/// # Panics
+/// - If the pointer is null
+/// - If the type doesn't support size operation
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Cannot get size of null value";
+                "function" => "cel_value_size");
+        }
+
+        let value = &*ptr;
+
+        match value {
+            CelValue::String(_) => string::cel_string_size(ptr),
+            CelValue::Bytes(_) => bytes::cel_bytes_size(ptr),
+            CelValue::Array(arr) => arr.len() as i64,
+            CelValue::Object(map) => map.len() as i64,
+            other => cel_panic!(log, "size() not supported for this type";
+                "function" => "cel_value_size",
+                "type" => format!("{:?}", other)),
+        }
     }
 }
 

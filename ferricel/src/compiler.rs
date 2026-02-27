@@ -70,9 +70,10 @@ pub struct CompilerEnv {
     pub create_bool_func_id: FunctionId,
     pub create_double_func_id: FunctionId,
     pub create_string_func_id: FunctionId,
+    pub create_bytes_func_id: FunctionId,
 
     // String operations
-    pub string_size_func_id: FunctionId,
+    pub size_func_id: FunctionId,
     pub string_starts_with_func_id: FunctionId,
     pub string_ends_with_func_id: FunctionId,
     pub string_contains_func_id: FunctionId,
@@ -189,9 +190,10 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         create_bool_func_id: module.exports.get_func("cel_create_bool")?,
         create_double_func_id: module.exports.get_func("cel_create_double")?,
         create_string_func_id: module.exports.get_func("cel_create_string")?,
+        create_bytes_func_id: module.exports.get_func("cel_create_bytes")?,
 
         // String operations
-        string_size_func_id: module.exports.get_func("cel_string_size")?,
+        size_func_id: module.exports.get_func("cel_value_size")?,
         string_starts_with_func_id: module.exports.get_func("cel_string_starts_with")?,
         string_ends_with_func_id: module.exports.get_func("cel_string_ends_with")?,
         string_contains_func_id: module.exports.get_func("cel_string_contains")?,
@@ -415,6 +417,48 @@ pub fn compile_expr(
                     body.i32_const(string_len); // Load length
                     body.call(env.create_string_func_id); // Returns *mut CelValue
                 }
+                CelVal::Bytes(bytes) => {
+                    // Bytes literals require memory allocation (same pattern as strings)
+                    let bytes_len = bytes.len() as i32;
+
+                    // Create a local to store the bytes data pointer
+                    let data_ptr_local = module.locals.add(ValType::I32);
+
+                    // Allocate memory for the bytes data
+                    body.i32_const(bytes_len)
+                        .call(env.malloc_func_id) // Returns data_ptr
+                        .local_set(data_ptr_local); // Store in local and pop from stack
+
+                    // Get memory reference
+                    let memory_id = module
+                        .memories
+                        .iter()
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("No memory found"))?
+                        .id();
+
+                    // Write each byte to the allocated memory
+                    for (offset, &byte) in bytes.iter().enumerate() {
+                        // Load data_ptr
+                        body.local_get(data_ptr_local);
+                        // Load byte value
+                        body.i32_const(byte as i32);
+                        // Store byte at offset
+                        body.store(
+                            memory_id,
+                            walrus::ir::StoreKind::I32_8 { atomic: false },
+                            walrus::ir::MemArg {
+                                align: 1,
+                                offset: offset as u32,
+                            },
+                        );
+                    }
+
+                    // Call cel_create_bytes(data_ptr, len)
+                    body.local_get(data_ptr_local); // Load data_ptr
+                    body.i32_const(bytes_len); // Load length
+                    body.call(env.create_bytes_func_id); // Returns *mut CelValue
+                }
                 // Other literals not supported yet
                 _ => anyhow::bail!("Unsupported literal: {:?}", literal),
             }
@@ -579,17 +623,19 @@ pub fn compile_expr(
 
                 // String functions
                 "size" => {
-                    // size() can work on strings or arrays
+                    // size() can work on strings, bytes, arrays, or maps
                     // For strings, it returns the number of Unicode codepoints
+                    // For bytes, it returns the number of bytes
                     // For arrays, it returns the number of elements
+                    // For maps, it returns the number of keys
                     if call_expr.args.len() != 1 {
                         anyhow::bail!("size() expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
 
-                    // For now, we'll call cel_string_size which returns i64
+                    // Call polymorphic cel_value_size which returns i64
                     // We need to convert it to *mut CelValue::Int
-                    body.call(env.string_size_func_id); // Returns i64
+                    body.call(env.size_func_id); // Returns i64
                     body.call(env.create_int_func_id); // Convert i64 to *mut CelValue
                 }
 

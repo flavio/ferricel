@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use slog::{o, Drain, Logger};
+use slog::{Drain, Logger, o};
 
 use crate::cli::LogLevelArg;
 use crate::runtime;
