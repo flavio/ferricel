@@ -51,11 +51,12 @@ tests: $(RUNTIME_TARGET)
 # Check code formatting (does not modify files)
 .PHONY: fmt
 fmt:
-	cargo fmt --all -- --check
+	cargo fmt --all
 
 # Run clippy lints with warnings treated as errors
 .PHONY: lint
 lint:
+	cargo fmt --all -- --check
 	cargo clippy --workspace -- -D warnings
 
 # Auto-fix clippy warnings where possible

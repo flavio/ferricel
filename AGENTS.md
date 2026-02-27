@@ -33,7 +33,7 @@ to run, unit tests are to be preferred.
 The CEL official specification must absolutely be respected. It's the north start when doing changes or
 implementing new features inside of the compiler.
 
-After new changes are done, the `unit-tests` must be passing.
+After new changes are done, the `unit-tests` and linter checks must be passing.
 
 The `runtime` is always going to be embedded into the final WASM file. The API can be changed at any time,
 there are no backward compatibility concerns. Each WASM file produced by the tool is "self-sustained".
