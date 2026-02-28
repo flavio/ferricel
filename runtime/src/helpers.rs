@@ -615,7 +615,14 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::Int(a), CelValue::Int(b)) => a == b,
             (CelValue::UInt(a), CelValue::UInt(b)) => a == b,
             (CelValue::Double(a), CelValue::Double(b)) => a == b,
+            (CelValue::String(a), CelValue::String(b)) => a == b,
+            (CelValue::Bool(a), CelValue::Bool(b)) => a == b,
             (CelValue::Bytes(a), CelValue::Bytes(b)) => a == b,
+            (CelValue::Null, CelValue::Null) => true,
+            (CelValue::Array(a), CelValue::Array(b)) => a == b,
+            (CelValue::Object(a), CelValue::Object(b)) => a == b,
+            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a == b,
+            (CelValue::Duration(a), CelValue::Duration(b)) => a == b,
 
             // Cross-type numeric equality (CEL spec: x == y if !(x < y || x > y))
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -637,10 +644,8 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) == *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a == (*b as f64),
 
-            _ => cel_panic!(log, "Cannot compare incompatible types for equality";
-                "operation" => "cel_value_eq",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            // Different types are not equal
+            _ => false,
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
@@ -666,7 +671,14 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::Int(a), CelValue::Int(b)) => a != b,
             (CelValue::UInt(a), CelValue::UInt(b)) => a != b,
             (CelValue::Double(a), CelValue::Double(b)) => a != b,
+            (CelValue::String(a), CelValue::String(b)) => a != b,
+            (CelValue::Bool(a), CelValue::Bool(b)) => a != b,
             (CelValue::Bytes(a), CelValue::Bytes(b)) => a != b,
+            (CelValue::Null, CelValue::Null) => false,
+            (CelValue::Array(a), CelValue::Array(b)) => a != b,
+            (CelValue::Object(a), CelValue::Object(b)) => a != b,
+            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a != b,
+            (CelValue::Duration(a), CelValue::Duration(b)) => a != b,
 
             // Cross-type numeric inequality
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -688,10 +700,8 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) != *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a != (*b as f64),
 
-            _ => cel_panic!(log, "Cannot compare incompatible types for inequality";
-                "operation" => "cel_value_ne",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            // Different types are not equal (so they are not-equal)
+            _ => true,
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
