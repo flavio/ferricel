@@ -1022,7 +1022,7 @@ pub extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
 ///
 /// # Parameters
 /// - `container_ptr`: Pointer to a CelValue (must be an Array or Object)
-/// - `index_ptr`: Pointer to a CelValue to use as index (Int for arrays, String for maps)
+/// - `index_ptr`: Pointer to a CelValue to use as index (Int/UInt/Double for arrays, String for maps)
 ///
 /// # Returns
 /// - Pointer to a new CelValue containing the element at the given index
@@ -1033,6 +1033,7 @@ pub extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
 /// - If the index type doesn't match the container type
 /// - If the index is out of bounds (for arrays)
 /// - If the key doesn't exist (for maps)
+/// - If Double index is not a whole number
 ///
 /// # Safety
 /// - Both pointers must be valid CelValue pointers
@@ -1073,6 +1074,19 @@ pub extern "C" fn cel_value_index(
                 };
                 array::cel_array_get(container_ptr, idx_i64 as i32)
             }
+            // Array indexing with Double (convert to Int)
+            (CelValue::Array(_), CelValue::Double(idx)) => {
+                cel_debug!(log, "Indexing array with Double"; "index" => *idx);
+                // Check if the double is a whole number
+                if idx.fract() != 0.0 {
+                    cel_panic!(log, "Array index must be a whole number";
+                        "function" => "cel_value_index",
+                        "index" => *idx);
+                }
+                // Convert to i64
+                let idx_i64 = *idx as i64;
+                array::cel_array_get(container_ptr, idx_i64 as i32)
+            }
             // Map indexing with String
             (CelValue::Object(map), CelValue::String(key)) => {
                 cel_debug!(log, "Indexing map with String"; "key" => key.as_str());
@@ -1085,7 +1099,7 @@ pub extern "C" fn cel_value_index(
             }
             // Type mismatches
             (CelValue::Array(_), _) => {
-                cel_panic!(log, "Array index must be Int or UInt";
+                cel_panic!(log, "Array index must be Int, UInt, or Double";
                     "function" => "cel_value_index",
                     "index_type" => format!("{:?}", index))
             }
