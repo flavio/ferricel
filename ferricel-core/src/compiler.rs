@@ -96,6 +96,10 @@ pub struct CompilerEnv {
 
     // Value conversion helpers
     pub string_func_id: FunctionId,
+    pub int_func_id: FunctionId,
+    pub uint_func_id: FunctionId,
+    pub double_func_id: FunctionId,
+    pub bytes_func_id: FunctionId,
 }
 
 /// Compilation context that holds state during expression compilation
@@ -213,6 +217,10 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         timestamp_func_id: module.exports.get_func("cel_timestamp")?,
         duration_func_id: module.exports.get_func("cel_duration")?,
         string_func_id: module.exports.get_func("cel_string")?,
+        int_func_id: module.exports.get_func("cel_int")?,
+        uint_func_id: module.exports.get_func("cel_uint")?,
+        double_func_id: module.exports.get_func("cel_double")?,
+        bytes_func_id: module.exports.get_func("cel_bytes")?,
     };
 
     // 3. Remove the helpers from exports so the Host can't call them directly
@@ -789,6 +797,46 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     body.call(env.string_func_id);
+                }
+
+                "int" => {
+                    // int(value) - converts value to int
+                    // Returns *mut CelValue::Int
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("int() expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.int_func_id);
+                }
+
+                "uint" => {
+                    // uint(value) - converts value to uint
+                    // Returns *mut CelValue::UInt
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("uint() expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.uint_func_id);
+                }
+
+                "double" => {
+                    // double(value) - converts value to double
+                    // Returns *mut CelValue::Double
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("double() expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.double_func_id);
+                }
+
+                "bytes" => {
+                    // bytes(value) - converts value to bytes
+                    // Returns *mut CelValue::Bytes
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("bytes() expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.bytes_func_id);
                 }
 
                 "dyn" => {
