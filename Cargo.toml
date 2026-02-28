@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "conformance",
-    "example",
     "ferricel",
     "ferricel-core",
     "ferricel-types",
