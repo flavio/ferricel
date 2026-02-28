@@ -59,6 +59,13 @@ pub extern "C" fn cel_create_duration(seconds: i64, nanos: i64) -> *mut CelValue
     Box::into_raw(Box::new(CelValue::Duration(duration)))
 }
 
+/// Creates a CelValue::Null on the heap and returns a pointer to it.
+/// The caller is responsible for freeing the memory using cel_free_value.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_create_null() -> *mut CelValue {
+    Box::into_raw(Box::new(CelValue::Null))
+}
+
 /// Internal helper: Extracts i64 from CelValue or panics with type error.
 /// This is not exported - it's used by arithmetic and comparison operations.
 pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {

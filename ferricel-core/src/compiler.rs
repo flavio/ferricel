@@ -1,5 +1,5 @@
-use cel::common::ast::Expr;
 use cel::common::ast::operators;
+use cel::common::ast::Expr;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
 use std::collections::HashMap;
@@ -71,6 +71,7 @@ pub struct CompilerEnv {
     pub create_double_func_id: FunctionId,
     pub create_string_func_id: FunctionId,
     pub create_bytes_func_id: FunctionId,
+    pub create_null_func_id: FunctionId,
 
     // String operations
     pub size_func_id: FunctionId,
@@ -185,6 +186,7 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         create_double_func_id: module.exports.get_func("cel_create_double")?,
         create_string_func_id: module.exports.get_func("cel_create_string")?,
         create_bytes_func_id: module.exports.get_func("cel_create_bytes")?,
+        create_null_func_id: module.exports.get_func("cel_create_null")?,
 
         // String operations
         size_func_id: module.exports.get_func("cel_value_size")?,
@@ -452,6 +454,10 @@ pub fn compile_expr(
                     body.local_get(data_ptr_local); // Load data_ptr
                     body.i32_const(bytes_len); // Load length
                     body.call(env.create_bytes_func_id); // Returns *mut CelValue
+                }
+                CelVal::Null => {
+                    // Create a CelValue::Null pointer
+                    body.call(env.create_null_func_id);
                 }
                 // Other literals not supported yet
                 _ => anyhow::bail!("Unsupported literal: {:?}", literal),
