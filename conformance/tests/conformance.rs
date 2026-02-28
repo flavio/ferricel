@@ -289,9 +289,22 @@ impl ConformanceTestRunner {
                 Kind::BoolValue(b) => Ok(JsonValue::Bool(*b)),
                 Kind::Int64Value(i) => Ok(JsonValue::Number((*i).into())),
                 Kind::Uint64Value(u) => Ok(JsonValue::Number((*u).into())),
-                Kind::DoubleValue(d) => serde_json::Number::from_f64(*d)
-                    .map(JsonValue::Number)
-                    .ok_or_else(|| "Invalid double value".to_string()),
+                Kind::DoubleValue(d) => {
+                    // Handle special float values (infinity, NaN) as strings
+                    if d.is_infinite() || d.is_nan() {
+                        if d.is_infinite() && d.is_sign_positive() {
+                            Ok(JsonValue::String("Infinity".to_string()))
+                        } else if d.is_infinite() && d.is_sign_negative() {
+                            Ok(JsonValue::String("-Infinity".to_string()))
+                        } else {
+                            Ok(JsonValue::String("NaN".to_string()))
+                        }
+                    } else {
+                        serde_json::Number::from_f64(*d)
+                            .map(JsonValue::Number)
+                            .ok_or_else(|| "Invalid double value".to_string())
+                    }
+                }
                 Kind::StringValue(s) => Ok(JsonValue::String(s.clone())),
                 Kind::BytesValue(b) => {
                     use base64::Engine as _;

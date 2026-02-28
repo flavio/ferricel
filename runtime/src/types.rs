@@ -81,10 +81,23 @@ impl Serialize for CelValue {
             CelValue::Bool(b) => serializer.serialize_bool(*b),
             CelValue::Int(i) => serializer.serialize_i64(*i),
             CelValue::UInt(u) => serializer.serialize_u64(*u),
-            CelValue::Double(d) => serializer.serialize_f64(*d),
+            CelValue::Double(d) => {
+                // Handle special float values that JSON doesn't support natively
+                if d.is_infinite() {
+                    if d.is_sign_positive() {
+                        serializer.serialize_str("Infinity")
+                    } else {
+                        serializer.serialize_str("-Infinity")
+                    }
+                } else if d.is_nan() {
+                    serializer.serialize_str("NaN")
+                } else {
+                    serializer.serialize_f64(*d)
+                }
+            }
             CelValue::String(s) => serializer.serialize_str(s),
             CelValue::Bytes(bytes) => {
-                use base64::{Engine as _, engine::general_purpose};
+                use base64::{engine::general_purpose, Engine as _};
                 let encoded = general_purpose::STANDARD.encode(bytes);
                 serializer.serialize_str(&encoded)
             }
