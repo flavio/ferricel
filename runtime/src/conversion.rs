@@ -112,7 +112,11 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
     match value {
         CelValue::Bool(b) => {
             cel_debug!(log, "Converting CelValue to bool"; "value" => *b);
-            if *b { 1 } else { 0 }
+            if *b {
+                1
+            } else {
+                0
+            }
         }
         other => cel_panic!(log, "Type mismatch in conversion";
             "function" => "cel_value_to_bool",
@@ -433,7 +437,12 @@ pub extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
             }
             CelValue::Timestamp(dt) => {
                 cel_debug!(log, "Converting Timestamp to string");
-                let s = dt.to_rfc3339();
+                // Use "Z" suffix for UTC timestamps instead of "+00:00" for CEL compliance
+                let s = if dt.offset().local_minus_utc() == 0 {
+                    dt.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string()
+                } else {
+                    dt.to_rfc3339()
+                };
                 Box::into_raw(Box::new(CelValue::String(s)))
             }
             CelValue::Duration(d) => {

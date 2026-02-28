@@ -103,7 +103,15 @@ impl Serialize for CelValue {
             }
             CelValue::Array(arr) => arr.serialize(serializer),
             CelValue::Object(obj) => obj.serialize(serializer),
-            CelValue::Timestamp(dt) => serializer.serialize_str(&dt.to_rfc3339()),
+            CelValue::Timestamp(dt) => {
+                // Use "Z" suffix for UTC timestamps instead of "+00:00" for CEL compliance
+                let formatted = if dt.offset().local_minus_utc() == 0 {
+                    dt.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string()
+                } else {
+                    dt.to_rfc3339()
+                };
+                serializer.serialize_str(&formatted)
+            }
             CelValue::Duration(d) => {
                 let formatted = crate::chrono_helpers::format_duration(d);
                 serializer.serialize_str(&formatted)
