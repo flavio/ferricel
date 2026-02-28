@@ -944,6 +944,63 @@ pub extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
     }
 }
 
+/// Polymorphic negation operator for CelValue objects.
+/// Performs unary negation:
+/// - Int: arithmetic negation
+/// - Double: arithmetic negation
+/// - Duration: temporal negation
+///
+/// # Safety
+/// - `ptr` must be a valid, non-null CelValue pointer
+///
+/// # Arguments
+/// - `ptr`: Pointer to the operand
+///
+/// # Returns
+/// Pointer to a new heap-allocated CelValue containing the negated result
+///
+/// # Panics
+/// - If the pointer is null
+/// - If the type doesn't support negation
+/// - On integer overflow (negating i64::MIN)
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Cannot negate null value";
+                "function" => "cel_value_negate");
+        }
+
+        let value = &*ptr;
+
+        match value {
+            CelValue::Int(i) => {
+                cel_debug!(log, "Performing Int negation"; "value" => *i);
+                let result = i.checked_neg().unwrap_or_else(|| {
+                    cel_panic!(log, "Integer overflow in negation";
+                        "operation" => "cel_value_negate",
+                        "type" => "Int",
+                        "value" => *i)
+                });
+                cel_create_int(result)
+            }
+            CelValue::Double(d) => {
+                cel_debug!(log, "Performing Double negation"; "value" => *d);
+                cel_create_double(-d)
+            }
+            CelValue::Duration(_) => {
+                cel_debug!(log, "Performing Duration negation");
+                temporal::cel_duration_negate(ptr)
+            }
+            other => cel_panic!(log, "Negation not supported for this type";
+                "function" => "cel_value_negate",
+                "type" => format!("{:?}", other)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

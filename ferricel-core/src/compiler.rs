@@ -19,6 +19,7 @@ pub struct CompilerEnv {
     pub mul_func_id: FunctionId,
     pub div_func_id: FunctionId,
     pub mod_func_id: FunctionId,
+    pub negate_func_id: FunctionId,
 
     // Comparison operations
     pub eq_func_id: FunctionId,
@@ -134,6 +135,7 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         mul_func_id: module.exports.get_func("cel_value_mul")?,
         div_func_id: module.exports.get_func("cel_value_div")?,
         mod_func_id: module.exports.get_func("cel_value_mod")?,
+        negate_func_id: module.exports.get_func("cel_value_negate")?,
 
         // Comparison operations
         eq_func_id: module.exports.get_func("cel_value_eq")?,
@@ -509,6 +511,14 @@ pub fn compile_expr(
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     body.call(env.mod_func_id);
+                }
+                operators::NEGATE => {
+                    // Unary negation operator: -x
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("Negation operator expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.negate_func_id);
                 }
 
                 // Comparison operators
