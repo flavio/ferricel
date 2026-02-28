@@ -60,8 +60,8 @@ pub use map::{cel_create_map, cel_map_insert};
 pub use helpers::{
     cel_create_bool, cel_create_double, cel_create_duration, cel_create_int, cel_create_null,
     cel_create_timestamp, cel_create_uint, cel_value_add, cel_value_div, cel_value_eq,
-    cel_value_gt, cel_value_gte, cel_value_lt, cel_value_lte, cel_value_mod, cel_value_mul,
-    cel_value_ne, cel_value_negate, cel_value_size, cel_value_sub,
+    cel_value_gt, cel_value_gte, cel_value_index, cel_value_lt, cel_value_lte, cel_value_mod,
+    cel_value_mul, cel_value_ne, cel_value_negate, cel_value_size, cel_value_sub,
 };
 
 pub use string::{

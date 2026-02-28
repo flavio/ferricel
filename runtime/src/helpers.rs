@@ -594,6 +594,49 @@ pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
     }
 }
 
+/// Internal helper function to check CEL equality between two CelValue references.
+/// This implements CEL spec cross-type numeric equality.
+/// Used by both the `==` operator and the `in` operator.
+pub(crate) fn cel_equals(a_val: &CelValue, b_val: &CelValue) -> bool {
+    match (a_val, b_val) {
+        // Same-type comparisons
+        (CelValue::Int(a), CelValue::Int(b)) => a == b,
+        (CelValue::UInt(a), CelValue::UInt(b)) => a == b,
+        (CelValue::Double(a), CelValue::Double(b)) => a == b,
+        (CelValue::String(a), CelValue::String(b)) => a == b,
+        (CelValue::Bool(a), CelValue::Bool(b)) => a == b,
+        (CelValue::Bytes(a), CelValue::Bytes(b)) => a == b,
+        (CelValue::Null, CelValue::Null) => true,
+        (CelValue::Array(a), CelValue::Array(b)) => a == b,
+        (CelValue::Object(a), CelValue::Object(b)) => a == b,
+        (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a == b,
+        (CelValue::Duration(a), CelValue::Duration(b)) => a == b,
+
+        // Cross-type numeric equality (CEL spec: x == y if !(x < y || x > y))
+        (CelValue::Int(a), CelValue::UInt(b)) => {
+            if *a < 0 {
+                false
+            } else {
+                (*a as u64) == *b
+            }
+        }
+        (CelValue::UInt(a), CelValue::Int(b)) => {
+            if *b < 0 {
+                false
+            } else {
+                *a == (*b as u64)
+            }
+        }
+        (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) == *b,
+        (CelValue::Double(a), CelValue::Int(b)) => *a == (*b as f64),
+        (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) == *b,
+        (CelValue::Double(a), CelValue::UInt(b)) => *a == (*b as f64),
+
+        // Different types are not equal
+        _ => false,
+    }
+}
+
 /// Polymorphic equality operator for CelValue objects.
 /// Implements CEL spec cross-type numeric equality: int, uint, and double
 /// are compared as if they exist on a continuous number line.
@@ -610,43 +653,7 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
         let a_val = &*a_ptr;
         let b_val = &*b_ptr;
 
-        let result = match (a_val, b_val) {
-            // Same-type comparisons
-            (CelValue::Int(a), CelValue::Int(b)) => a == b,
-            (CelValue::UInt(a), CelValue::UInt(b)) => a == b,
-            (CelValue::Double(a), CelValue::Double(b)) => a == b,
-            (CelValue::String(a), CelValue::String(b)) => a == b,
-            (CelValue::Bool(a), CelValue::Bool(b)) => a == b,
-            (CelValue::Bytes(a), CelValue::Bytes(b)) => a == b,
-            (CelValue::Null, CelValue::Null) => true,
-            (CelValue::Array(a), CelValue::Array(b)) => a == b,
-            (CelValue::Object(a), CelValue::Object(b)) => a == b,
-            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a == b,
-            (CelValue::Duration(a), CelValue::Duration(b)) => a == b,
-
-            // Cross-type numeric equality (CEL spec: x == y if !(x < y || x > y))
-            (CelValue::Int(a), CelValue::UInt(b)) => {
-                if *a < 0 {
-                    false
-                } else {
-                    (*a as u64) == *b
-                }
-            }
-            (CelValue::UInt(a), CelValue::Int(b)) => {
-                if *b < 0 {
-                    false
-                } else {
-                    *a == (*b as u64)
-                }
-            }
-            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) == *b,
-            (CelValue::Double(a), CelValue::Int(b)) => *a == (*b as f64),
-            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) == *b,
-            (CelValue::Double(a), CelValue::UInt(b)) => *a == (*b as f64),
-
-            // Different types are not equal
-            _ => false,
-        };
+        let result = cel_equals(a_val, b_val);
         cel_create_bool(if result { 1 } else { 0 })
     }
 }
@@ -1007,6 +1014,92 @@ pub extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
             other => cel_panic!(log, "Negation not supported for this type";
                 "function" => "cel_value_negate",
                 "type" => format!("{:?}", other)),
+        }
+    }
+}
+
+/// Index operator for arrays and maps.
+///
+/// # Parameters
+/// - `container_ptr`: Pointer to a CelValue (must be an Array or Object)
+/// - `index_ptr`: Pointer to a CelValue to use as index (Int for arrays, String for maps)
+///
+/// # Returns
+/// - Pointer to a new CelValue containing the element at the given index
+///
+/// # Panics
+/// - If either pointer is null
+/// - If the container is not an Array or Object
+/// - If the index type doesn't match the container type
+/// - If the index is out of bounds (for arrays)
+/// - If the key doesn't exist (for maps)
+///
+/// # Safety
+/// - Both pointers must be valid CelValue pointers
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_value_index(
+    container_ptr: *mut CelValue,
+    index_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if container_ptr.is_null() {
+            cel_panic!(log, "Cannot index null container";
+                "function" => "cel_value_index");
+        }
+        if index_ptr.is_null() {
+            cel_panic!(log, "Cannot use null index";
+                "function" => "cel_value_index");
+        }
+
+        let container = &*container_ptr;
+        let index = &*index_ptr;
+
+        match (container, index) {
+            // Array indexing with Int
+            (CelValue::Array(_), CelValue::Int(idx)) => {
+                cel_debug!(log, "Indexing array with Int"; "index" => *idx);
+                array::cel_array_get(container_ptr, *idx as i32)
+            }
+            // Array indexing with UInt (convert to Int)
+            (CelValue::Array(_), CelValue::UInt(idx)) => {
+                cel_debug!(log, "Indexing array with UInt"; "index" => *idx);
+                let idx_i64: i64 = match (*idx).try_into() {
+                    Ok(v) => v,
+                    Err(_) => cel_panic!(log, "UInt index too large to convert to Int";
+                        "function" => "cel_value_index",
+                        "index" => *idx),
+                };
+                array::cel_array_get(container_ptr, idx_i64 as i32)
+            }
+            // Map indexing with String
+            (CelValue::Object(map), CelValue::String(key)) => {
+                cel_debug!(log, "Indexing map with String"; "key" => key.as_str());
+                match map.get(key) {
+                    Some(value) => Box::into_raw(Box::new(value.clone())),
+                    None => cel_panic!(log, "Key not found in map";
+                        "function" => "cel_value_index",
+                        "key" => key.as_str()),
+                }
+            }
+            // Type mismatches
+            (CelValue::Array(_), _) => {
+                cel_panic!(log, "Array index must be Int or UInt";
+                    "function" => "cel_value_index",
+                    "index_type" => format!("{:?}", index))
+            }
+            (CelValue::Object(_), _) => {
+                cel_panic!(log, "Map index must be String";
+                    "function" => "cel_value_index",
+                    "index_type" => format!("{:?}", index))
+            }
+            _ => {
+                cel_panic!(log, "Index operator not supported for this type";
+                    "function" => "cel_value_index",
+                    "container_type" => format!("{:?}", container),
+                    "index_type" => format!("{:?}", index))
+            }
         }
     }
 }

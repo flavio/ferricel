@@ -9,7 +9,7 @@
 //! - Time cost for maps: O(1) expected (implementation may vary)
 
 use crate::cel_panic;
-use crate::helpers::cel_create_bool;
+use crate::helpers::{cel_create_bool, cel_equals};
 use crate::logging::macros::{cel_debug, cel_info};
 use crate::types::CelValue;
 
@@ -53,8 +53,8 @@ pub unsafe extern "C" fn cel_value_in(
         // List membership: A in list(A)
         CelValue::Array(arr) => {
             cel_debug!(log, "Checking list membership"; "list_size" => arr.len());
-            // Linear search through array for equality
-            let found = arr.iter().any(|item| item == element);
+            // Linear search through array using CEL equality (supports cross-type numeric equality)
+            let found = arr.iter().any(|item| cel_equals(item, element));
             cel_info!(log, "List membership check complete"; "found" => found);
             cel_create_bool(if found { 1 } else { 0 })
         }

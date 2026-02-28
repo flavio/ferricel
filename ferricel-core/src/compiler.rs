@@ -84,6 +84,9 @@ pub struct CompilerEnv {
     // Membership testing
     pub in_func_id: FunctionId,
 
+    // Index operator
+    pub index_func_id: FunctionId,
+
     // Value conversion helpers
     pub value_to_bool_func_id: FunctionId,
 
@@ -200,6 +203,9 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         // Membership testing
         in_func_id: module.exports.get_func("cel_value_in")?,
 
+        // Index operator
+        index_func_id: module.exports.get_func("cel_value_index")?,
+
         // Value conversion helpers
         value_to_bool_func_id: module.exports.get_func("cel_value_to_bool")?,
 
@@ -283,6 +289,7 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     module.exports.remove("cel_uint")?;
     module.exports.remove("cel_double")?;
     module.exports.remove("cel_value_in")?;
+    module.exports.remove("cel_value_index")?;
 
     // 4. Parse the CEL expression
     let root_ast = Parser::default()
@@ -793,6 +800,20 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     // No function call needed - just leave the value on the stack
+                }
+
+                operators::INDEX => {
+                    // Index operator for arrays and maps
+                    // array[index] or map[key]
+                    if call_expr.args.len() != 2 {
+                        anyhow::bail!("Index operator _[_] expects 2 arguments (container, index)");
+                    }
+                    // Compile container (array or map)
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    // Compile index (int for array, string for map)
+                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+                    // Call the polymorphic index function
+                    body.call(env.index_func_id);
                 }
 
                 _ => anyhow::bail!("Unsupported function call: {}", call_expr.func_name),
