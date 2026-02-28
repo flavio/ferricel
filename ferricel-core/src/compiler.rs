@@ -94,6 +94,28 @@ pub struct CompilerEnv {
     pub timestamp_func_id: FunctionId,
     pub duration_func_id: FunctionId,
 
+    // Timestamp accessor functions
+    pub timestamp_get_full_year_func_id: FunctionId,
+    pub timestamp_get_full_year_tz_func_id: FunctionId,
+    pub timestamp_get_month_func_id: FunctionId,
+    pub timestamp_get_month_tz_func_id: FunctionId,
+    pub timestamp_get_date_func_id: FunctionId,
+    pub timestamp_get_date_tz_func_id: FunctionId,
+    pub timestamp_get_day_of_month_func_id: FunctionId,
+    pub timestamp_get_day_of_month_tz_func_id: FunctionId,
+    pub timestamp_get_day_of_week_func_id: FunctionId,
+    pub timestamp_get_day_of_week_tz_func_id: FunctionId,
+    pub timestamp_get_day_of_year_func_id: FunctionId,
+    pub timestamp_get_day_of_year_tz_func_id: FunctionId,
+    pub timestamp_get_hours_func_id: FunctionId,
+    pub timestamp_get_hours_tz_func_id: FunctionId,
+    pub timestamp_get_minutes_func_id: FunctionId,
+    pub timestamp_get_minutes_tz_func_id: FunctionId,
+    pub timestamp_get_seconds_func_id: FunctionId,
+    pub timestamp_get_seconds_tz_func_id: FunctionId,
+    pub timestamp_get_milliseconds_func_id: FunctionId,
+    pub timestamp_get_milliseconds_tz_func_id: FunctionId,
+
     // Value conversion helpers
     pub string_func_id: FunctionId,
     pub int_func_id: FunctionId,
@@ -216,6 +238,51 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         // Temporal operations
         timestamp_func_id: module.exports.get_func("cel_timestamp")?,
         duration_func_id: module.exports.get_func("cel_duration")?,
+
+        // Timestamp accessor functions
+        timestamp_get_full_year_func_id: module.exports.get_func("cel_timestamp_get_full_year")?,
+        timestamp_get_full_year_tz_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_full_year_tz")?,
+        timestamp_get_month_func_id: module.exports.get_func("cel_timestamp_get_month")?,
+        timestamp_get_month_tz_func_id: module.exports.get_func("cel_timestamp_get_month_tz")?,
+        timestamp_get_date_func_id: module.exports.get_func("cel_timestamp_get_date")?,
+        timestamp_get_date_tz_func_id: module.exports.get_func("cel_timestamp_get_date_tz")?,
+        timestamp_get_day_of_month_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_day_of_month")?,
+        timestamp_get_day_of_month_tz_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_day_of_month_tz")?,
+        timestamp_get_day_of_week_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_day_of_week")?,
+        timestamp_get_day_of_week_tz_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_day_of_week_tz")?,
+        timestamp_get_day_of_year_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_day_of_year")?,
+        timestamp_get_day_of_year_tz_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_day_of_year_tz")?,
+        timestamp_get_hours_func_id: module.exports.get_func("cel_timestamp_get_hours")?,
+        timestamp_get_hours_tz_func_id: module.exports.get_func("cel_timestamp_get_hours_tz")?,
+        timestamp_get_minutes_func_id: module.exports.get_func("cel_timestamp_get_minutes")?,
+        timestamp_get_minutes_tz_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_minutes_tz")?,
+        timestamp_get_seconds_func_id: module.exports.get_func("cel_timestamp_get_seconds")?,
+        timestamp_get_seconds_tz_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_seconds_tz")?,
+        timestamp_get_milliseconds_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_milliseconds")?,
+        timestamp_get_milliseconds_tz_func_id: module
+            .exports
+            .get_func("cel_timestamp_get_milliseconds_tz")?,
+
         string_func_id: module.exports.get_func("cel_string")?,
         int_func_id: module.exports.get_func("cel_int")?,
         uint_func_id: module.exports.get_func("cel_uint")?,
@@ -787,6 +854,206 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     body.call(env.duration_func_id);
+                }
+
+                // Timestamp accessor methods
+                "getFullYear" => {
+                    // timestamp.getFullYear() or timestamp.getFullYear(timezone)
+                    // Returns the year component as int
+                    if let Some(target) = &call_expr.target {
+                        // Method syntax: timestamp(...).getFullYear() or timestamp(...).getFullYear("UTC")
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        if call_expr.args.is_empty() {
+                            // No timezone parameter - use UTC
+                            body.call(env.timestamp_get_full_year_func_id);
+                        } else if call_expr.args.len() == 1 {
+                            // With timezone parameter
+                            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                            body.call(env.timestamp_get_full_year_tz_func_id);
+                        } else {
+                            anyhow::bail!(
+                                "getFullYear() expects 0 or 1 argument (optional timezone)"
+                            );
+                        }
+                    } else {
+                        anyhow::bail!("getFullYear() must be called as a method on a timestamp");
+                    }
+                }
+
+                "getMonth" => {
+                    // timestamp.getMonth() or timestamp.getMonth(timezone)
+                    // Returns the month component (0-11) as int
+                    if let Some(target) = &call_expr.target {
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        if call_expr.args.is_empty() {
+                            body.call(env.timestamp_get_month_func_id);
+                        } else if call_expr.args.len() == 1 {
+                            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                            body.call(env.timestamp_get_month_tz_func_id);
+                        } else {
+                            anyhow::bail!("getMonth() expects 0 or 1 argument (optional timezone)");
+                        }
+                    } else {
+                        anyhow::bail!("getMonth() must be called as a method on a timestamp");
+                    }
+                }
+
+                "getDate" => {
+                    // timestamp.getDate() or timestamp.getDate(timezone)
+                    // Returns the day of month (1-31) as int
+                    if let Some(target) = &call_expr.target {
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        if call_expr.args.is_empty() {
+                            body.call(env.timestamp_get_date_func_id);
+                        } else if call_expr.args.len() == 1 {
+                            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                            body.call(env.timestamp_get_date_tz_func_id);
+                        } else {
+                            anyhow::bail!("getDate() expects 0 or 1 argument (optional timezone)");
+                        }
+                    } else {
+                        anyhow::bail!("getDate() must be called as a method on a timestamp");
+                    }
+                }
+
+                "getDayOfMonth" => {
+                    // timestamp.getDayOfMonth() or timestamp.getDayOfMonth(timezone)
+                    // Returns the day of month (0-30) as int
+                    if let Some(target) = &call_expr.target {
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        if call_expr.args.is_empty() {
+                            body.call(env.timestamp_get_day_of_month_func_id);
+                        } else if call_expr.args.len() == 1 {
+                            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                            body.call(env.timestamp_get_day_of_month_tz_func_id);
+                        } else {
+                            anyhow::bail!(
+                                "getDayOfMonth() expects 0 or 1 argument (optional timezone)"
+                            );
+                        }
+                    } else {
+                        anyhow::bail!("getDayOfMonth() must be called as a method on a timestamp");
+                    }
+                }
+
+                "getDayOfWeek" => {
+                    // timestamp.getDayOfWeek() or timestamp.getDayOfWeek(timezone)
+                    // Returns the day of week (0-6, Sunday=0) as int
+                    if let Some(target) = &call_expr.target {
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        if call_expr.args.is_empty() {
+                            body.call(env.timestamp_get_day_of_week_func_id);
+                        } else if call_expr.args.len() == 1 {
+                            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                            body.call(env.timestamp_get_day_of_week_tz_func_id);
+                        } else {
+                            anyhow::bail!(
+                                "getDayOfWeek() expects 0 or 1 argument (optional timezone)"
+                            );
+                        }
+                    } else {
+                        anyhow::bail!("getDayOfWeek() must be called as a method on a timestamp");
+                    }
+                }
+
+                "getDayOfYear" => {
+                    // timestamp.getDayOfYear() or timestamp.getDayOfYear(timezone)
+                    // Returns the day of year (0-365) as int
+                    if let Some(target) = &call_expr.target {
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        if call_expr.args.is_empty() {
+                            body.call(env.timestamp_get_day_of_year_func_id);
+                        } else if call_expr.args.len() == 1 {
+                            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                            body.call(env.timestamp_get_day_of_year_tz_func_id);
+                        } else {
+                            anyhow::bail!(
+                                "getDayOfYear() expects 0 or 1 argument (optional timezone)"
+                            );
+                        }
+                    } else {
+                        anyhow::bail!("getDayOfYear() must be called as a method on a timestamp");
+                    }
+                }
+
+                "getHours" => {
+                    // timestamp.getHours() or timestamp.getHours(timezone)
+                    // Returns the hours component (0-23) as int
+                    if let Some(target) = &call_expr.target {
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        if call_expr.args.is_empty() {
+                            body.call(env.timestamp_get_hours_func_id);
+                        } else if call_expr.args.len() == 1 {
+                            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                            body.call(env.timestamp_get_hours_tz_func_id);
+                        } else {
+                            anyhow::bail!("getHours() expects 0 or 1 argument (optional timezone)");
+                        }
+                    } else {
+                        anyhow::bail!("getHours() must be called as a method on a timestamp");
+                    }
+                }
+
+                "getMinutes" => {
+                    // timestamp.getMinutes() or timestamp.getMinutes(timezone)
+                    // Returns the minutes component (0-59) as int
+                    if let Some(target) = &call_expr.target {
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        if call_expr.args.is_empty() {
+                            body.call(env.timestamp_get_minutes_func_id);
+                        } else if call_expr.args.len() == 1 {
+                            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                            body.call(env.timestamp_get_minutes_tz_func_id);
+                        } else {
+                            anyhow::bail!(
+                                "getMinutes() expects 0 or 1 argument (optional timezone)"
+                            );
+                        }
+                    } else {
+                        anyhow::bail!("getMinutes() must be called as a method on a timestamp");
+                    }
+                }
+
+                "getSeconds" => {
+                    // timestamp.getSeconds() or timestamp.getSeconds(timezone)
+                    // Returns the seconds component (0-59) as int
+                    if let Some(target) = &call_expr.target {
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        if call_expr.args.is_empty() {
+                            body.call(env.timestamp_get_seconds_func_id);
+                        } else if call_expr.args.len() == 1 {
+                            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                            body.call(env.timestamp_get_seconds_tz_func_id);
+                        } else {
+                            anyhow::bail!(
+                                "getSeconds() expects 0 or 1 argument (optional timezone)"
+                            );
+                        }
+                    } else {
+                        anyhow::bail!("getSeconds() must be called as a method on a timestamp");
+                    }
+                }
+
+                "getMilliseconds" => {
+                    // timestamp.getMilliseconds() or timestamp.getMilliseconds(timezone)
+                    // Returns the milliseconds component (0-999) as int
+                    if let Some(target) = &call_expr.target {
+                        compile_expr(&target.expr, body, env, ctx, module)?;
+                        if call_expr.args.is_empty() {
+                            body.call(env.timestamp_get_milliseconds_func_id);
+                        } else if call_expr.args.len() == 1 {
+                            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                            body.call(env.timestamp_get_milliseconds_tz_func_id);
+                        } else {
+                            anyhow::bail!(
+                                "getMilliseconds() expects 0 or 1 argument (optional timezone)"
+                            );
+                        }
+                    } else {
+                        anyhow::bail!(
+                            "getMilliseconds() must be called as a method on a timestamp"
+                        );
+                    }
                 }
 
                 "string" => {

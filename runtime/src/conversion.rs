@@ -112,11 +112,7 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
     match value {
         CelValue::Bool(b) => {
             cel_debug!(log, "Converting CelValue to bool"; "value" => *b);
-            if *b {
-                1
-            } else {
-                0
-            }
+            if *b { 1 } else { 0 }
         }
         other => cel_panic!(log, "Type mismatch in conversion";
             "function" => "cel_value_to_bool",
