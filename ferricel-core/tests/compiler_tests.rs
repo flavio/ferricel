@@ -4,8 +4,7 @@
 use ferricel_core::{compiler::compile_cel_to_wasm, runtime};
 use ferricel_types::LogLevel;
 use rstest::rstest;
-use slog::{o, Drain, Logger};
-
+use slog::{Drain, Logger, o};
 
 /// Test helper: create a logger for tests
 fn create_test_logger() -> Logger {
@@ -651,12 +650,12 @@ fn test_special_modulo_overflow() {
 #[test]
 fn test_safe_arithmetic_at_boundaries() {
     // These operations should work without overflow
-    let result = compile_and_execute("9223372036854775807 - 1")
-        .expect("i64::MAX - 1 should not overflow");
+    let result =
+        compile_and_execute("9223372036854775807 - 1").expect("i64::MAX - 1 should not overflow");
     assert_eq!(result, 9223372036854775806);
 
-    let result = compile_and_execute("-9223372036854775808 + 1")
-        .expect("i64::MIN + 1 should not overflow");
+    let result =
+        compile_and_execute("-9223372036854775808 + 1").expect("i64::MIN + 1 should not overflow");
     assert_eq!(result, -9223372036854775807);
 
     let result = compile_and_execute("4611686018427387903 * 2")
@@ -970,8 +969,8 @@ fn test_input_variable_i64_max() {
     // Test with i64::MAX
     let max = i64::MAX;
     let input_json = format!("{}", max);
-    let result = compile_and_execute_with_vars("input", Some(&input_json), None)
-        .expect("Failed to execute");
+    let result =
+        compile_and_execute_with_vars("input", Some(&input_json), None).expect("Failed to execute");
     assert_eq!(result, max, "input should return i64::MAX");
 }
 
@@ -980,8 +979,8 @@ fn test_input_variable_i64_min() {
     // Test with i64::MIN
     let min = i64::MIN;
     let input_json = format!("{}", min);
-    let result = compile_and_execute_with_vars("input", Some(&input_json), None)
-        .expect("Failed to execute");
+    let result =
+        compile_and_execute_with_vars("input", Some(&input_json), None).expect("Failed to execute");
     assert_eq!(result, min, "input should return i64::MIN");
 }
 
@@ -1040,12 +1039,9 @@ fn test_multiple_field_access() {
 fn test_deeply_nested_field_access() {
     // Test accessing deeply nested fields
     let input_json = r#"{"level1": {"level2": {"level3": {"value": 99}}}}"#;
-    let result = compile_and_execute_with_vars(
-        "input.level1.level2.level3.value",
-        Some(input_json),
-        None,
-    )
-    .expect("Failed to execute");
+    let result =
+        compile_and_execute_with_vars("input.level1.level2.level3.value", Some(input_json), None)
+            .expect("Failed to execute");
     assert_eq!(result, 99, "deeply nested field should return 99");
 }
 

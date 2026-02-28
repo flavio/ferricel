@@ -1,5 +1,5 @@
-use cel::common::ast::operators;
 use cel::common::ast::Expr;
+use cel::common::ast::operators;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
 use std::collections::HashMap;

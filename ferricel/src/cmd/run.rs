@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ferricel_core::runtime;
-use slog::{o, Drain, Logger};
+use slog::{Drain, Logger, o};
 
 use crate::cli::LogLevelArg;
 
