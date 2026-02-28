@@ -32,8 +32,10 @@ pub use arithmetic::{
 
 pub use comparison::{
     cel_double_eq, cel_double_gt, cel_double_gte, cel_double_lt, cel_double_lte, cel_double_ne,
-    cel_int_eq, cel_int_gt, cel_int_gte, cel_int_lt, cel_int_lte, cel_int_ne, cel_uint_eq,
-    cel_uint_gt, cel_uint_gte, cel_uint_lt, cel_uint_lte, cel_uint_ne,
+    cel_duration_gt, cel_duration_gte, cel_duration_lt, cel_duration_lte, cel_int_eq, cel_int_gt,
+    cel_int_gte, cel_int_lt, cel_int_lte, cel_int_ne, cel_timestamp_gt, cel_timestamp_gte,
+    cel_timestamp_lt, cel_timestamp_lte, cel_uint_eq, cel_uint_gt, cel_uint_gte, cel_uint_lt,
+    cel_uint_lte, cel_uint_ne,
 };
 
 pub use logical::{

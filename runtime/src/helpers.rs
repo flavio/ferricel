@@ -272,6 +272,34 @@ pub(crate) fn extract_duration_chrono_with_log(
     }
 }
 
+/// Internal helper: Extracts chrono::DateTime from CelValue::Timestamp.
+/// This is not exported - it's used by temporal comparison operations.
+pub(crate) fn extract_timestamp(ptr: *mut CelValue) -> chrono::DateTime<chrono::FixedOffset> {
+    let log = crate::logging::get_logger();
+    extract_timestamp_with_log(ptr, &log)
+}
+
+/// Internal helper with logger: Extracts chrono::DateTime from CelValue::Timestamp.
+pub(crate) fn extract_timestamp_with_log(
+    ptr: *mut CelValue,
+    log: &slog::Logger,
+) -> chrono::DateTime<chrono::FixedOffset> {
+    unsafe {
+        if ptr.is_null() {
+            cel_panic!(log, "Null pointer in extract operation";
+                "function" => "extract_timestamp",
+                "pointer" => "null");
+        }
+        match &*ptr {
+            CelValue::Timestamp(dt) => *dt,
+            other => cel_panic!(log, "Type mismatch in extraction";
+                "function" => "extract_timestamp",
+                "expected" => "Timestamp",
+                "actual" => format!("{:?}", other)),
+        }
+    }
+}
+
 /// Polymorphic addition operator for CelValue objects.
 /// Dispatches to type-specific implementations:
 /// - Int + Int = Int (arithmetic addition)
@@ -735,6 +763,8 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::UInt(b)) => a > b,
             (CelValue::Double(a), CelValue::Double(b)) => a > b,
             (CelValue::Bytes(a), CelValue::Bytes(b)) => a > b,
+            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a > b,
+            (CelValue::Duration(a), CelValue::Duration(b)) => a > b,
 
             // Cross-type numeric ordering
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -786,6 +816,8 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::UInt(b)) => a < b,
             (CelValue::Double(a), CelValue::Double(b)) => a < b,
             (CelValue::Bytes(a), CelValue::Bytes(b)) => a < b,
+            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a < b,
+            (CelValue::Duration(a), CelValue::Duration(b)) => a < b,
 
             // Cross-type numeric ordering
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -837,6 +869,8 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             (CelValue::UInt(a), CelValue::UInt(b)) => a >= b,
             (CelValue::Double(a), CelValue::Double(b)) => a >= b,
             (CelValue::Bytes(a), CelValue::Bytes(b)) => a >= b,
+            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a >= b,
+            (CelValue::Duration(a), CelValue::Duration(b)) => a >= b,
 
             // Cross-type numeric ordering
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -888,6 +922,8 @@ pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             (CelValue::UInt(a), CelValue::UInt(b)) => a <= b,
             (CelValue::Double(a), CelValue::Double(b)) => a <= b,
             (CelValue::Bytes(a), CelValue::Bytes(b)) => a <= b,
+            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a <= b,
+            (CelValue::Duration(a), CelValue::Duration(b)) => a <= b,
 
             // Cross-type numeric ordering
             (CelValue::Int(a), CelValue::UInt(b)) => {

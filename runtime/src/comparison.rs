@@ -301,3 +301,65 @@ mod tests {
         assert_uint_comparison(a, b, cel_uint_lte, expected);
     }
 }
+
+// Timestamp comparison functions
+use crate::helpers::extract_timestamp;
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_timestamp_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_timestamp(a_ptr);
+    let b = extract_timestamp(b_ptr);
+    cel_create_bool(if a < b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_timestamp_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_timestamp(a_ptr);
+    let b = extract_timestamp(b_ptr);
+    cel_create_bool(if a <= b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_timestamp_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_timestamp(a_ptr);
+    let b = extract_timestamp(b_ptr);
+    cel_create_bool(if a > b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_timestamp_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_timestamp(a_ptr);
+    let b = extract_timestamp(b_ptr);
+    cel_create_bool(if a >= b { 1 } else { 0 })
+}
+
+// Duration comparison functions
+use crate::helpers::extract_duration_chrono;
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_duration_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_duration_chrono(a_ptr);
+    let b = extract_duration_chrono(b_ptr);
+    cel_create_bool(if a < b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_duration_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_duration_chrono(a_ptr);
+    let b = extract_duration_chrono(b_ptr);
+    cel_create_bool(if a <= b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_duration_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_duration_chrono(a_ptr);
+    let b = extract_duration_chrono(b_ptr);
+    cel_create_bool(if a > b { 1 } else { 0 })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_duration_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = extract_duration_chrono(a_ptr);
+    let b = extract_duration_chrono(b_ptr);
+    cel_create_bool(if a >= b { 1 } else { 0 })
+}
