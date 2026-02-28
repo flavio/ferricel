@@ -784,6 +784,17 @@ pub fn compile_expr(
                     body.call(env.string_func_id);
                 }
 
+                "dyn" => {
+                    // dyn(value) - identity function that marks value as dynamically typed
+                    // In CEL, this is used to force dynamic dispatch for operations
+                    // For our compiler, it's a no-op since we already do dynamic dispatch
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("dyn() expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    // No function call needed - just leave the value on the stack
+                }
+
                 _ => anyhow::bail!("Unsupported function call: {}", call_expr.func_name),
             }
         }
