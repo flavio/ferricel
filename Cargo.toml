@@ -1,5 +1,12 @@
 [workspace]
-members  = ["example", "ferricel", "ferricel-types", "runtime"]
+members = [
+    "conformance",
+    "example",
+    "ferricel",
+    "ferricel-core",
+    "ferricel-types",
+    "runtime",
+]
 resolver = "2"
 
 [workspace.dependencies]

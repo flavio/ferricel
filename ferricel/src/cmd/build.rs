@@ -2,8 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-
-use crate::compiler;
+use ferricel_core::compiler;
 
 pub fn run(
     expression: Option<String>,

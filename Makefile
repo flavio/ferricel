@@ -1,4 +1,4 @@
-.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests
+.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests
 
 # Default target
 all: ferricel
@@ -31,22 +31,25 @@ clean:
 	@echo "Cleaning build artifacts..."
 	cargo clean
 
-# Run only unit tests (tests within src/)
+# Run only unit tests (compiler and runtime unit tests)
 unit-tests: $(RUNTIME_TARGET)
 	@echo "Running unit tests..."
-	cargo test --package runtime --lib
-	cargo test --package ferricel --bins
+	cargo test --workspace --exclude conformance --lib --bins
 
-# Run only end-to-end tests (tests/ directory)
+# Run only end-to-end tests (CLI integration tests)
 e2e-tests: $(RUNTIME_TARGET)
-	@echo "Running end-to-end tests..."
+	@echo "Running end-to-end CLI tests..."
 	cargo test --package ferricel --test e2e
 
-# Run all tests (unit + e2e)
-tests: $(RUNTIME_TARGET)
-	@echo "Running all tests..."
-	cargo test --package runtime
-	cargo test --package ferricel
+# Run all tests (unit + e2e + conformance)
+tests: unit-tests e2e-tests conformance-tests
+
+# Run CEL conformance tests (separate crate)
+conformance-tests: $(RUNTIME_TARGET)
+	@echo "Running CEL conformance tests..."
+	@echo "Note: Building ferricel-core first..."
+	cargo build --package ferricel-core
+	cargo test --package conformance --test conformance -- --nocapture
 
 # Check code formatting (does not modify files)
 .PHONY: fmt
@@ -72,25 +75,34 @@ check:
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  all        - Build ferricel and runtime (default)"
-	@echo "  runtime    - Build only the runtime WASM module"
-	@echo "  ferricel   - Build runtime and ferricel binary (runtime is embedded at compile-time)"
-	@echo "  clean      - Remove all build artifacts"
-	@echo "  unit-tests - Run only unit tests (tests within src/)"
-	@echo "  e2e-tests  - Run only end-to-end CLI tests (tests/ directory)"
-	@echo "  tests      - Run all tests (unit + e2e)"
-	@echo "  fmt        - Check code formatting (does not modify files)"
-	@echo "  lint       - Run clippy lints with warnings as errors"
-	@echo "  lint-fix   - Auto-fix clippy warnings where possible"
-	@echo "  check      - Check that code compiles without building"
-	@echo "  help       - Show this help message"
+	@echo "  all              - Build ferricel and runtime (default)"
+	@echo "  runtime          - Build only the runtime WASM module"
+	@echo "  ferricel         - Build runtime and ferricel binary (runtime is embedded at compile-time)"
+	@echo "  clean            - Remove all build artifacts"
+	@echo "  unit-tests       - Run unit tests (ferricel-core, runtime)"
+	@echo "  e2e-tests        - Run CLI integration tests"
+	@echo "  tests            - Run all tests (unit + e2e + conformance)"
+	@echo "  conformance-tests - Run official CEL conformance tests"
+	@echo "  fmt              - Check code formatting (does not modify files)"
+	@echo "  lint             - Run clippy lints with warnings as errors"
+	@echo "  lint-fix         - Auto-fix clippy warnings where possible"
+	@echo "  check            - Check that code compiles without building"
+	@echo "  help             - Show this help message"
 	@echo ""
 	@echo "Note: The runtime WASM must be built before ferricel, as it's embedded using include_bytes!"
 	@echo ""
+	@echo "Workspace structure:"
+	@echo "  ferricel-core    - Core compiler and runtime library"
+	@echo "  ferricel         - CLI binary (thin wrapper)"
+	@echo "  conformance      - CEL conformance tests"
+	@echo "  runtime          - WASM guest runtime"
+	@echo "  ferricel-types   - Shared types"
+	@echo ""
 	@echo "Usage examples:"
 	@echo "  make ferricel"
-	@echo "  make tests"
+	@echo "  make unit-tests"
 	@echo "  make e2e-tests"
+	@echo "  make conformance-tests"
 	@echo "  cargo run -p ferricel -- build --expression '10 + 20'"
 	@echo "  cargo run -p ferricel -- build -e '5 + 15' -o output.wasm"
 	@echo "  cargo run -p ferricel -- run output.wasm"

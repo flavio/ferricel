@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use slog::{Drain, Logger, o};
+use ferricel_core::runtime;
+use slog::{o, Drain, Logger};
 
 use crate::cli::LogLevelArg;
-use crate::runtime;
 
 pub fn run(
     wasm_path: &Path,

@@ -2,8 +2,6 @@ use clap::Parser;
 
 mod cli;
 mod cmd;
-mod compiler;
-mod runtime;
 
 fn main() -> Result<(), anyhow::Error> {
     let cli = cli::Cli::parse();
