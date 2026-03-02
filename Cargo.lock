@@ -352,6 +352,7 @@ dependencies = [
  "prost",
  "prost-build",
  "prost-types",
+ "rayon",
  "serde",
  "serde_json",
  "slog",

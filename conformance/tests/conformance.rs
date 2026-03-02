@@ -1,9 +1,17 @@
 // Conformance test runner for ferricel
 // This test suite runs the official CEL conformance tests from google/cel-spec
 
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 
 use ferricel_types::LogLevel;
+use rayon::prelude::*;
 use serde_json::Value as JsonValue;
 use slog::{Drain, Logger, o};
 
@@ -38,36 +46,47 @@ enum TestResult {
 // Statistics for test execution
 #[derive(Debug, Default)]
 struct TestStats {
-    passed: usize,
-    failed: usize,
-    skipped: usize,
-    total: usize,
+    passed: AtomicUsize,
+    failed: AtomicUsize,
+    skipped: AtomicUsize,
+    total: AtomicUsize,
 }
 
 impl TestStats {
-    fn record(&mut self, result: &TestResult) {
-        self.total += 1;
+    fn record(&self, result: &TestResult) {
+        self.total.fetch_add(1, Ordering::SeqCst);
         match result {
-            TestResult::Passed => self.passed += 1,
-            TestResult::Failed(_) => self.failed += 1,
-            TestResult::Skipped(_) => self.skipped += 1,
+            TestResult::Passed => {
+                self.passed.fetch_add(1, Ordering::SeqCst);
+            }
+            TestResult::Failed(_) => {
+                self.failed.fetch_add(1, Ordering::SeqCst);
+            }
+            TestResult::Skipped(_) => {
+                self.skipped.fetch_add(1, Ordering::SeqCst);
+            }
         }
     }
 
     fn print_summary(&self, test_file: &str) {
-        let total_f64 = self.total as f64;
-        let passed_pct = if self.total > 0 {
-            (self.passed as f64 / total_f64) * 100.0
+        let passed = self.passed.load(Ordering::SeqCst);
+        let failed = self.failed.load(Ordering::SeqCst);
+        let skipped = self.skipped.load(Ordering::SeqCst);
+        let total = self.total.load(Ordering::SeqCst);
+
+        let total_f64 = total as f64;
+        let passed_pct = if total > 0 {
+            (passed as f64 / total_f64) * 100.0
         } else {
             0.0
         };
-        let failed_pct = if self.total > 0 {
-            (self.failed as f64 / total_f64) * 100.0
+        let failed_pct = if total > 0 {
+            (failed as f64 / total_f64) * 100.0
         } else {
             0.0
         };
-        let skipped_pct = if self.total > 0 {
-            (self.skipped as f64 / total_f64) * 100.0
+        let skipped_pct = if total > 0 {
+            (skipped as f64 / total_f64) * 100.0
         } else {
             0.0
         };
@@ -77,15 +96,15 @@ impl TestStats {
         println!("{:-<60}", "");
         println!(
             "PASSED:  {:>4} / {:>4}  ({:>5.1}%)",
-            self.passed, self.total, passed_pct
+            passed, total, passed_pct
         );
         println!(
             "FAILED:  {:>4} / {:>4}  ({:>5.1}%)",
-            self.failed, self.total, failed_pct
+            failed, total, failed_pct
         );
         println!(
             "SKIPPED: {:>4} / {:>4}  ({:>5.1}%)",
-            self.skipped, self.total, skipped_pct
+            skipped, total, skipped_pct
         );
         println!("{:=<60}\n", "");
     }
@@ -160,7 +179,7 @@ impl ConformanceTestRunner {
         }
     }
 
-    fn run_test_file(&mut self, test_file_path: &Path) -> TestStats {
+    fn run_test_file(&self, test_file_path: &Path) -> TestStats {
         let file_name = test_file_path.file_stem().unwrap().to_str().unwrap();
 
         println!("\n{:=<60}", "");
@@ -169,41 +188,51 @@ impl ConformanceTestRunner {
 
         // Load the test file
         let test_file = self.load_test_file(test_file_path);
-        let mut stats = TestStats::default();
-        let mut failed_tests = Vec::new();
+        let stats = TestStats::default();
+        let failed_tests = Mutex::new(Vec::new());
 
-        // Run each section
+        // Run each section sequentially (to maintain clean output)
+        // but parallelize tests within each section
         for section in &test_file.section {
             println!("\n  Section: {}", section.name);
             if !section.description.is_empty() {
                 println!("    {}", section.description);
             }
 
-            // Run each test
-            for test in &section.test {
-                let result = self.run_single_test(file_name, &section.name, test);
-                stats.record(&result);
+            // Collect results for this section with parallel execution
+            let section_results: Vec<_> = section
+                .test
+                .par_iter()
+                .map(|test| {
+                    let result = self.run_single_test(file_name, &section.name, test);
+                    stats.record(&result);
+                    (test.name.clone(), result)
+                })
+                .collect();
 
+            // Print results sequentially for cleaner output
+            for (test_name, result) in section_results {
                 match &result {
                     TestResult::Passed => {
-                        println!("    ✓ {}", test.name);
+                        println!("    ✓ {}", test_name);
                     }
                     TestResult::Failed(reason) => {
-                        println!("    ✗ {}: {}", test.name, reason);
-                        failed_tests.push((
+                        println!("    ✗ {}: {}", test_name, reason);
+                        failed_tests.lock().unwrap().push((
                             section.name.clone(),
-                            test.name.clone(),
+                            test_name,
                             reason.clone(),
                         ));
                     }
                     TestResult::Skipped(reason) => {
-                        println!("    ⊘ {} (SKIPPED: {})", test.name, reason);
+                        println!("    ⊘ {} (SKIPPED: {})", test_name, reason);
                     }
                 }
             }
         }
 
         // Print failed tests at the end
+        let failed_tests = failed_tests.into_inner().unwrap();
         if !failed_tests.is_empty() {
             println!("\n{:-<60}", "");
             println!("Failed Tests:");
@@ -464,7 +493,7 @@ impl ConformanceTestRunner {
 
 #[test]
 fn conformance_basic_tests() {
-    let mut runner = ConformanceTestRunner::new();
+    let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/basic.textproto");
 
     runner.run_test_file(test_file);
@@ -475,7 +504,7 @@ fn conformance_basic_tests() {
 
 #[test]
 fn conformance_comparisons_tests() {
-    let mut runner = ConformanceTestRunner::new();
+    let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/comparisons.textproto");
 
     runner.run_test_file(test_file);
@@ -483,7 +512,7 @@ fn conformance_comparisons_tests() {
 
 #[test]
 fn conformance_integer_math_tests() {
-    let mut runner = ConformanceTestRunner::new();
+    let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/integer_math.textproto");
 
     runner.run_test_file(test_file);
@@ -491,7 +520,7 @@ fn conformance_integer_math_tests() {
 
 #[test]
 fn conformance_fp_math_tests() {
-    let mut runner = ConformanceTestRunner::new();
+    let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/fp_math.textproto");
 
     runner.run_test_file(test_file);
@@ -499,7 +528,7 @@ fn conformance_fp_math_tests() {
 
 #[test]
 fn conformance_string_tests() {
-    let mut runner = ConformanceTestRunner::new();
+    let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/string.textproto");
 
     runner.run_test_file(test_file);
@@ -507,7 +536,7 @@ fn conformance_string_tests() {
 
 #[test]
 fn conformance_logic_tests() {
-    let mut runner = ConformanceTestRunner::new();
+    let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/logic.textproto");
 
     runner.run_test_file(test_file);
@@ -515,7 +544,7 @@ fn conformance_logic_tests() {
 
 #[test]
 fn conformance_lists_tests() {
-    let mut runner = ConformanceTestRunner::new();
+    let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/lists.textproto");
 
     runner.run_test_file(test_file);
@@ -523,7 +552,7 @@ fn conformance_lists_tests() {
 
 #[test]
 fn conformance_conversions_tests() {
-    let mut runner = ConformanceTestRunner::new();
+    let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/conversions.textproto");
 
     runner.run_test_file(test_file);
@@ -531,7 +560,7 @@ fn conformance_conversions_tests() {
 
 #[test]
 fn conformance_timestamps_tests() {
-    let mut runner = ConformanceTestRunner::new();
+    let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/timestamps.textproto");
 
     runner.run_test_file(test_file);
