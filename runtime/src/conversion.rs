@@ -281,6 +281,11 @@ pub extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
                     abort_with_error("no such overload")
                 }
             },
+            CelValue::Timestamp(ts) => {
+                // Convert timestamp to Unix seconds (int)
+                debug!(log, "Converting Timestamp to int (Unix seconds)"; "timestamp" => format!("{:?}", ts));
+                cel_create_int(ts.timestamp())
+            }
             other => {
                 error!(log, "Cannot convert type to int";
                 "function" => "cel_int",
@@ -372,6 +377,20 @@ pub extern "C" fn cel_timestamp(ptr: *mut CelValue) -> *mut CelValue {
 
                 // Create CelValue::Timestamp directly - preserves timezone!
                 Box::into_raw(Box::new(CelValue::Timestamp(dt)))
+            }
+            CelValue::Int(seconds) => {
+                // Convert Unix seconds (int) to timestamp
+                debug!(log, "Converting int (Unix seconds) to timestamp"; "seconds" => *seconds);
+                use chrono::{TimeZone, Utc};
+                let dt = Utc.timestamp_opt(*seconds, 0).single().unwrap_or_else(|| {
+                    error!(log, "Invalid Unix timestamp";
+                            "function" => "cel_timestamp",
+                            "seconds" => *seconds);
+                    abort_with_error("no such overload")
+                });
+                // Convert Utc to FixedOffset (UTC has offset +00:00)
+                let dt_fixed = dt.with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
+                Box::into_raw(Box::new(CelValue::Timestamp(dt_fixed)))
             }
             other => {
                 error!(log, "Cannot convert type to timestamp";
