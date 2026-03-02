@@ -255,7 +255,13 @@ pub extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
                         abort_with_error("no such overload")
                     }
                 }
-                if *d < i64::MIN as f64 || *d > i64::MAX as f64 {
+                // i64::MIN and i64::MAX cannot be exactly represented as f64
+                // Values at or beyond these boundaries should error
+                // Safe range is approximately: -9223372036854774784.0 to 9223372036854774784.0
+                const MAX_SAFE_INT_AS_F64: f64 = 9223372036854774784.0;
+                const MIN_SAFE_INT_AS_F64: f64 = -9223372036854774784.0;
+
+                if *d < MIN_SAFE_INT_AS_F64 || *d > MAX_SAFE_INT_AS_F64 {
                     error!(log, "Value out of range for int";
                         "function" => "cel_int",
                         "from_type" => "Double",
