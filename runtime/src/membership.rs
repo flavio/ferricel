@@ -63,24 +63,26 @@ pub unsafe extern "C" fn cel_value_in(
 
         // Map key membership: A in map(A, B)
         // Only checks key existence, not values
-        CelValue::Object(map) => match element {
-            CelValue::String(key) => {
-                debug!(log, "Checking map key membership"; 
-                    "key" => key.as_str(),
-                    "map_size" => map.len());
-                // Maps in CEL must have string keys
-                let found = map.contains_key(key);
-                info!(log, "Map membership check complete"; "found" => found);
-                cel_create_bool(if found { 1 } else { 0 })
+        // Maps can have bool, int, uint, or string keys per CEL spec
+        CelValue::Object(map) => {
+            use crate::types::CelMapKey;
+            match CelMapKey::from_cel_value(element) {
+                Some(key) => {
+                    debug!(log, "Checking map key membership"; 
+                        "key" => key.to_string_key(),
+                        "map_size" => map.len());
+                    let found = map.contains_key(&key);
+                    info!(log, "Map membership check complete"; "found" => found);
+                    cel_create_bool(if found { 1 } else { 0 })
+                }
+                None => {
+                    error!(log, "Maps require bool, int, uint, or string keys for membership test";
+                        "function" => "cel_value_in",
+                        "actual_key_type" => format!("{:?}", element));
+                    abort_with_error("no such overload")
+                }
             }
-            _ => {
-                error!(log, "Maps require string keys for membership test";
-                    "function" => "cel_value_in",
-                    "expected_key_type" => "String",
-                    "actual_key_type" => format!("{:?}", element));
-                abort_with_error("no such overload")
-            }
-        },
+        }
 
         // Type mismatch - no matching overload
         _ => {
@@ -198,9 +200,10 @@ mod tests {
     #[case::key_exists(
         CelValue::String("key1".to_string()),
         CelValue::Object({
+            use crate::types::CelMapKey;
             let mut map = HashMap::new();
-            map.insert("key1".to_string(), CelValue::String("value1".to_string()));
-            map.insert("key2".to_string(), CelValue::String("value2".to_string()));
+            map.insert(CelMapKey::String("key1".to_string()), CelValue::String("value1".to_string()));
+            map.insert(CelMapKey::String("key2".to_string()), CelValue::String("value2".to_string()));
             map
         }),
         true
@@ -208,8 +211,9 @@ mod tests {
     #[case::key_missing(
         CelValue::String("key3".to_string()),
         CelValue::Object({
+            use crate::types::CelMapKey;
             let mut map = HashMap::new();
-            map.insert("key1".to_string(), CelValue::String("value1".to_string()));
+            map.insert(CelMapKey::String("key1".to_string()), CelValue::String("value1".to_string()));
             map
         }),
         false
@@ -217,9 +221,10 @@ mod tests {
     #[case::null_value_key_exists(
         CelValue::String("age".to_string()),
         CelValue::Object({
+            use crate::types::CelMapKey;
             let mut map = HashMap::new();
-            map.insert("name".to_string(), CelValue::String("Alice".to_string()));
-            map.insert("age".to_string(), CelValue::Null);
+            map.insert(CelMapKey::String("name".to_string()), CelValue::String("Alice".to_string()));
+            map.insert(CelMapKey::String("age".to_string()), CelValue::Null);
             map
         }),
         true  // Key exists even though value is null

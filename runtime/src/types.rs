@@ -3,8 +3,61 @@
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
 
-/// Type alias for HashMap with String keys
-type CelMap = HashMap<String, CelValue>;
+/// Map key types allowed by CEL specification.
+/// Per CEL spec, only boolean, int, uint, and string values can be map keys.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CelMapKey {
+    Bool(bool),
+    Int(i64),
+    UInt(u64),
+    String(String),
+}
+
+impl CelMapKey {
+    /// Convert the key to a string representation for JSON serialization.
+    pub fn to_string_key(&self) -> String {
+        match self {
+            CelMapKey::Bool(b) => b.to_string(),
+            CelMapKey::Int(i) => i.to_string(),
+            CelMapKey::UInt(u) => u.to_string(),
+            CelMapKey::String(s) => s.clone(),
+        }
+    }
+
+    /// Create a CelMapKey from a CelValue (if it's a valid key type).
+    pub fn from_cel_value(value: &CelValue) -> Option<CelMapKey> {
+        match value {
+            CelValue::Bool(b) => Some(CelMapKey::Bool(*b)),
+            CelValue::Int(i) => Some(CelMapKey::Int(*i)),
+            CelValue::UInt(u) => Some(CelMapKey::UInt(*u)),
+            CelValue::String(s) => Some(CelMapKey::String(s.clone())),
+            _ => None,
+        }
+    }
+}
+
+/// Type alias for CEL maps with heterogeneous key types
+type CelMap = HashMap<CelMapKey, CelValue>;
+
+/// Helper module for deserializing maps with string keys from JSON
+mod cel_map_serde {
+    use super::*;
+    use serde::{Deserialize, Deserializer};
+    use std::collections::HashMap;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<CelMapKey, CelValue>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Deserialize as a string-keyed HashMap first
+        let string_map: HashMap<String, CelValue> = HashMap::deserialize(deserializer)?;
+        // Convert all string keys to CelMapKey::String
+        Ok(string_map
+            .into_iter()
+            .map(|(k, v)| (CelMapKey::String(k), v))
+            .collect())
+    }
+}
 
 /// Represents a CEL value that can be serialized to/from JSON.
 /// Uses untagged serialization for raw JSON output (e.g., `42` instead of `{"Int": 42}`).
@@ -47,7 +100,9 @@ pub enum CelValue {
     /// Array of CelValues
     Array(Vec<CelValue>),
 
-    /// Object/map with string keys
+    /// Object/map with heterogeneous key types (bool, int, uint, string)
+    /// Deserialized from JSON with string keys only (JSON limitation)
+    #[serde(deserialize_with = "cel_map_serde::deserialize")]
     Object(CelMap),
 
     /// Timestamp - google.protobuf.Timestamp
@@ -67,6 +122,12 @@ pub enum CelValue {
     /// Note: Cannot be deserialized from JSON. Created via duration() CEL function.
     #[serde(skip_deserializing)]
     Duration(chrono::Duration),
+
+    /// Type - represents a CEL type value
+    /// Used by the type() function and type denotations (e.g., int, bool, string)
+    /// Serializes as a type_value object per CEL spec
+    #[serde(skip_deserializing)]
+    Type(String),
 }
 
 // Custom serialization for CelValue to provide untagged JSON output
@@ -102,7 +163,15 @@ impl Serialize for CelValue {
                 serializer.serialize_str(&encoded)
             }
             CelValue::Array(arr) => arr.serialize(serializer),
-            CelValue::Object(obj) => obj.serialize(serializer),
+            CelValue::Object(obj) => {
+                // Convert CelMapKey to string keys for JSON serialization
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(obj.len()))?;
+                for (key, value) in obj {
+                    map.serialize_entry(&key.to_string_key(), value)?;
+                }
+                map.end()
+            }
             CelValue::Timestamp(dt) => {
                 // Use "Z" suffix for UTC timestamps instead of "+00:00" for CEL compliance
                 let formatted = if dt.offset().local_minus_utc() == 0 {
@@ -115,6 +184,13 @@ impl Serialize for CelValue {
             CelValue::Duration(d) => {
                 let formatted = crate::chrono_helpers::format_duration(d);
                 serializer.serialize_str(&formatted)
+            }
+            CelValue::Type(type_name) => {
+                // Serialize as {"type_value": "type_name"} per CEL spec
+                use serde::ser::SerializeStruct;
+                let mut state = serializer.serialize_struct("Type", 1)?;
+                state.serialize_field("type_value", type_name)?;
+                state.end()
             }
         }
     }

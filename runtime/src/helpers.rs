@@ -67,6 +67,31 @@ pub extern "C" fn cel_create_null() -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::Null))
 }
 
+/// Creates a CelValue::Type on the heap from a string pointer and returns a pointer to it.
+/// The caller is responsible for freeing the memory using cel_free_value.
+///
+/// # Arguments
+/// * `type_name_ptr` - Pointer to the type name string in WASM memory
+/// * `type_name_len` - Length of the type name string
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_create_type(type_name_ptr: *const u8, type_name_len: i32) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if type_name_ptr.is_null() {
+            error!(log, "Null pointer for type name";
+                "function" => "cel_create_type");
+            abort_with_error("no such overload");
+        }
+
+        let slice = std::slice::from_raw_parts(type_name_ptr, type_name_len as usize);
+        let type_name = String::from_utf8_lossy(slice).to_string();
+
+        debug!(log, "Creating Type value"; "type_name" => &type_name);
+        Box::into_raw(Box::new(CelValue::Type(type_name)))
+    }
+}
+
 /// Internal helper: Extracts i64 from CelValue or panics with type error.
 /// This is not exported - it's used by arithmetic and comparison operations.
 pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
@@ -714,6 +739,7 @@ pub(crate) fn cel_equals(a_val: &CelValue, b_val: &CelValue) -> bool {
         (CelValue::Object(a), CelValue::Object(b)) => a == b,
         (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a == b,
         (CelValue::Duration(a), CelValue::Duration(b)) => a == b,
+        (CelValue::Type(a), CelValue::Type(b)) => a == b,
 
         // Cross-type numeric equality (CEL spec: x == y if !(x < y || x > y))
         (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -791,6 +817,7 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::Object(a), CelValue::Object(b)) => a != b,
             (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a != b,
             (CelValue::Duration(a), CelValue::Duration(b)) => a != b,
+            (CelValue::Type(a), CelValue::Type(b)) => a != b,
 
             // Cross-type numeric inequality
             (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -1227,23 +1254,28 @@ pub extern "C" fn cel_value_index(
                 let idx_i64 = *idx as i64;
                 array::cel_array_get(container_ptr, idx_i64 as i32)
             }
-            // Map indexing with String
-            (CelValue::Object(map), CelValue::String(key)) => {
-                debug!(log, "Indexing map with String"; "key" => key.as_str());
-                match map.get(key) {
-                    Some(value) => Box::into_raw(Box::new(value.clone())),
-                    None => crate::error::abort_with_error("no such key"),
+            // Map indexing with valid key types (bool, int, uint, string)
+            (CelValue::Object(map), key) => {
+                use crate::types::CelMapKey;
+                match CelMapKey::from_cel_value(key) {
+                    Some(map_key) => {
+                        debug!(log, "Indexing map"; "key" => map_key.to_string_key());
+                        match map.get(&map_key) {
+                            Some(value) => Box::into_raw(Box::new(value.clone())),
+                            None => crate::error::abort_with_error("no such key"),
+                        }
+                    }
+                    None => {
+                        error!(log, "Map key must be bool, int, uint, or string";
+                            "function" => "cel_value_index",
+                            "key_type" => format!("{:?}", key));
+                        abort_with_error("no such overload");
+                    }
                 }
             }
             // Type mismatches
             (CelValue::Array(_), _) => {
                 error!(log, "Array index must be Int, UInt, or Double";
-                    "function" => "cel_value_index",
-                    "index_type" => format!("{:?}", index));
-                abort_with_error("no such overload");
-            }
-            (CelValue::Object(_), _) => {
-                error!(log, "Map index must be String";
                     "function" => "cel_value_index",
                     "index_type" => format!("{:?}", index));
                 abort_with_error("no such overload");

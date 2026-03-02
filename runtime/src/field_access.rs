@@ -61,8 +61,10 @@ pub unsafe extern "C" fn cel_get_field(
             debug!(log, "Accessing field from object"; 
                 "field" => field_name.as_str(),
                 "num_fields" => map.len());
-            // Look up the field in the hashmap
-            match map.get(&field_name) {
+            // Look up the field in the hashmap using string key
+            use crate::types::CelMapKey;
+            let key = CelMapKey::String(field_name.clone());
+            match map.get(&key) {
                 Some(value) => {
                     info!(log, "Field found"; "field" => field_name.as_str());
                     // Clone the value and return a new boxed pointer
@@ -70,7 +72,8 @@ pub unsafe extern "C" fn cel_get_field(
                     Box::into_raw(boxed_value)
                 }
                 None => {
-                    let available_fields: Vec<&String> = map.keys().collect();
+                    let available_fields: Vec<String> =
+                        map.keys().map(|k| k.to_string_key()).collect();
                     {
                         error!(log, "Field not found in object";
                         "field" => field_name,
@@ -140,8 +143,12 @@ pub unsafe extern "C" fn cel_has_field(
     // Check if the field exists
     // Returns true if the key exists in the map, regardless of value (including null)
     // Returns false if obj is not an Object or if field is missing
+    use crate::types::CelMapKey;
     let has_field = match obj {
-        CelValue::Object(map) => map.contains_key(&field_name),
+        CelValue::Object(map) => {
+            let key = CelMapKey::String(field_name);
+            map.contains_key(&key)
+        }
         _ => false, // Non-objects don't have fields
     };
 
@@ -152,19 +159,19 @@ pub unsafe extern "C" fn cel_has_field(
 
 #[cfg(test)]
 mod tests {
-    use crate::types::CelValue;
+    use crate::types::{CelMapKey, CelValue};
     use std::collections::HashMap;
 
     #[test]
     fn test_field_access_logic() {
         // Test the logic without WASM memory operations
         let mut map = HashMap::new();
-        map.insert("age".into(), CelValue::Int(42));
+        map.insert(CelMapKey::String("age".into()), CelValue::Int(42));
         let obj = CelValue::Object(map);
 
         // Verify we can access the field
         if let CelValue::Object(ref map) = obj {
-            let field_value = map.get("age");
+            let field_value = map.get(&CelMapKey::String("age".into()));
             assert!(field_value.is_some());
             assert_eq!(*field_value.unwrap(), CelValue::Int(42));
         } else {
@@ -176,16 +183,22 @@ mod tests {
     fn test_nested_object_logic() {
         // Create a nested object: {"user": {"name": "Alice"}}
         let mut inner_map = HashMap::new();
-        inner_map.insert("name".into(), CelValue::String("Alice".into()));
+        inner_map.insert(
+            CelMapKey::String("name".into()),
+            CelValue::String("Alice".into()),
+        );
 
         let mut outer_map = HashMap::new();
-        outer_map.insert("user".into(), CelValue::Object(inner_map));
+        outer_map.insert(
+            CelMapKey::String("user".into()),
+            CelValue::Object(inner_map),
+        );
 
         let obj = CelValue::Object(outer_map);
 
         // Verify we can access the nested field
         if let CelValue::Object(ref map) = obj {
-            let user_value = map.get("user");
+            let user_value = map.get(&CelMapKey::String("user".into()));
             assert!(user_value.is_some());
             assert!(matches!(user_value.unwrap(), CelValue::Object(_)));
         }
@@ -195,12 +208,12 @@ mod tests {
     fn test_has_field_logic_exists() {
         // Test has() when field exists
         let mut map = HashMap::new();
-        map.insert("age".into(), CelValue::Int(42));
+        map.insert(CelMapKey::String("age".into()), CelValue::Int(42));
         let obj = CelValue::Object(map);
 
         if let CelValue::Object(ref map) = obj {
-            assert!(map.contains_key("age"));
-            assert!(!map.contains_key("missing"));
+            assert!(map.contains_key(&CelMapKey::String("age".into())));
+            assert!(!map.contains_key(&CelMapKey::String("missing".into())));
         } else {
             panic!("Expected Object variant");
         }
@@ -213,7 +226,7 @@ mod tests {
         let obj = CelValue::Object(map);
 
         if let CelValue::Object(ref map) = obj {
-            assert!(!map.contains_key("nonexistent"));
+            assert!(!map.contains_key(&CelMapKey::String("nonexistent".into())));
         } else {
             panic!("Expected Object variant");
         }
@@ -232,12 +245,12 @@ mod tests {
         // Test has() when field exists but value is null
         // Should return true because the key exists in the map
         let mut map = HashMap::new();
-        map.insert("nullable".into(), CelValue::Null);
+        map.insert(CelMapKey::String("nullable".into()), CelValue::Null);
         let obj = CelValue::Object(map);
 
         if let CelValue::Object(ref map) = obj {
             assert!(
-                map.contains_key("nullable"),
+                map.contains_key(&CelMapKey::String("nullable".into())),
                 "Should return true even if value is null"
             );
         } else {

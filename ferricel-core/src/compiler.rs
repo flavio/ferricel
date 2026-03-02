@@ -1,5 +1,5 @@
-use cel::common::ast::operators;
 use cel::common::ast::Expr;
+use cel::common::ast::operators;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
 use std::collections::HashMap;
@@ -75,6 +75,7 @@ pub struct CompilerEnv {
     pub create_string_func_id: FunctionId,
     pub create_bytes_func_id: FunctionId,
     pub create_null_func_id: FunctionId,
+    pub create_type_func_id: FunctionId,
 
     // String operations
     pub size_func_id: FunctionId,
@@ -125,6 +126,7 @@ pub struct CompilerEnv {
     pub double_func_id: FunctionId,
     pub bytes_func_id: FunctionId,
     pub bool_func_id: FunctionId,
+    pub type_func_id: FunctionId,
 }
 
 /// Compilation context that holds state during expression compilation
@@ -223,6 +225,7 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         create_string_func_id: module.exports.get_func("cel_create_string")?,
         create_bytes_func_id: module.exports.get_func("cel_create_bytes")?,
         create_null_func_id: module.exports.get_func("cel_create_null")?,
+        create_type_func_id: module.exports.get_func("cel_create_type")?,
 
         // String operations
         size_func_id: module.exports.get_func("cel_value_size")?,
@@ -294,6 +297,7 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         double_func_id: module.exports.get_func("cel_double")?,
         bytes_func_id: module.exports.get_func("cel_bytes")?,
         bool_func_id: module.exports.get_func("cel_bool")?,
+        type_func_id: module.exports.get_func("cel_type")?,
     };
 
     // 3. Remove the helpers from exports so the Host can't call them directly
@@ -1226,6 +1230,16 @@ pub fn compile_expr(
                     body.call(env.bool_func_id);
                 }
 
+                "type" => {
+                    // type(value) - returns the runtime type of a value
+                    // Returns *mut CelValue::Type
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("type() expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.type_func_id);
+                }
+
                 "dyn" => {
                     // dyn(value) - identity function that marks value as dynamically typed
                     // In CEL, this is used to force dynamic dispatch for operations
@@ -1262,7 +1276,7 @@ pub fn compile_expr(
                 // This is a local variable, load it from the local
                 body.local_get(local_id);
             } else {
-                // Not a local variable, check global variables
+                // Not a local variable, check global variables and type denotations
                 match name.as_str() {
                     "input" => {
                         // Get the input variable from global storage
@@ -1273,6 +1287,46 @@ pub fn compile_expr(
                         // Get the data variable from global storage
                         // Returns *mut CelValue
                         body.call(env.get_data_func_id);
+                    }
+                    // Type denotations - these are constant Type values
+                    // Note: "dyn" is NOT a type denotation - it's only valid as a function call
+                    "bool" | "int" | "uint" | "double" | "string" | "bytes" | "list" | "map"
+                    | "null_type" | "type" => {
+                        // Create a Type value for this type denotation
+                        let type_name = name.as_bytes();
+                        let type_name_len = type_name.len() as i32;
+
+                        // Allocate memory for the type name
+                        let type_name_ptr_local = module.locals.add(ValType::I32);
+                        body.i32_const(type_name_len)
+                            .call(env.malloc_func_id)
+                            .local_set(type_name_ptr_local);
+
+                        // Write the type name bytes to allocated memory
+                        let memory_id = module
+                            .memories
+                            .iter()
+                            .next()
+                            .ok_or_else(|| anyhow::anyhow!("No memory found"))?
+                            .id();
+
+                        for (offset, &byte) in type_name.iter().enumerate() {
+                            body.local_get(type_name_ptr_local);
+                            body.i32_const(byte as i32);
+                            body.store(
+                                memory_id,
+                                walrus::ir::StoreKind::I32_8 { atomic: false },
+                                walrus::ir::MemArg {
+                                    align: 1,
+                                    offset: offset as u32,
+                                },
+                            );
+                        }
+
+                        // Call cel_create_type(type_name_ptr, type_name_len)
+                        body.local_get(type_name_ptr_local)
+                            .i32_const(type_name_len)
+                            .call(env.create_type_func_id);
                     }
                     _ => {
                         anyhow::bail!(

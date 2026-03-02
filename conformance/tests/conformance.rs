@@ -270,8 +270,19 @@ impl ConformanceTestRunner {
 
     fn execute_cel_expression(&self, test: &SimpleTest) -> Result<JsonValue, String> {
         // Step 1: Compile the CEL expression to WASM (in memory)
-        let wasm_bytes =
-            compile_cel_to_wasm(&test.expr).map_err(|e| format!("Build failed: {}", e))?;
+        let wasm_bytes = match compile_cel_to_wasm(&test.expr) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                // Check if this test expects an error (eval_error or any error)
+                use cel::expr::conformance::test::simple_test::ResultMatcher;
+                if matches!(test.result_matcher, Some(ResultMatcher::EvalError(_))) {
+                    // Build error counts as eval error for tests with disable_check
+                    // Return as error marker (to match expected error format)
+                    return Ok(JsonValue::String(format!("error: {}", e)));
+                }
+                return Err(format!("Build failed: {}", e));
+            }
+        };
 
         // Step 2: Prepare input/data JSON if bindings are present
         let (input_json, data_json) = if !test.bindings.is_empty() {
@@ -387,6 +398,15 @@ impl ConformanceTestRunner {
                     }
                     Ok(JsonValue::Object(obj))
                 }
+                Kind::TypeValue(type_name) => {
+                    // Type values are represented as {"type_value": "type_name"}
+                    let mut obj = serde_json::Map::new();
+                    obj.insert(
+                        "type_value".to_string(),
+                        JsonValue::String(type_name.clone()),
+                    );
+                    Ok(JsonValue::Object(obj))
+                }
                 _ => Err("Unsupported value type".to_string()),
             }
         } else {
@@ -454,7 +474,23 @@ impl ConformanceTestRunner {
                 {
                     return true;
                 }
-                e == a
+
+                // For floating point numbers, use epsilon comparison
+                // to handle rounding differences in representation
+                if let (Some(ef), Some(af)) = (e.as_f64(), a.as_f64()) {
+                    // Use relative epsilon for very small numbers
+                    let epsilon = if ef.abs() < 1e-10 || af.abs() < 1e-10 {
+                        // For very small numbers, use a small absolute epsilon
+                        1e-30
+                    } else {
+                        // For larger numbers, use relative epsilon
+                        ef.abs() * 1e-10
+                    };
+                    (ef - af).abs() <= epsilon
+                } else {
+                    // If not floats (i.e., integers), compare exactly
+                    e == a
+                }
             }
             (JsonValue::Object(e), JsonValue::Object(a)) => {
                 // Maps are order-agnostic

@@ -121,11 +121,7 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
     match value {
         CelValue::Bool(b) => {
             debug!(log, "Converting CelValue to bool"; "value" => *b);
-            if *b {
-                1
-            } else {
-                0
-            }
+            if *b { 1 } else { 0 }
         }
         other => {
             error!(log, "Type mismatch in conversion";
@@ -599,6 +595,40 @@ pub extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
                 abort_with_error("no such overload")
             }
         }
+    }
+}
+
+/// CEL type() function - returns the type of a value as a Type value.
+/// Signatures per CEL spec:
+/// - type(value) -> Type (returns runtime type)
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if ptr.is_null() {
+            error!(log, "Cannot get type of null";
+                "function" => "cel_type");
+            abort_with_error("no such overload");
+        }
+
+        let type_name = match &*ptr {
+            CelValue::Null => "null_type",
+            CelValue::Bool(_) => "bool",
+            CelValue::Int(_) => "int",
+            CelValue::UInt(_) => "uint",
+            CelValue::Double(_) => "double",
+            CelValue::String(_) => "string",
+            CelValue::Bytes(_) => "bytes",
+            CelValue::Array(_) => "list",
+            CelValue::Object(_) => "map",
+            CelValue::Timestamp(_) => "google.protobuf.Timestamp",
+            CelValue::Duration(_) => "google.protobuf.Duration",
+            CelValue::Type(_) => "type",
+        };
+
+        debug!(log, "Getting type of value"; "type_name" => type_name);
+        Box::into_raw(Box::new(CelValue::Type(type_name.to_string())))
     }
 }
 

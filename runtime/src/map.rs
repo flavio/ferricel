@@ -71,13 +71,13 @@ pub unsafe extern "C" fn cel_map_insert(
     let key = unsafe { &*key_ptr };
     let value = unsafe { &*value_ptr };
 
-    // Extract the key string
-    let key_string = match key {
-        CelValue::String(s) => s.clone(),
-        _ => {
-            error!(log, "Map key must be a String";
+    // Extract the map key (must be bool, int, uint, or string per CEL spec)
+    use crate::types::CelMapKey;
+    let map_key = match CelMapKey::from_cel_value(key) {
+        Some(k) => k,
+        None => {
+            error!(log, "Map key must be bool, int, uint, or string";
             "function" => "cel_map_insert",
-            "expected_key_type" => "String",
             "actual_key_type" => format!("{:?}", key));
             abort_with_error("no such overload")
         }
@@ -87,9 +87,9 @@ pub unsafe extern "C" fn cel_map_insert(
     match map_value {
         CelValue::Object(hash_map) => {
             debug!(log, "Inserting into map"; 
-                "key" => key_string.as_str(),
+                "key" => map_key.to_string_key(),
                 "current_size" => hash_map.len());
-            hash_map.insert(key_string, value.clone());
+            hash_map.insert(map_key, value.clone());
         }
         _ => {
             error!(log, "Type mismatch in map operation";
@@ -136,9 +136,10 @@ mod tests {
         let map_value = unsafe { &*map_ptr };
         match map_value {
             CelValue::Object(hash_map) => {
+                use crate::types::CelMapKey;
                 assert_eq!(hash_map.len(), 1, "Map should have 1 entry");
                 assert_eq!(
-                    hash_map.get("name"),
+                    hash_map.get(&CelMapKey::String("name".to_string())),
                     Some(&CelValue::String("Alice".to_string())),
                     "Map should contain the inserted key-value pair"
                 );
@@ -176,12 +177,16 @@ mod tests {
         let map_value = unsafe { &*map_ptr };
         match map_value {
             CelValue::Object(hash_map) => {
+                use crate::types::CelMapKey;
                 assert_eq!(hash_map.len(), 2, "Map should have 2 entries");
                 assert_eq!(
-                    hash_map.get("name"),
+                    hash_map.get(&CelMapKey::String("name".to_string())),
                     Some(&CelValue::String("Alice".to_string()))
                 );
-                assert_eq!(hash_map.get("age"), Some(&CelValue::Int(30)));
+                assert_eq!(
+                    hash_map.get(&CelMapKey::String("age".to_string())),
+                    Some(&CelValue::Int(30))
+                );
             }
             _ => panic!("Expected Object, got {:?}", map_value),
         }
