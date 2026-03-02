@@ -121,7 +121,11 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
     match value {
         CelValue::Bool(b) => {
             debug!(log, "Converting CelValue to bool"; "value" => *b);
-            if *b { 1 } else { 0 }
+            if *b {
+                1
+            } else {
+                0
+            }
         }
         other => {
             error!(log, "Type mismatch in conversion";
@@ -444,6 +448,51 @@ pub extern "C" fn cel_bytes(ptr: *mut CelValue) -> *mut CelValue {
             other => {
                 error!(log, "Cannot convert type to bytes";
                 "function" => "cel_bytes",
+                "from_type" => format!("{:?}", other));
+                abort_with_error("no such overload")
+            }
+        }
+    }
+}
+
+/// CEL bool() function - converts values to bool.
+/// Signatures per CEL spec:
+/// - bool(bool) -> bool (identity)
+/// - bool(string) -> bool (parses "true"/"false" with various cases: "1", "t", "T", "TRUE", "True", "0", "f", "F", "FALSE", "False")
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_bool(ptr: *mut CelValue) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if ptr.is_null() {
+            error!(log, "Cannot convert null to bool";
+                "function" => "cel_bool");
+            abort_with_error("no such overload");
+        }
+
+        match &*ptr {
+            CelValue::Bool(b) => {
+                debug!(log, "Bool identity conversion");
+                Box::into_raw(Box::new(CelValue::Bool(*b)))
+            }
+            CelValue::String(s) => {
+                debug!(log, "Converting String to bool"; "value" => s);
+                // Per CEL spec, bool() accepts various string representations
+                let b = match s.as_str() {
+                    "true" | "TRUE" | "True" | "t" | "T" | "1" => true,
+                    "false" | "FALSE" | "False" | "f" | "F" | "0" => false,
+                    _ => {
+                        error!(log, "Cannot parse string as bool";
+                        "function" => "cel_bool",
+                        "value" => s);
+                        abort_with_error("no such overload")
+                    }
+                };
+                Box::into_raw(Box::new(CelValue::Bool(b)))
+            }
+            other => {
+                error!(log, "Cannot convert type to bool";
+                "function" => "cel_bool",
                 "from_type" => format!("{:?}", other));
                 abort_with_error("no such overload")
             }

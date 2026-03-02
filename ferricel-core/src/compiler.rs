@@ -1,5 +1,5 @@
-use cel::common::ast::Expr;
 use cel::common::ast::operators;
+use cel::common::ast::Expr;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
 use std::collections::HashMap;
@@ -124,6 +124,7 @@ pub struct CompilerEnv {
     pub uint_func_id: FunctionId,
     pub double_func_id: FunctionId,
     pub bytes_func_id: FunctionId,
+    pub bool_func_id: FunctionId,
 }
 
 /// Compilation context that holds state during expression compilation
@@ -292,6 +293,7 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         uint_func_id: module.exports.get_func("cel_uint")?,
         double_func_id: module.exports.get_func("cel_double")?,
         bytes_func_id: module.exports.get_func("cel_bytes")?,
+        bool_func_id: module.exports.get_func("cel_bool")?,
     };
 
     // 3. Remove the helpers from exports so the Host can't call them directly
@@ -369,6 +371,7 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     module.exports.remove("cel_int")?;
     module.exports.remove("cel_uint")?;
     module.exports.remove("cel_double")?;
+    module.exports.remove("cel_bool")?;
     module.exports.remove("cel_value_in")?;
     module.exports.remove("cel_value_index")?;
 
@@ -1211,6 +1214,16 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     body.call(env.bytes_func_id);
+                }
+
+                "bool" => {
+                    // bool(value) - converts value to bool
+                    // Returns *mut CelValue::Bool
+                    if call_expr.args.len() != 1 {
+                        anyhow::bail!("bool() expects 1 argument");
+                    }
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+                    body.call(env.bool_func_id);
                 }
 
                 "dyn" => {
