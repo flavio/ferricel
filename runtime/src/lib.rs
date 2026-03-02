@@ -6,6 +6,7 @@ mod chrono_helpers;
 mod comparison;
 mod conversion;
 mod deserialization;
+pub mod error;
 mod field_access;
 mod globals;
 mod helpers;
@@ -39,7 +40,8 @@ pub use comparison::{
 };
 
 pub use logical::{
-    cel_bool_and, cel_bool_not, cel_bool_or, cel_conditional, cel_not_strictly_false,
+    cel_bool_and, cel_bool_not, cel_bool_or, cel_conditional, cel_is_strictly_false,
+    cel_is_strictly_true, cel_not_strictly_false,
 };
 
 pub use serialization::{cel_serialize_bool, cel_serialize_int, cel_serialize_value};

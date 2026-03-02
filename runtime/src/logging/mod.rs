@@ -9,7 +9,6 @@
 
 mod drain;
 mod event;
-pub mod macros;
 
 use ferricel_types::LogLevel;
 use once_cell::sync::OnceCell;

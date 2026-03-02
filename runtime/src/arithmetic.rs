@@ -1,17 +1,17 @@
 //! Arithmetic operations with overflow checking and division-by-zero protection.
-//! All operations panic on overflow or invalid operations per CEL spec.
+//! All operations return errors via cel_abort on overflow or invalid operations per CEL spec.
 //!
 //! Following CEL specification:
 //! - Integer operations: checked arithmetic with overflow protection
 //! - Double operations: IEEE 754 floating point arithmetic
 //! - NO automatic type coercion between Int and Double
 
+use crate::error::abort_with_error;
 use crate::helpers::{
-    cel_create_double, cel_create_int, cel_create_uint, extract_double, extract_int,
-    extract_int_with_log, extract_uint,
+    cel_create_double, cel_create_int, cel_create_uint, extract_double, extract_int, extract_uint,
 };
 use crate::types::CelValue;
-use crate::{cel_panic, logging::macros::cel_warn};
+use slog::warn;
 
 /// Internal helper: Add two integers with overflow checking.
 ///
@@ -22,10 +22,13 @@ use crate::{cel_panic, logging::macros::cel_warn};
 /// # Returns
 /// The sum of `a` and `b`
 ///
-/// # Panics
-/// Panics on integer overflow
+/// # Errors
+/// Calls cel_abort on integer overflow
 pub(crate) fn cel_int_add(a: i64, b: i64) -> i64 {
-    a.checked_add(b).expect("integer overflow in addition")
+    match a.checked_add(b) {
+        Some(result) => result,
+        None => abort_with_error("integer overflow in addition"),
+    }
 }
 
 /// Internal helper: Add two doubles using IEEE 754 floating point arithmetic.
@@ -62,63 +65,51 @@ pub(crate) fn double_div(a: f64, b: f64) -> f64 {
 pub extern "C" fn cel_int_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
-    let result = a.checked_sub(b).expect("integer overflow in subtraction");
-    cel_create_int(result)
+    match a.checked_sub(b) {
+        Some(result) => cel_create_int(result),
+        None => abort_with_error("integer overflow"),
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
-    let result = a
-        .checked_mul(b)
-        .expect("integer overflow in multiplication");
-    cel_create_int(result)
+    match a.checked_mul(b) {
+        Some(result) => cel_create_int(result),
+        None => abort_with_error("integer overflow"),
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let log = crate::logging::get_logger();
-    let a = extract_int_with_log(a_ptr, &log);
-    let b = extract_int_with_log(b_ptr, &log);
+    let a = extract_int(a_ptr);
+    let b = extract_int(b_ptr);
 
     if b == 0 {
-        cel_panic!(log, "Division by zero";
-            "operation" => "cel_int_div",
-            "dividend" => a,
-            "divisor" => b);
+        abort_with_error("division by zero");
     }
 
     // checked_div also catches the special case: i64::MIN / -1
     match a.checked_div(b) {
         Some(result) => cel_create_int(result),
-        None => cel_panic!(log, "Integer overflow in division";
-            "operation" => "cel_int_div",
-            "dividend" => a,
-            "divisor" => b),
+        None => abort_with_error("integer overflow"),
     }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let log = crate::logging::get_logger();
-    let a = extract_int_with_log(a_ptr, &log);
-    let b = extract_int_with_log(b_ptr, &log);
+    let a = extract_int(a_ptr);
+    let b = extract_int(b_ptr);
 
     if b == 0 {
-        cel_panic!(log, "Modulo by zero";
-            "operation" => "cel_int_mod",
-            "dividend" => a,
-            "divisor" => b);
+        abort_with_error("modulus by zero");
     }
 
     // checked_rem also catches the special case: i64::MIN % -1
     match a.checked_rem(b) {
         Some(result) => cel_create_int(result),
-        None => cel_panic!(log, "Integer overflow in modulo";
-            "operation" => "cel_int_mod",
-            "dividend" => a,
-            "divisor" => b),
+        None => abort_with_error("integer overflow"),
     }
 }
 
@@ -129,58 +120,48 @@ pub extern "C" fn cel_int_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
 pub extern "C" fn cel_uint_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
-    let result = a
-        .checked_add(b)
-        .expect("unsigned integer overflow in addition");
-    cel_create_uint(result)
+    match a.checked_add(b) {
+        Some(result) => cel_create_uint(result),
+        None => abort_with_error("unsigned integer overflow"),
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_uint_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
-    let result = a
-        .checked_sub(b)
-        .expect("unsigned integer underflow in subtraction");
-    cel_create_uint(result)
+    match a.checked_sub(b) {
+        Some(result) => cel_create_uint(result),
+        None => abort_with_error("unsigned integer underflow"),
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_uint_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
-    let result = a
-        .checked_mul(b)
-        .expect("unsigned integer overflow in multiplication");
-    cel_create_uint(result)
+    match a.checked_mul(b) {
+        Some(result) => cel_create_uint(result),
+        None => abort_with_error("unsigned integer overflow"),
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_uint_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let log = crate::logging::get_logger();
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     if b == 0 {
-        cel_panic!(log, "Division by zero";
-            "operation" => "cel_uint_div",
-            "type" => "UInt",
-            "dividend" => a,
-            "divisor" => b);
+        abort_with_error("division by zero");
     }
     cel_create_uint(a / b)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_uint_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let log = crate::logging::get_logger();
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     if b == 0 {
-        cel_panic!(log, "Modulo by zero";
-            "operation" => "cel_uint_mod",
-            "type" => "UInt",
-            "dividend" => a,
-            "divisor" => b);
+        abort_with_error("modulus by zero");
     }
     cel_create_uint(a % b)
 }
@@ -221,13 +202,13 @@ pub extern "C" fn cel_double_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> 
 
     // Warn about special IEEE 754 results
     if result.is_infinite() {
-        cel_warn!(log, "Division resulted in Infinity";
+        warn!(log, "Division resulted in Infinity";
             "operation" => "cel_double_div",
             "dividend" => a,
             "divisor" => b,
             "result" => format!("{}", result));
     } else if result.is_nan() {
-        cel_warn!(log, "Division resulted in NaN";
+        warn!(log, "Division resulted in NaN";
             "operation" => "cel_double_div",
             "dividend" => a,
             "divisor" => b);

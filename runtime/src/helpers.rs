@@ -2,9 +2,10 @@
 //! These are used internally by other runtime functions and exported for compiler use.
 //! Also includes polymorphic operators that dispatch to type-specific implementations.
 
-use crate::logging::macros::cel_debug;
+use crate::error::abort_with_error;
 use crate::types::CelValue;
-use crate::{arithmetic, array, bytes, cel_panic, string, temporal};
+use crate::{arithmetic, array, bytes, string, temporal};
+use slog::{debug, error};
 
 /// Creates a CelValue::Int on the heap and returns a pointer to it.
 /// The caller is responsible for freeing the memory using cel_free_value.
@@ -73,20 +74,24 @@ pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
     extract_int_with_log(ptr, &log)
 }
 
-/// Internal helper with logger: Extracts i64 from CelValue or panics with structured error.
+/// Internal helper with logger: Extracts i64 from CelValue or aborts with structured error.
 pub(crate) fn extract_int_with_log(ptr: *mut CelValue, log: &slog::Logger) -> i64 {
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Null pointer in extract operation";
+            error!(log, "Null pointer in extract operation";
                 "function" => "extract_int",
                 "pointer" => "null");
+            abort_with_error("no such overload");
         }
         match &*ptr {
             CelValue::Int(i) => *i,
-            other => cel_panic!(log, "Type mismatch in extraction";
-                "function" => "extract_int",
-                "expected" => "Int",
-                "actual" => format!("{:?}", other)),
+            other => {
+                error!(log, "Type mismatch in extraction";
+                    "function" => "extract_int",
+                    "expected" => "Int",
+                    "actual" => format!("{:?}", other));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -98,20 +103,24 @@ pub(crate) fn extract_uint(ptr: *mut CelValue) -> u64 {
     extract_uint_with_log(ptr, &log)
 }
 
-/// Internal helper with logger: Extracts u64 from CelValue or panics with structured error.
+/// Internal helper with logger: Extracts u64 from CelValue or aborts with structured error.
 pub(crate) fn extract_uint_with_log(ptr: *mut CelValue, log: &slog::Logger) -> u64 {
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Null pointer in extract operation";
+            error!(log, "Null pointer in extract operation";
                 "function" => "extract_uint",
                 "pointer" => "null");
+            abort_with_error("no such overload");
         }
         match &*ptr {
             CelValue::UInt(u) => *u,
-            other => cel_panic!(log, "Type mismatch in extraction";
-                "function" => "extract_uint",
-                "expected" => "UInt",
-                "actual" => format!("{:?}", other)),
+            other => {
+                error!(log, "Type mismatch in extraction";
+                    "function" => "extract_uint",
+                    "expected" => "UInt",
+                    "actual" => format!("{:?}", other));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -123,20 +132,24 @@ pub(crate) fn extract_bool(ptr: *mut CelValue) -> bool {
     extract_bool_with_log(ptr, &log)
 }
 
-/// Internal helper with logger: Extracts bool from CelValue or panics with structured error.
+/// Internal helper with logger: Extracts bool from CelValue or aborts with structured error.
 pub(crate) fn extract_bool_with_log(ptr: *mut CelValue, log: &slog::Logger) -> bool {
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Null pointer in extract operation";
+            error!(log, "Null pointer in extract operation";
                 "function" => "extract_bool",
                 "pointer" => "null");
+            abort_with_error("no such overload");
         }
         match &*ptr {
             CelValue::Bool(b) => *b,
-            other => cel_panic!(log, "Type mismatch in extraction";
-                "function" => "extract_bool",
-                "expected" => "Bool",
-                "actual" => format!("{:?}", other)),
+            other => {
+                error!(log, "Type mismatch in extraction";
+                    "function" => "extract_bool",
+                    "expected" => "Bool",
+                    "actual" => format!("{:?}", other));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -148,20 +161,24 @@ pub(crate) fn extract_double(ptr: *mut CelValue) -> f64 {
     extract_double_with_log(ptr, &log)
 }
 
-/// Internal helper with logger: Extracts f64 from CelValue or panics with structured error.
+/// Internal helper with logger: Extracts f64 from CelValue or aborts with structured error.
 pub(crate) fn extract_double_with_log(ptr: *mut CelValue, log: &slog::Logger) -> f64 {
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Null pointer in extract operation";
+            error!(log, "Null pointer in extract operation";
                 "function" => "extract_double",
                 "pointer" => "null");
+            abort_with_error("no such overload");
         }
         match &*ptr {
             CelValue::Double(d) => *d,
-            other => cel_panic!(log, "Type mismatch in extraction";
-                "function" => "extract_double",
-                "expected" => "Double",
-                "actual" => format!("{:?}", other)),
+            other => {
+                error!(log, "Type mismatch in extraction";
+                    "function" => "extract_double",
+                    "expected" => "Double",
+                    "actual" => format!("{:?}", other));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -177,16 +194,20 @@ pub(crate) fn extract_duration(ptr: *mut CelValue) -> (i64, i32) {
 pub(crate) fn extract_duration_with_log(ptr: *mut CelValue, log: &slog::Logger) -> (i64, i32) {
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Null pointer in extract operation";
+            error!(log, "Null pointer in extract operation";
                 "function" => "extract_duration",
                 "pointer" => "null");
+            abort_with_error("no such overload");
         }
         match &*ptr {
             CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(d),
-            other => cel_panic!(log, "Type mismatch in extraction";
-                "function" => "extract_duration",
-                "expected" => "Duration",
-                "actual" => format!("{:?}", other)),
+            other => {
+                error!(log, "Type mismatch in extraction";
+                    "function" => "extract_duration",
+                    "expected" => "Duration",
+                    "actual" => format!("{:?}", other));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -205,16 +226,20 @@ pub(crate) fn extract_datetime_with_log(
 ) -> chrono::DateTime<chrono::FixedOffset> {
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Null pointer in extract operation";
+            error!(log, "Null pointer in extract operation";
                 "function" => "extract_datetime",
                 "pointer" => "null");
+            abort_with_error("no such overload");
         }
         match &*ptr {
             CelValue::Timestamp(dt) => *dt,
-            other => cel_panic!(log, "Type mismatch in extraction";
-                "function" => "extract_datetime",
-                "expected" => "Timestamp",
-                "actual" => format!("{:?}", other)),
+            other => {
+                error!(log, "Type mismatch in extraction";
+                    "function" => "extract_datetime",
+                    "expected" => "Timestamp",
+                    "actual" => format!("{:?}", other));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -230,16 +255,20 @@ pub(crate) fn extract_string(ptr: *mut CelValue) -> String {
 pub(crate) fn extract_string_with_log(ptr: *mut CelValue, log: &slog::Logger) -> String {
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Null pointer in extract operation";
+            error!(log, "Null pointer in extract operation";
                 "function" => "extract_string",
                 "pointer" => "null");
+            abort_with_error("no such overload");
         }
         match &*ptr {
             CelValue::String(s) => s.clone(),
-            other => cel_panic!(log, "Type mismatch in extraction";
-                "function" => "extract_string",
-                "expected" => "String",
-                "actual" => format!("{:?}", other)),
+            other => {
+                error!(log, "Type mismatch in extraction";
+                    "function" => "extract_string",
+                    "expected" => "String",
+                    "actual" => format!("{:?}", other));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -258,16 +287,20 @@ pub(crate) fn extract_duration_chrono_with_log(
 ) -> chrono::Duration {
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Null pointer in extract operation";
+            error!(log, "Null pointer in extract operation";
                 "function" => "extract_duration_chrono",
                 "pointer" => "null");
+            abort_with_error("no such overload");
         }
         match &*ptr {
             CelValue::Duration(d) => *d,
-            other => cel_panic!(log, "Type mismatch in extraction";
-                "function" => "extract_duration_chrono",
-                "expected" => "Duration",
-                "actual" => format!("{:?}", other)),
+            other => {
+                error!(log, "Type mismatch in extraction";
+                    "function" => "extract_duration_chrono",
+                    "expected" => "Duration",
+                    "actual" => format!("{:?}", other));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -286,16 +319,20 @@ pub(crate) fn extract_timestamp_with_log(
 ) -> chrono::DateTime<chrono::FixedOffset> {
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Null pointer in extract operation";
+            error!(log, "Null pointer in extract operation";
                 "function" => "extract_timestamp",
                 "pointer" => "null");
+            abort_with_error("no such overload");
         }
         match &*ptr {
             CelValue::Timestamp(dt) => *dt,
-            other => cel_panic!(log, "Type mismatch in extraction";
-                "function" => "extract_timestamp",
-                "expected" => "Timestamp",
-                "actual" => format!("{:?}", other)),
+            other => {
+                error!(log, "Type mismatch in extraction";
+                    "function" => "extract_timestamp",
+                    "expected" => "Timestamp",
+                    "actual" => format!("{:?}", other));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -331,8 +368,9 @@ pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot add null values";
+            error!(log, "Cannot add null values";
                 "function" => "cel_value_add");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -340,60 +378,66 @@ pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
-                cel_debug!(log, "Performing Int addition"; "left" => *a, "right" => *b);
+                debug!(log, "Performing Int addition"; "left" => *a, "right" => *b);
                 let result = arithmetic::cel_int_add(*a, *b);
                 cel_create_int(result)
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
-                cel_debug!(log, "Performing UInt addition"; "left" => *a, "right" => *b);
-                let result = a.checked_add(*b).unwrap_or_else(|| {
-                    cel_panic!(log, "Unsigned integer overflow in addition";
-                        "operation" => "cel_value_add",
-                        "type" => "UInt",
-                        "left" => *a,
-                        "right" => *b)
-                });
-                cel_create_uint(result)
+                debug!(log, "Performing UInt addition"; "left" => *a, "right" => *b);
+                match a.checked_add(*b) {
+                    Some(result) => cel_create_uint(result),
+                    None => {
+                        error!(log, "Unsigned integer overflow in addition";
+                            "operation" => "cel_value_add",
+                            "type" => "UInt",
+                            "left" => *a,
+                            "right" => *b);
+                        abort_with_error("return error for overflow");
+                    }
+                }
             }
             (CelValue::Double(a), CelValue::Double(b)) => {
-                cel_debug!(log, "Performing Double addition"; "left" => *a, "right" => *b);
+                debug!(log, "Performing Double addition"; "left" => *a, "right" => *b);
                 let result = arithmetic::double_add(*a, *b);
                 cel_create_double(result)
             }
             (CelValue::String(a_str), CelValue::String(b_str)) => {
-                cel_debug!(log, "Performing String concatenation"; 
+                debug!(log, "Performing String concatenation"; 
                     "left_len" => a_str.len(), "right_len" => b_str.len());
                 let result = string::cel_string_concat(a_str, b_str);
                 Box::into_raw(Box::new(CelValue::String(result)))
             }
             (CelValue::Bytes(a_bytes), CelValue::Bytes(b_bytes)) => {
-                cel_debug!(log, "Performing Bytes concatenation"; 
+                debug!(log, "Performing Bytes concatenation"; 
                     "left_len" => a_bytes.len(), "right_len" => b_bytes.len());
                 let result = bytes::cel_bytes_concat_internal(a_bytes, b_bytes);
                 Box::into_raw(Box::new(CelValue::Bytes(result)))
             }
             (CelValue::Array(a_vec), CelValue::Array(b_vec)) => {
-                cel_debug!(log, "Performing Array concatenation"; 
+                debug!(log, "Performing Array concatenation"; 
                     "left_len" => a_vec.len(), "right_len" => b_vec.len());
                 let result = array::cel_array_concat(a_vec, b_vec);
                 Box::into_raw(Box::new(CelValue::Array(result)))
             }
             (CelValue::Timestamp(_), CelValue::Duration(_)) => {
-                cel_debug!(log, "Performing Timestamp + Duration");
+                debug!(log, "Performing Timestamp + Duration");
                 temporal::cel_timestamp_add_duration(a_ptr, b_ptr)
             }
             (CelValue::Duration(_), CelValue::Timestamp(_)) => {
-                cel_debug!(log, "Performing Duration + Timestamp");
+                debug!(log, "Performing Duration + Timestamp");
                 temporal::cel_timestamp_add_duration(b_ptr, a_ptr)
             }
             (CelValue::Duration(_), CelValue::Duration(_)) => {
-                cel_debug!(log, "Performing Duration + Duration");
+                debug!(log, "Performing Duration + Duration");
                 temporal::cel_duration_add(a_ptr, b_ptr)
             }
-            _ => cel_panic!(log, "Cannot add incompatible types";
-                "operation" => "cel_value_add",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            _ => {
+                error!(log, "Cannot add incompatible types";
+                    "operation" => "cel_value_add",
+                    "left_type" => format!("{:?}", a_val),
+                    "right_type" => format!("{:?}", b_val));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -408,8 +452,9 @@ pub extern "C" fn cel_value_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot subtract null values";
+            error!(log, "Cannot subtract null values";
                 "function" => "cel_value_sub");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -417,48 +462,57 @@ pub extern "C" fn cel_value_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
-                cel_debug!(log, "Performing Int subtraction"; "left" => *a, "right" => *b);
-                let result = a.checked_sub(*b).unwrap_or_else(|| {
-                    cel_panic!(log, "Integer overflow in subtraction";
-                        "operation" => "cel_value_sub",
-                        "type" => "Int",
-                        "left" => *a,
-                        "right" => *b)
-                });
-                cel_create_int(result)
+                debug!(log, "Performing Int subtraction"; "left" => *a, "right" => *b);
+                match a.checked_sub(*b) {
+                    Some(result) => cel_create_int(result),
+                    None => {
+                        error!(log, "Integer overflow in subtraction";
+                            "operation" => "cel_value_sub",
+                            "type" => "Int",
+                            "left" => *a,
+                            "right" => *b);
+                        abort_with_error("return error for overflow");
+                    }
+                }
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
-                cel_debug!(log, "Performing UInt subtraction"; "left" => *a, "right" => *b);
-                let result = a.checked_sub(*b).unwrap_or_else(|| {
-                    cel_panic!(log, "Unsigned integer underflow in subtraction";
-                        "operation" => "cel_value_sub",
-                        "type" => "UInt",
-                        "left" => *a,
-                        "right" => *b)
-                });
-                cel_create_uint(result)
+                debug!(log, "Performing UInt subtraction"; "left" => *a, "right" => *b);
+                match a.checked_sub(*b) {
+                    Some(result) => cel_create_uint(result),
+                    None => {
+                        error!(log, "Unsigned integer underflow in subtraction";
+                            "operation" => "cel_value_sub",
+                            "type" => "UInt",
+                            "left" => *a,
+                            "right" => *b);
+                        abort_with_error("return error for overflow");
+                    }
+                }
             }
             (CelValue::Double(a), CelValue::Double(b)) => {
-                cel_debug!(log, "Performing Double subtraction"; "left" => *a, "right" => *b);
+                debug!(log, "Performing Double subtraction"; "left" => *a, "right" => *b);
                 let result = arithmetic::double_sub(*a, *b);
                 cel_create_double(result)
             }
             (CelValue::Timestamp(_), CelValue::Duration(_)) => {
-                cel_debug!(log, "Performing Timestamp - Duration");
+                debug!(log, "Performing Timestamp - Duration");
                 temporal::cel_timestamp_sub_duration(a_ptr, b_ptr)
             }
             (CelValue::Timestamp(_), CelValue::Timestamp(_)) => {
-                cel_debug!(log, "Performing Timestamp - Timestamp");
+                debug!(log, "Performing Timestamp - Timestamp");
                 temporal::cel_timestamp_diff(a_ptr, b_ptr)
             }
             (CelValue::Duration(_), CelValue::Duration(_)) => {
-                cel_debug!(log, "Performing Duration - Duration");
+                debug!(log, "Performing Duration - Duration");
                 temporal::cel_duration_sub(a_ptr, b_ptr)
             }
-            _ => cel_panic!(log, "Cannot subtract incompatible types";
-                "operation" => "cel_value_sub",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            _ => {
+                error!(log, "Cannot subtract incompatible types";
+                    "operation" => "cel_value_sub",
+                    "left_type" => format!("{:?}", a_val),
+                    "right_type" => format!("{:?}", b_val));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -470,8 +524,9 @@ pub extern "C" fn cel_value_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot multiply null values";
+            error!(log, "Cannot multiply null values";
                 "function" => "cel_value_mul");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -479,36 +534,45 @@ pub extern "C" fn cel_value_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
-                cel_debug!(log, "Performing Int multiplication"; "left" => *a, "right" => *b);
-                let result = a.checked_mul(*b).unwrap_or_else(|| {
-                    cel_panic!(log, "Integer overflow in multiplication";
-                        "operation" => "cel_value_mul",
-                        "type" => "Int",
-                        "left" => *a,
-                        "right" => *b)
-                });
-                cel_create_int(result)
+                debug!(log, "Performing Int multiplication"; "left" => *a, "right" => *b);
+                match a.checked_mul(*b) {
+                    Some(result) => cel_create_int(result),
+                    None => {
+                        error!(log, "Integer overflow in multiplication";
+                            "operation" => "cel_value_mul",
+                            "type" => "Int",
+                            "left" => *a,
+                            "right" => *b);
+                        abort_with_error("return error for overflow");
+                    }
+                }
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
-                cel_debug!(log, "Performing UInt multiplication"; "left" => *a, "right" => *b);
-                let result = a.checked_mul(*b).unwrap_or_else(|| {
-                    cel_panic!(log, "Unsigned integer overflow in multiplication";
-                        "operation" => "cel_value_mul",
-                        "type" => "UInt",
-                        "left" => *a,
-                        "right" => *b)
-                });
-                cel_create_uint(result)
+                debug!(log, "Performing UInt multiplication"; "left" => *a, "right" => *b);
+                match a.checked_mul(*b) {
+                    Some(result) => cel_create_uint(result),
+                    None => {
+                        error!(log, "Unsigned integer overflow in multiplication";
+                            "operation" => "cel_value_mul",
+                            "type" => "UInt",
+                            "left" => *a,
+                            "right" => *b);
+                        abort_with_error("return error for overflow");
+                    }
+                }
             }
             (CelValue::Double(a), CelValue::Double(b)) => {
-                cel_debug!(log, "Performing Double multiplication"; "left" => *a, "right" => *b);
+                debug!(log, "Performing Double multiplication"; "left" => *a, "right" => *b);
                 let result = arithmetic::double_mul(*a, *b);
                 cel_create_double(result)
             }
-            _ => cel_panic!(log, "Cannot multiply incompatible types";
-                "operation" => "cel_value_mul",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            _ => {
+                error!(log, "Cannot multiply incompatible types";
+                    "operation" => "cel_value_mul",
+                    "left_type" => format!("{:?}", a_val),
+                    "right_type" => format!("{:?}", b_val));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -520,8 +584,9 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot divide null values";
+            error!(log, "Cannot divide null values";
                 "function" => "cel_value_div");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -529,42 +594,50 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
-                cel_debug!(log, "Performing Int division"; "dividend" => *a, "divisor" => *b);
+                debug!(log, "Performing Int division"; "dividend" => *a, "divisor" => *b);
                 if *b == 0 {
-                    cel_panic!(log, "Division by zero";
+                    error!(log, "Division by zero";
                         "operation" => "cel_value_div",
                         "type" => "Int",
                         "dividend" => *a,
                         "divisor" => *b);
+                    abort_with_error("divide by zero");
                 }
-                let result = a.checked_div(*b).unwrap_or_else(|| {
-                    cel_panic!(log, "Integer overflow in division";
-                        "operation" => "cel_value_div",
-                        "dividend" => *a,
-                        "divisor" => *b)
-                });
-                cel_create_int(result)
+                match a.checked_div(*b) {
+                    Some(result) => cel_create_int(result),
+                    None => {
+                        error!(log, "Integer overflow in division";
+                            "operation" => "cel_value_div",
+                            "dividend" => *a,
+                            "divisor" => *b);
+                        abort_with_error("return error for overflow");
+                    }
+                }
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
-                cel_debug!(log, "Performing UInt division"; "dividend" => *a, "divisor" => *b);
+                debug!(log, "Performing UInt division"; "dividend" => *a, "divisor" => *b);
                 if *b == 0 {
-                    cel_panic!(log, "Division by zero";
+                    error!(log, "Division by zero";
                         "operation" => "cel_value_div",
                         "type" => "UInt",
                         "dividend" => *a,
                         "divisor" => *b);
+                    abort_with_error("divide by zero");
                 }
                 cel_create_uint(a / b)
             }
             (CelValue::Double(a), CelValue::Double(b)) => {
-                cel_debug!(log, "Performing Double division"; "dividend" => *a, "divisor" => *b);
+                debug!(log, "Performing Double division"; "dividend" => *a, "divisor" => *b);
                 let result = arithmetic::double_div(*a, *b);
                 cel_create_double(result)
             }
-            _ => cel_panic!(log, "Cannot divide incompatible types";
-                "operation" => "cel_value_div",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            _ => {
+                error!(log, "Cannot divide incompatible types";
+                    "operation" => "cel_value_div",
+                    "left_type" => format!("{:?}", a_val),
+                    "right_type" => format!("{:?}", b_val));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -577,8 +650,9 @@ pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot modulo null values";
+            error!(log, "Cannot modulo null values";
                 "function" => "cel_value_mod");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -586,38 +660,39 @@ pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
-                cel_debug!(log, "Performing Int modulo"; "dividend" => *a, "divisor" => *b);
+                debug!(log, "Performing Int modulo"; "dividend" => *a, "divisor" => *b);
                 if *b == 0 {
-                    cel_panic!(log, "Modulo by zero";
+                    error!(log, "Modulo by zero";
                         "operation" => "cel_value_mod",
                         "type" => "Int",
                         "dividend" => *a,
                         "divisor" => *b);
+                    abort_with_error("modulus by zero");
                 }
-                let result = a.checked_rem(*b).unwrap_or_else(|| {
-                    cel_panic!(log, "Integer overflow in modulo";
-                        "operation" => "cel_value_mod",
-                        "type" => "Int",
-                        "dividend" => *a,
-                        "divisor" => *b)
-                });
-                cel_create_int(result)
+                match a.checked_rem(*b) {
+                    Some(result) => cel_create_int(result),
+                    None => abort_with_error("return error for overflow"),
+                }
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
-                cel_debug!(log, "Performing UInt modulo"; "dividend" => *a, "divisor" => *b);
+                debug!(log, "Performing UInt modulo"; "dividend" => *a, "divisor" => *b);
                 if *b == 0 {
-                    cel_panic!(log, "Modulo by zero";
+                    error!(log, "Modulo by zero";
                         "operation" => "cel_value_mod",
                         "type" => "UInt",
                         "dividend" => *a,
                         "divisor" => *b);
+                    abort_with_error("modulus by zero");
                 }
                 cel_create_uint(a % b)
             }
-            _ => cel_panic!(log, "Modulo is only defined for int and uint";
-                "operation" => "cel_value_mod",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            _ => {
+                error!(log, "Modulo is only defined for int and uint";
+                    "operation" => "cel_value_mod",
+                    "left_type" => format!("{:?}", a_val),
+                    "right_type" => format!("{:?}", b_val));
+                abort_with_error("no such overload")
+            }
         }
     }
 }
@@ -674,8 +749,9 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot compare null values";
+            error!(log, "Cannot compare null values";
                 "function" => "cel_value_eq");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -694,8 +770,9 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot compare null values";
+            error!(log, "Cannot compare null values";
                 "function" => "cel_value_ne");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -750,8 +827,9 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot compare null values";
+            error!(log, "Cannot compare null values";
                 "function" => "cel_value_gt");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -786,10 +864,13 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) > *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a > (*b as f64),
 
-            _ => cel_panic!(log, "Cannot compare incompatible types for greater-than";
-                "operation" => "cel_value_gt",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            _ => {
+                error!(log, "Cannot compare incompatible types for greater-than";
+                    "operation" => "cel_value_gt",
+                    "left_type" => format!("{:?}", a_val),
+                    "right_type" => format!("{:?}", b_val));
+                abort_with_error("no such overload");
+            }
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
@@ -803,8 +884,9 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot compare null values";
+            error!(log, "Cannot compare null values";
                 "function" => "cel_value_lt");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -839,10 +921,13 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) < *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a < (*b as f64),
 
-            _ => cel_panic!(log, "Cannot compare incompatible types for less-than";
-                "operation" => "cel_value_lt",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            _ => {
+                error!(log, "Cannot compare incompatible types for less-than";
+                    "operation" => "cel_value_lt",
+                    "left_type" => format!("{:?}", a_val),
+                    "right_type" => format!("{:?}", b_val));
+                abort_with_error("no such overload");
+            }
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
@@ -856,8 +941,9 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot compare null values";
+            error!(log, "Cannot compare null values";
                 "function" => "cel_value_gte");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -892,10 +978,13 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) >= *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a >= (*b as f64),
 
-            _ => cel_panic!(log, "Cannot compare incompatible types for greater-than-or-equal";
-                "operation" => "cel_value_gte",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            _ => {
+                error!(log, "Cannot compare incompatible types for greater-than-or-equal";
+                    "operation" => "cel_value_gte",
+                    "left_type" => format!("{:?}", a_val),
+                    "right_type" => format!("{:?}", b_val));
+                abort_with_error("no such overload");
+            }
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
@@ -909,8 +998,9 @@ pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
     unsafe {
         if a_ptr.is_null() || b_ptr.is_null() {
-            cel_panic!(log, "Cannot compare null values";
+            error!(log, "Cannot compare null values";
                 "function" => "cel_value_lte");
+            abort_with_error("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -945,10 +1035,13 @@ pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) <= *b,
             (CelValue::Double(a), CelValue::UInt(b)) => *a <= (*b as f64),
 
-            _ => cel_panic!(log, "Cannot compare incompatible types for less-than-or-equal";
-                "operation" => "cel_value_lte",
-                "left_type" => format!("{:?}", a_val),
-                "right_type" => format!("{:?}", b_val)),
+            _ => {
+                error!(log, "Cannot compare incompatible types for less-than-or-equal";
+                    "operation" => "cel_value_lte",
+                    "left_type" => format!("{:?}", a_val),
+                    "right_type" => format!("{:?}", b_val));
+                abort_with_error("no such overload");
+            }
         };
         cel_create_bool(if result { 1 } else { 0 })
     }
@@ -979,8 +1072,9 @@ pub extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
 
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Cannot get size of null value";
+            error!(log, "Cannot get size of null value";
                 "function" => "cel_value_size");
+            abort_with_error("no such overload");
         }
 
         let value = &*ptr;
@@ -990,9 +1084,12 @@ pub extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
             CelValue::Bytes(_) => bytes::cel_bytes_size(ptr),
             CelValue::Array(arr) => arr.len() as i64,
             CelValue::Object(map) => map.len() as i64,
-            other => cel_panic!(log, "size() not supported for this type";
-                "function" => "cel_value_size",
-                "type" => format!("{:?}", other)),
+            other => {
+                error!(log, "size() not supported for this type";
+                    "function" => "cel_value_size",
+                    "type" => format!("{:?}", other));
+                abort_with_error("no such overload");
+            }
         }
     }
 }
@@ -1022,34 +1119,35 @@ pub extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
 
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Cannot negate null value";
+            error!(log, "Cannot negate null value";
                 "function" => "cel_value_negate");
+            abort_with_error("no such overload");
         }
 
         let value = &*ptr;
 
         match value {
             CelValue::Int(i) => {
-                cel_debug!(log, "Performing Int negation"; "value" => *i);
-                let result = i.checked_neg().unwrap_or_else(|| {
-                    cel_panic!(log, "Integer overflow in negation";
-                        "operation" => "cel_value_negate",
-                        "type" => "Int",
-                        "value" => *i)
-                });
-                cel_create_int(result)
+                debug!(log, "Performing Int negation"; "value" => *i);
+                match i.checked_neg() {
+                    Some(result) => cel_create_int(result),
+                    None => abort_with_error("return error for overflow"),
+                }
             }
             CelValue::Double(d) => {
-                cel_debug!(log, "Performing Double negation"; "value" => *d);
+                debug!(log, "Performing Double negation"; "value" => *d);
                 cel_create_double(-d)
             }
             CelValue::Duration(_) => {
-                cel_debug!(log, "Performing Duration negation");
+                debug!(log, "Performing Duration negation");
                 temporal::cel_duration_negate(ptr)
             }
-            other => cel_panic!(log, "Negation not supported for this type";
-                "function" => "cel_value_negate",
-                "type" => format!("{:?}", other)),
+            other => {
+                error!(log, "Negation not supported for this type";
+                    "function" => "cel_value_negate",
+                    "type" => format!("{:?}", other));
+                abort_with_error("no such overload")
+            }
         }
     }
 }
@@ -1082,12 +1180,14 @@ pub extern "C" fn cel_value_index(
 
     unsafe {
         if container_ptr.is_null() {
-            cel_panic!(log, "Cannot index null container";
+            error!(log, "Cannot index null container";
                 "function" => "cel_value_index");
+            abort_with_error("no such overload");
         }
         if index_ptr.is_null() {
-            cel_panic!(log, "Cannot use null index";
+            error!(log, "Cannot use null index";
                 "function" => "cel_value_index");
+            abort_with_error("no such overload");
         }
 
         let container = &*container_ptr;
@@ -1096,28 +1196,32 @@ pub extern "C" fn cel_value_index(
         match (container, index) {
             // Array indexing with Int
             (CelValue::Array(_), CelValue::Int(idx)) => {
-                cel_debug!(log, "Indexing array with Int"; "index" => *idx);
+                debug!(log, "Indexing array with Int"; "index" => *idx);
                 array::cel_array_get(container_ptr, *idx as i32)
             }
             // Array indexing with UInt (convert to Int)
             (CelValue::Array(_), CelValue::UInt(idx)) => {
-                cel_debug!(log, "Indexing array with UInt"; "index" => *idx);
+                debug!(log, "Indexing array with UInt"; "index" => *idx);
                 let idx_i64: i64 = match (*idx).try_into() {
                     Ok(v) => v,
-                    Err(_) => cel_panic!(log, "UInt index too large to convert to Int";
-                        "function" => "cel_value_index",
-                        "index" => *idx),
+                    Err(_) => {
+                        error!(log, "UInt index too large to convert to Int";
+                            "function" => "cel_value_index",
+                            "index" => *idx);
+                        abort_with_error("no such overload");
+                    }
                 };
                 array::cel_array_get(container_ptr, idx_i64 as i32)
             }
             // Array indexing with Double (convert to Int)
             (CelValue::Array(_), CelValue::Double(idx)) => {
-                cel_debug!(log, "Indexing array with Double"; "index" => *idx);
+                debug!(log, "Indexing array with Double"; "index" => *idx);
                 // Check if the double is a whole number
                 if idx.fract() != 0.0 {
-                    cel_panic!(log, "Array index must be a whole number";
+                    error!(log, "Array index must be a whole number";
                         "function" => "cel_value_index",
                         "index" => *idx);
+                    abort_with_error("no such overload");
                 }
                 // Convert to i64
                 let idx_i64 = *idx as i64;
@@ -1125,30 +1229,31 @@ pub extern "C" fn cel_value_index(
             }
             // Map indexing with String
             (CelValue::Object(map), CelValue::String(key)) => {
-                cel_debug!(log, "Indexing map with String"; "key" => key.as_str());
+                debug!(log, "Indexing map with String"; "key" => key.as_str());
                 match map.get(key) {
                     Some(value) => Box::into_raw(Box::new(value.clone())),
-                    None => cel_panic!(log, "Key not found in map";
-                        "function" => "cel_value_index",
-                        "key" => key.as_str()),
+                    None => crate::error::abort_with_error("no such key"),
                 }
             }
             // Type mismatches
             (CelValue::Array(_), _) => {
-                cel_panic!(log, "Array index must be Int, UInt, or Double";
+                error!(log, "Array index must be Int, UInt, or Double";
                     "function" => "cel_value_index",
-                    "index_type" => format!("{:?}", index))
+                    "index_type" => format!("{:?}", index));
+                abort_with_error("no such overload");
             }
             (CelValue::Object(_), _) => {
-                cel_panic!(log, "Map index must be String";
+                error!(log, "Map index must be String";
                     "function" => "cel_value_index",
-                    "index_type" => format!("{:?}", index))
+                    "index_type" => format!("{:?}", index));
+                abort_with_error("no such overload");
             }
             _ => {
-                cel_panic!(log, "Index operator not supported for this type";
+                error!(log, "Index operator not supported for this type";
                     "function" => "cel_value_index",
                     "container_type" => format!("{:?}", container),
-                    "index_type" => format!("{:?}", index))
+                    "index_type" => format!("{:?}", index));
+                abort_with_error("no such overload");
             }
         }
     }

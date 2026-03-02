@@ -55,6 +55,38 @@ pub extern "C" fn cel_conditional(
     if cond { true_ptr } else { false_ptr }
 }
 
+/// Check if a CelValue is strictly false.
+/// Returns 1 if value is CelValue::Bool(false), 0 otherwise.
+/// Used for conditional short-circuit evaluation of && operator.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_is_strictly_false(ptr: *mut CelValue) -> i32 {
+    unsafe {
+        if ptr.is_null() {
+            return 0;
+        }
+        match &*ptr {
+            CelValue::Bool(false) => 1,
+            _ => 0,
+        }
+    }
+}
+
+/// Check if a CelValue is strictly true.
+/// Returns 1 if value is CelValue::Bool(true), 0 otherwise.
+/// Used for conditional short-circuit evaluation of || operator.
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_is_strictly_true(ptr: *mut CelValue) -> i32 {
+    unsafe {
+        if ptr.is_null() {
+            return 0;
+        }
+        match &*ptr {
+            CelValue::Bool(true) => 1,
+            _ => 0,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -231,24 +231,26 @@ impl ConformanceTestRunner {
         };
 
         // Step 3: Execute the WASM module in-memory
-        let json_result = runtime::execute_wasm_with_vars(
+        let json_result = match runtime::execute_wasm_with_vars(
             &wasm_bytes,
             input_json.as_deref(),
             data_json,
             LogLevel::Error, // Use Error level to reduce noise in test output
             self.logger.clone(),
-        )
-        .map_err(|e| {
-            // Check if this is an expected error
-            if test.result_matcher.is_some() {
-                use cel::expr::conformance::test::simple_test::ResultMatcher;
-                if matches!(test.result_matcher, Some(ResultMatcher::EvalError(_))) {
-                    // This is expected to fail, return error marker
-                    return format!("error: {}", e);
+        ) {
+            Ok(result) => result,
+            Err(e) => {
+                // Check if this is an expected error
+                if test.result_matcher.is_some() {
+                    use cel::expr::conformance::test::simple_test::ResultMatcher;
+                    if matches!(test.result_matcher, Some(ResultMatcher::EvalError(_))) {
+                        // This is expected to fail, return error marker as a JSON string
+                        return Ok(JsonValue::String(format!("error: {}", e)));
+                    }
                 }
+                return Err(format!("Run failed: {}", e));
             }
-            format!("Run failed: {}", e)
-        })?;
+        };
 
         // Step 4: Parse the JSON result
         serde_json::from_str(&json_result)

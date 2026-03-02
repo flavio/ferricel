@@ -2,9 +2,9 @@
 //!
 //! Provides functions for creating and populating map literals.
 
-use crate::cel_panic;
-use crate::logging::macros::cel_debug;
+use crate::error::abort_with_error;
 use crate::types::CelValue;
+use slog::{debug, error};
 use std::collections::HashMap;
 
 /// Create an empty CelValue map (Object).
@@ -48,19 +48,22 @@ pub unsafe extern "C" fn cel_map_insert(
 
     // Check for null pointers
     if map_ptr.is_null() {
-        cel_panic!(log, "Map pointer is null";
+        error!(log, "Map pointer is null";
             "function" => "cel_map_insert",
             "parameter" => "map_ptr");
+        abort_with_error("no such overload");
     }
     if key_ptr.is_null() {
-        cel_panic!(log, "Key pointer is null";
+        error!(log, "Key pointer is null";
             "function" => "cel_map_insert",
             "parameter" => "key_ptr");
+        abort_with_error("no such overload");
     }
     if value_ptr.is_null() {
-        cel_panic!(log, "Value pointer is null";
+        error!(log, "Value pointer is null";
             "function" => "cel_map_insert",
             "parameter" => "value_ptr");
+        abort_with_error("no such overload");
     }
 
     // SAFETY: Caller guarantees all pointers are valid
@@ -71,24 +74,30 @@ pub unsafe extern "C" fn cel_map_insert(
     // Extract the key string
     let key_string = match key {
         CelValue::String(s) => s.clone(),
-        _ => cel_panic!(log, "Map key must be a String";
+        _ => {
+            error!(log, "Map key must be a String";
             "function" => "cel_map_insert",
             "expected_key_type" => "String",
-            "actual_key_type" => format!("{:?}", key)),
+            "actual_key_type" => format!("{:?}", key));
+            abort_with_error("no such overload")
+        }
     };
 
     // Insert the key-value pair into the map
     match map_value {
         CelValue::Object(hash_map) => {
-            cel_debug!(log, "Inserting into map"; 
+            debug!(log, "Inserting into map"; 
                 "key" => key_string.as_str(),
                 "current_size" => hash_map.len());
             hash_map.insert(key_string, value.clone());
         }
-        _ => cel_panic!(log, "Type mismatch in map operation";
+        _ => {
+            error!(log, "Type mismatch in map operation";
             "function" => "cel_map_insert",
             "expected" => "Object",
-            "actual" => format!("{:?}", map_value)),
+            "actual" => format!("{:?}", map_value));
+            abort_with_error("no such overload")
+        }
     }
 }
 

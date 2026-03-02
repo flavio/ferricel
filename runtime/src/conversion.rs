@@ -2,10 +2,10 @@
 //! These functions extract values from CelValue pointers and panic on type mismatches.
 //! Also provides CEL type conversion functions (uint(), int(), double(), string(), timestamp(), duration()).
 
-use crate::cel_panic;
+use crate::error::abort_with_error;
 use crate::helpers::{cel_create_double, cel_create_duration, cel_create_int, cel_create_uint};
-use crate::logging::macros::cel_debug;
 use crate::types::CelValue;
+use slog::{debug, error};
 
 /// Extract i64 from a CelValue pointer.
 ///
@@ -26,8 +26,9 @@ pub unsafe extern "C" fn cel_value_to_i64(ptr: *mut CelValue) -> i64 {
     let log = crate::logging::get_logger();
 
     if ptr.is_null() {
-        cel_panic!(log, "Attempted to convert null CelValue pointer to i64";
+        error!(log, "Attempted to convert null CelValue pointer to i64";
             "function" => "cel_value_to_i64");
+        abort_with_error("no such overload");
     }
 
     // SAFETY: Caller guarantees ptr is valid
@@ -35,13 +36,16 @@ pub unsafe extern "C" fn cel_value_to_i64(ptr: *mut CelValue) -> i64 {
 
     match value {
         CelValue::Int(n) => {
-            cel_debug!(log, "Converting CelValue to i64"; "value" => *n);
+            debug!(log, "Converting CelValue to i64"; "value" => *n);
             *n
         }
-        other => cel_panic!(log, "Type mismatch in conversion";
+        other => {
+            error!(log, "Type mismatch in conversion";
             "function" => "cel_value_to_i64",
             "expected" => "Int",
-            "actual" => format!("{:?}", other)),
+            "actual" => format!("{:?}", other));
+            abort_with_error("no such overload")
+        }
     }
 }
 
@@ -64,8 +68,9 @@ pub unsafe extern "C" fn cel_value_to_u64(ptr: *mut CelValue) -> u64 {
     let log = crate::logging::get_logger();
 
     if ptr.is_null() {
-        cel_panic!(log, "Attempted to convert null CelValue pointer to u64";
+        error!(log, "Attempted to convert null CelValue pointer to u64";
             "function" => "cel_value_to_u64");
+        abort_with_error("no such overload");
     }
 
     // SAFETY: Caller guarantees ptr is valid
@@ -73,13 +78,16 @@ pub unsafe extern "C" fn cel_value_to_u64(ptr: *mut CelValue) -> u64 {
 
     match value {
         CelValue::UInt(n) => {
-            cel_debug!(log, "Converting CelValue to u64"; "value" => *n);
+            debug!(log, "Converting CelValue to u64"; "value" => *n);
             *n
         }
-        other => cel_panic!(log, "Type mismatch in conversion";
+        other => {
+            error!(log, "Type mismatch in conversion";
             "function" => "cel_value_to_u64",
             "expected" => "UInt",
-            "actual" => format!("{:?}", other)),
+            "actual" => format!("{:?}", other));
+            abort_with_error("no such overload")
+        }
     }
 }
 
@@ -102,8 +110,9 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
     let log = crate::logging::get_logger();
 
     if ptr.is_null() {
-        cel_panic!(log, "Attempted to convert null CelValue pointer to bool";
+        error!(log, "Attempted to convert null CelValue pointer to bool";
             "function" => "cel_value_to_bool");
+        abort_with_error("no such overload");
     }
 
     // SAFETY: Caller guarantees ptr is valid
@@ -111,13 +120,16 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
 
     match value {
         CelValue::Bool(b) => {
-            cel_debug!(log, "Converting CelValue to bool"; "value" => *b);
+            debug!(log, "Converting CelValue to bool"; "value" => *b);
             if *b { 1 } else { 0 }
         }
-        other => cel_panic!(log, "Type mismatch in conversion";
+        other => {
+            error!(log, "Type mismatch in conversion";
             "function" => "cel_value_to_bool",
             "expected" => "Bool",
-            "actual" => format!("{:?}", other)),
+            "actual" => format!("{:?}", other));
+            abort_with_error("no such overload")
+        }
     }
 }
 
@@ -136,52 +148,65 @@ pub extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
 
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Cannot convert null to uint";
+            error!(log, "Cannot convert null to uint";
                 "function" => "cel_uint");
+            abort_with_error("no such overload");
         }
 
         match &*ptr {
             CelValue::UInt(u) => cel_create_uint(*u),
             CelValue::Int(i) => {
                 if *i < 0 {
-                    cel_panic!(log, "Cannot convert negative value to uint";
+                    error!(log, "Cannot convert negative value to uint";
                         "function" => "cel_uint",
                         "from_type" => "Int",
                         "value" => *i);
+                    abort_with_error("no such overload");
                 }
                 cel_create_uint(*i as u64)
             }
             CelValue::Double(d) => {
                 if d.is_nan() || d.is_infinite() {
-                    cel_panic!(log, "Cannot convert NaN or Infinity to uint";
+                    {
+                        error!(log, "Cannot convert NaN or Infinity to uint";
                         "function" => "cel_uint",
                         "from_type" => "Double",
                         "value" => format!("{}", d));
+                        abort_with_error("no such overload")
+                    }
                 }
                 if *d < 0.0 {
-                    cel_panic!(log, "Cannot convert negative value to uint";
+                    error!(log, "Cannot convert negative value to uint";
                         "function" => "cel_uint",
                         "from_type" => "Double",
                         "value" => *d);
+                    abort_with_error("no such overload");
                 }
                 if *d > u64::MAX as f64 {
-                    cel_panic!(log, "Value too large for uint";
+                    error!(log, "Value too large for uint";
                         "function" => "cel_uint",
                         "from_type" => "Double",
                         "value" => *d,
                         "max" => u64::MAX);
+                    abort_with_error("no such overload");
                 }
                 cel_create_uint(d.trunc() as u64)
             }
             CelValue::String(s) => match s.parse::<u64>() {
                 Ok(u) => cel_create_uint(u),
-                Err(_) => cel_panic!(log, "Cannot parse string as uint";
+                Err(_) => {
+                    error!(log, "Cannot parse string as uint";
                     "function" => "cel_uint",
-                    "value" => s),
+                    "value" => s);
+                    abort_with_error("no such overload")
+                }
             },
-            other => cel_panic!(log, "Cannot convert type to uint";
+            other => {
+                error!(log, "Cannot convert type to uint";
                 "function" => "cel_uint",
-                "from_type" => format!("{:?}", other)),
+                "from_type" => format!("{:?}", other));
+                abort_with_error("no such overload")
+            }
         }
     }
 }
@@ -198,48 +223,60 @@ pub extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
 
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Cannot convert null to int";
+            error!(log, "Cannot convert null to int";
                 "function" => "cel_int");
+            abort_with_error("no such overload");
         }
 
         match &*ptr {
             CelValue::Int(i) => cel_create_int(*i),
             CelValue::UInt(u) => {
                 if *u > i64::MAX as u64 {
-                    cel_panic!(log, "Value too large for int";
+                    error!(log, "Value too large for int";
                         "function" => "cel_int",
                         "from_type" => "UInt",
                         "value" => *u,
                         "max" => i64::MAX);
+                    abort_with_error("no such overload");
                 }
                 cel_create_int(*u as i64)
             }
             CelValue::Double(d) => {
                 if d.is_nan() || d.is_infinite() {
-                    cel_panic!(log, "Cannot convert NaN or Infinity to int";
+                    {
+                        error!(log, "Cannot convert NaN or Infinity to int";
                         "function" => "cel_int",
                         "from_type" => "Double",
                         "value" => format!("{}", d));
+                        abort_with_error("no such overload")
+                    }
                 }
                 if *d < i64::MIN as f64 || *d > i64::MAX as f64 {
-                    cel_panic!(log, "Value out of range for int";
+                    error!(log, "Value out of range for int";
                         "function" => "cel_int",
                         "from_type" => "Double",
                         "value" => *d,
                         "min" => i64::MIN,
                         "max" => i64::MAX);
+                    abort_with_error("no such overload");
                 }
                 cel_create_int(d.trunc() as i64)
             }
             CelValue::String(s) => match s.parse::<i64>() {
                 Ok(i) => cel_create_int(i),
-                Err(_) => cel_panic!(log, "Cannot parse string as int";
+                Err(_) => {
+                    error!(log, "Cannot parse string as int";
                     "function" => "cel_int",
-                    "value" => s),
+                    "value" => s);
+                    abort_with_error("no such overload")
+                }
             },
-            other => cel_panic!(log, "Cannot convert type to int";
+            other => {
+                error!(log, "Cannot convert type to int";
                 "function" => "cel_int",
-                "from_type" => format!("{:?}", other)),
+                "from_type" => format!("{:?}", other));
+                abort_with_error("no such overload")
+            }
         }
     }
 }
@@ -256,8 +293,9 @@ pub extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
 
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Cannot convert null to double";
+            error!(log, "Cannot convert null to double";
                 "function" => "cel_double");
+            abort_with_error("no such overload");
         }
 
         match &*ptr {
@@ -266,13 +304,19 @@ pub extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
             CelValue::UInt(u) => cel_create_double(*u as f64),
             CelValue::String(s) => match s.parse::<f64>() {
                 Ok(d) => cel_create_double(d),
-                Err(_) => cel_panic!(log, "Cannot parse string as double";
+                Err(_) => {
+                    error!(log, "Cannot parse string as double";
                     "function" => "cel_double",
-                    "value" => s),
+                    "value" => s);
+                    abort_with_error("no such overload")
+                }
             },
-            other => cel_panic!(log, "Cannot convert type to double";
+            other => {
+                error!(log, "Cannot convert type to double";
                 "function" => "cel_double",
-                "from_type" => format!("{:?}", other)),
+                "from_type" => format!("{:?}", other));
+                abort_with_error("no such overload")
+            }
         }
     }
 }
@@ -287,18 +331,19 @@ pub extern "C" fn cel_timestamp(ptr: *mut CelValue) -> *mut CelValue {
 
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Cannot convert null to timestamp";
+            error!(log, "Cannot convert null to timestamp";
                 "function" => "cel_timestamp");
+            abort_with_error("no such overload");
         }
 
         match &*ptr {
             CelValue::Timestamp(_) => {
                 // Already a timestamp - return as-is (identity conversion)
-                cel_debug!(log, "Timestamp identity conversion");
+                debug!(log, "Timestamp identity conversion");
                 ptr
             }
             CelValue::String(s) => {
-                cel_debug!(log, "Parsing string to timestamp"; "value" => s);
+                debug!(log, "Parsing string to timestamp"; "value" => s);
                 // Parse RFC3339 - preserves timezone from string, assumes UTC if missing
                 let dt = crate::chrono_helpers::parse_rfc3339(s)
                     .or_else(|_| {
@@ -308,18 +353,22 @@ pub extern "C" fn cel_timestamp(ptr: *mut CelValue) -> *mut CelValue {
                         crate::chrono_helpers::parse_rfc3339(&s_with_utc)
                     })
                     .unwrap_or_else(|e| {
-                        cel_panic!(log, "Cannot parse string as timestamp";
+                        error!(log, "Cannot parse string as timestamp";
                             "function" => "cel_timestamp",
                             "value" => s,
-                            "error" => e)
+                            "error" => e);
+                        abort_with_error("no such overload")
                     });
 
                 // Create CelValue::Timestamp directly - preserves timezone!
                 Box::into_raw(Box::new(CelValue::Timestamp(dt)))
             }
-            other => cel_panic!(log, "Cannot convert type to timestamp";
+            other => {
+                error!(log, "Cannot convert type to timestamp";
                 "function" => "cel_timestamp",
-                "from_type" => format!("{:?}", other)),
+                "from_type" => format!("{:?}", other));
+                abort_with_error("no such overload")
+            }
         }
     }
 }
@@ -334,30 +383,35 @@ pub extern "C" fn cel_duration(ptr: *mut CelValue) -> *mut CelValue {
 
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Cannot convert null to duration";
+            error!(log, "Cannot convert null to duration";
                 "function" => "cel_duration");
+            abort_with_error("no such overload");
         }
 
         match &*ptr {
             CelValue::Duration(d) => {
-                cel_debug!(log, "Duration identity conversion");
+                debug!(log, "Duration identity conversion");
                 let (seconds, nanos) = crate::chrono_helpers::duration_to_parts(d);
                 cel_create_duration(seconds, nanos as i64)
             }
             CelValue::String(s) => {
-                cel_debug!(log, "Parsing string to duration"; "value" => s);
+                debug!(log, "Parsing string to duration"; "value" => s);
                 let d = crate::chrono_helpers::parse_duration(s).unwrap_or_else(|e| {
-                    cel_panic!(log, "Cannot parse string as duration";
+                    error!(log, "Cannot parse string as duration";
                             "function" => "cel_duration",
                             "value" => s,
-                            "error" => e)
+                            "error" => e);
+                    abort_with_error("no such overload")
                 });
                 let (seconds, nanos) = crate::chrono_helpers::duration_to_parts(&d);
                 cel_create_duration(seconds, nanos as i64)
             }
-            other => cel_panic!(log, "Cannot convert type to duration";
+            other => {
+                error!(log, "Cannot convert type to duration";
                 "function" => "cel_duration",
-                "from_type" => format!("{:?}", other)),
+                "from_type" => format!("{:?}", other));
+                abort_with_error("no such overload")
+            }
         }
     }
 }
@@ -372,23 +426,27 @@ pub extern "C" fn cel_bytes(ptr: *mut CelValue) -> *mut CelValue {
 
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Cannot convert null to bytes";
+            error!(log, "Cannot convert null to bytes";
                 "function" => "cel_bytes");
+            abort_with_error("no such overload");
         }
 
         match &*ptr {
             CelValue::Bytes(b) => {
-                cel_debug!(log, "Bytes identity conversion");
+                debug!(log, "Bytes identity conversion");
                 Box::into_raw(Box::new(CelValue::Bytes(b.clone())))
             }
             CelValue::String(s) => {
-                cel_debug!(log, "Converting String to bytes"; "length" => s.len());
+                debug!(log, "Converting String to bytes"; "length" => s.len());
                 // Convert string to UTF-8 bytes
                 Box::into_raw(Box::new(CelValue::Bytes(s.as_bytes().to_vec())))
             }
-            other => cel_panic!(log, "Cannot convert type to bytes";
+            other => {
+                error!(log, "Cannot convert type to bytes";
                 "function" => "cel_bytes",
-                "from_type" => format!("{:?}", other)),
+                "from_type" => format!("{:?}", other));
+                abort_with_error("no such overload")
+            }
         }
     }
 }
@@ -402,29 +460,30 @@ pub extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
 
     unsafe {
         if ptr.is_null() {
-            cel_panic!(log, "Cannot convert null to string";
+            error!(log, "Cannot convert null to string";
                 "function" => "cel_string");
+            abort_with_error("no such overload");
         }
 
         match &*ptr {
             CelValue::String(s) => {
-                cel_debug!(log, "String identity conversion");
+                debug!(log, "String identity conversion");
                 Box::into_raw(Box::new(CelValue::String(s.clone())))
             }
             CelValue::Int(i) => {
-                cel_debug!(log, "Converting Int to string"; "value" => *i);
+                debug!(log, "Converting Int to string"; "value" => *i);
                 Box::into_raw(Box::new(CelValue::String(i.to_string())))
             }
             CelValue::UInt(u) => {
-                cel_debug!(log, "Converting UInt to string"; "value" => *u);
+                debug!(log, "Converting UInt to string"; "value" => *u);
                 Box::into_raw(Box::new(CelValue::String(u.to_string())))
             }
             CelValue::Double(d) => {
-                cel_debug!(log, "Converting Double to string"; "value" => *d);
+                debug!(log, "Converting Double to string"; "value" => *d);
                 Box::into_raw(Box::new(CelValue::String(d.to_string())))
             }
             CelValue::Bool(b) => {
-                cel_debug!(log, "Converting Bool to string"; "value" => *b);
+                debug!(log, "Converting Bool to string"; "value" => *b);
                 Box::into_raw(Box::new(CelValue::String(if *b {
                     "true".to_string()
                 } else {
@@ -432,7 +491,7 @@ pub extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
                 })))
             }
             CelValue::Timestamp(dt) => {
-                cel_debug!(log, "Converting Timestamp to string");
+                debug!(log, "Converting Timestamp to string");
                 // Use "Z" suffix for UTC timestamps instead of "+00:00" for CEL compliance
                 let s = if dt.offset().local_minus_utc() == 0 {
                     dt.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string()
@@ -442,23 +501,29 @@ pub extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
                 Box::into_raw(Box::new(CelValue::String(s)))
             }
             CelValue::Duration(d) => {
-                cel_debug!(log, "Converting Duration to string");
+                debug!(log, "Converting Duration to string");
                 let s = crate::chrono_helpers::format_duration(d);
                 Box::into_raw(Box::new(CelValue::String(s)))
             }
             CelValue::Bytes(bytes) => {
-                cel_debug!(log, "Converting Bytes to string");
+                debug!(log, "Converting Bytes to string");
                 // Convert bytes to UTF-8 string, error on invalid UTF-8 per CEL spec
                 match std::str::from_utf8(bytes) {
                     Ok(s) => Box::into_raw(Box::new(CelValue::String(s.to_string()))),
-                    Err(_) => cel_panic!(log, "Invalid UTF-8 in bytes-to-string conversion";
+                    Err(_) => {
+                        error!(log, "Invalid UTF-8 in bytes-to-string conversion";
                         "function" => "cel_string",
-                        "from_type" => "Bytes"),
+                        "from_type" => "Bytes");
+                        abort_with_error("no such overload")
+                    }
                 }
             }
-            other => cel_panic!(log, "Cannot convert type to string";
+            other => {
+                error!(log, "Cannot convert type to string";
                 "function" => "cel_string",
-                "from_type" => format!("{:?}", other)),
+                "from_type" => format!("{:?}", other));
+                abort_with_error("no such overload")
+            }
         }
     }
 }

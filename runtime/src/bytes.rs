@@ -6,9 +6,9 @@
 //! - Bytes size (length in bytes)
 //! - Bytes comparison (equality and ordering)
 
-use crate::cel_panic;
-use crate::logging::macros::cel_debug;
+use crate::error::abort_with_error;
 use crate::types::CelValue;
+use slog::{debug, error};
 
 /// Internal helper: Concatenate two byte sequences.
 ///
@@ -69,8 +69,9 @@ pub unsafe extern "C" fn cel_bytes_size(bytes_ptr: *const CelValue) -> i64 {
 
     // Check for null bytes pointer
     if bytes_ptr.is_null() {
-        cel_panic!(log, "Cannot get size of null bytes";
+        error!(log, "Cannot get size of null bytes";
             "function" => "cel_bytes_size");
+        abort_with_error("no such overload");
     }
 
     // SAFETY: Caller guarantees bytes_ptr is valid
@@ -78,13 +79,16 @@ pub unsafe extern "C" fn cel_bytes_size(bytes_ptr: *const CelValue) -> i64 {
 
     match value {
         CelValue::Bytes(b) => {
-            cel_debug!(log, "Getting bytes size"; "length" => b.len());
+            debug!(log, "Getting bytes size"; "length" => b.len());
             b.len() as i64
         }
-        _ => cel_panic!(log, "Type mismatch in bytes operation";
-            "function" => "cel_bytes_size",
-            "expected" => "Bytes",
-            "actual" => format!("{:?}", value)),
+        _ => {
+            error!(log, "Type mismatch in bytes operation";
+                "function" => "cel_bytes_size",
+                "expected" => "Bytes",
+                "actual" => format!("{:?}", value));
+            abort_with_error("no such overload")
+        }
     }
 }
 
@@ -112,12 +116,14 @@ pub unsafe extern "C" fn cel_bytes_concat(
 
     // Check for null pointers
     if left_ptr.is_null() {
-        cel_panic!(log, "Cannot concatenate null bytes (left operand)";
+        error!(log, "Cannot concatenate null bytes (left operand)";
             "function" => "cel_bytes_concat");
+        abort_with_error("no such overload");
     }
     if right_ptr.is_null() {
-        cel_panic!(log, "Cannot concatenate null bytes (right operand)";
+        error!(log, "Cannot concatenate null bytes (right operand)";
             "function" => "cel_bytes_concat");
+        abort_with_error("no such overload");
     }
 
     // SAFETY: Caller guarantees both pointers are valid
@@ -126,17 +132,20 @@ pub unsafe extern "C" fn cel_bytes_concat(
 
     match (left_val, right_val) {
         (CelValue::Bytes(a), CelValue::Bytes(b)) => {
-            cel_debug!(log, "Concatenating bytes"; 
+            debug!(log, "Concatenating bytes"; 
                 "left_length" => a.len(), 
                 "right_length" => b.len());
             let result = cel_bytes_concat_internal(a, b);
             Box::into_raw(Box::new(CelValue::Bytes(result)))
         }
-        _ => cel_panic!(log, "Type mismatch in bytes concatenation";
-            "function" => "cel_bytes_concat",
-            "expected" => "Bytes + Bytes",
-            "left_type" => format!("{:?}", left_val),
-            "right_type" => format!("{:?}", right_val)),
+        _ => {
+            error!(log, "Type mismatch in bytes concatenation";
+                "function" => "cel_bytes_concat",
+                "expected" => "Bytes + Bytes",
+                "left_type" => format!("{:?}", left_val),
+                "right_type" => format!("{:?}", right_val));
+            abort_with_error("no such overload")
+        }
     }
 }
 

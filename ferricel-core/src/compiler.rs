@@ -35,6 +35,8 @@ pub struct CompilerEnv {
     pub not_func_id: FunctionId,
     pub not_strictly_false_func_id: FunctionId,
     pub conditional_func_id: FunctionId,
+    pub is_strictly_false_func_id: FunctionId,
+    pub is_strictly_true_func_id: FunctionId,
 
     // JSON serialization
     pub serialize_value_func_id: FunctionId,
@@ -180,6 +182,8 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         not_func_id: module.exports.get_func("cel_bool_not")?,
         not_strictly_false_func_id: module.exports.get_func("cel_not_strictly_false")?,
         conditional_func_id: module.exports.get_func("cel_conditional")?,
+        is_strictly_false_func_id: module.exports.get_func("cel_is_strictly_false")?,
+        is_strictly_true_func_id: module.exports.get_func("cel_is_strictly_true")?,
 
         // JSON serialization
         serialize_value_func_id: module.exports.get_func("cel_serialize_value")?,
@@ -339,6 +343,8 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     module.exports.remove("cel_bool_not")?;
     module.exports.remove("cel_not_strictly_false")?;
     module.exports.remove("cel_conditional")?;
+    module.exports.remove("cel_is_strictly_false")?;
+    module.exports.remove("cel_is_strictly_true")?;
     module.exports.remove("cel_serialize_value")?;
     module.exports.remove("cel_deserialize_json")?;
     module.exports.remove("cel_init_input")?;
@@ -666,22 +672,96 @@ pub fn compile_expr(
                     body.call(env.in_func_id);
                 }
 
-                // Logical operators
+                // Logical operators with conditional short-circuit evaluation
                 operators::LOGICAL_AND => {
+                    // CEL AND semantics: false && <anything> => false (errors absorbed)
+                    //                    true && <error> => <error> (error propagates)
+                    //
+                    // Implementation:
+                    //   let left = evaluate(left_expr)
+                    //   if is_strictly_false(left):
+                    //     return left  // false absorbs errors on right
+                    //   else:
+                    //     return evaluate(right_expr)  // Only evaluate right if left is not false
+
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Logical AND operator expects 2 arguments");
                     }
+
+                    // Compile left operand
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.and_func_id);
+
+                    // Create a local variable to store the left result
+                    let left_local = module.locals.add(ValType::I32); // *mut CelValue is i32
+                    body.local_tee(left_local); // Duplicate and store left value
+
+                    // Check if left is strictly false
+                    body.call(env.is_strictly_false_func_id); // Returns i32: 1 if false, 0 otherwise
+
+                    // Create dangling instruction sequences for then and else branches
+                    // Both branches must produce *mut CelValue (i32) on the stack
+                    let then_seq = body.dangling_instr_seq(Some(ValType::I32));
+                    let then_id = then_seq.id();
+                    let else_seq = body.dangling_instr_seq(Some(ValType::I32));
+                    let else_id = else_seq.id();
+
+                    // Generate the if/else instruction
+                    body.instr(walrus::ir::IfElse {
+                        consequent: then_id,
+                        alternative: else_id,
+                    });
+
+                    // Then branch: return left (which is false)
+                    body.instr_seq(then_id).local_get(left_local);
+
+                    // Else branch: evaluate and return right operand
+                    let mut else_body = body.instr_seq(else_id);
+                    compile_expr(&call_expr.args[1].expr, &mut else_body, env, ctx, module)?;
                 }
                 operators::LOGICAL_OR => {
+                    // CEL OR semantics: true || <anything> => true (errors absorbed)
+                    //                   false || <error> => <error> (error propagates)
+                    //
+                    // Implementation:
+                    //   let left = evaluate(left_expr)
+                    //   if is_strictly_true(left):
+                    //     return left  // true absorbs errors on right
+                    //   else:
+                    //     return evaluate(right_expr)  // Only evaluate right if left is not true
+
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Logical OR operator expects 2 arguments");
                     }
+
+                    // Compile left operand
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.or_func_id);
+
+                    // Create a local variable to store the left result
+                    let left_local = module.locals.add(ValType::I32); // *mut CelValue is i32
+                    body.local_tee(left_local); // Duplicate and store left value
+
+                    // Check if left is strictly true
+                    body.call(env.is_strictly_true_func_id); // Returns i32: 1 if true, 0 otherwise
+
+                    // Create dangling instruction sequences for then and else branches
+                    // Both branches must produce *mut CelValue (i32) on the stack
+                    let then_seq = body.dangling_instr_seq(Some(ValType::I32));
+                    let then_id = then_seq.id();
+                    let else_seq = body.dangling_instr_seq(Some(ValType::I32));
+                    let else_id = else_seq.id();
+
+                    // Generate the if/else instruction
+                    body.instr(walrus::ir::IfElse {
+                        consequent: then_id,
+                        alternative: else_id,
+                    });
+
+                    // Then branch: return left (which is true)
+                    body.instr_seq(then_id).local_get(left_local);
+
+                    // Else branch: evaluate and return right operand
+                    let mut else_body = body.instr_seq(else_id);
+                    compile_expr(&call_expr.args[1].expr, &mut else_body, env, ctx, module)?;
                 }
                 operators::LOGICAL_NOT => {
                     if call_expr.args.len() != 1 {
@@ -703,14 +783,41 @@ pub fn compile_expr(
 
                 operators::CONDITIONAL => {
                     // Ternary/conditional operator: condition ? true_value : false_value
+                    // Only evaluate the branch that is taken
+
                     if call_expr.args.len() != 3 {
                         anyhow::bail!("Conditional operator expects 3 arguments");
                     }
-                    // Compile all three arguments
-                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?; // condition
-                    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?; // true_value
-                    compile_expr(&call_expr.args[2].expr, body, env, ctx, module)?; // false_value
-                    body.call(env.conditional_func_id);
+
+                    // Compile condition
+                    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+
+                    // Convert condition to boolean (i64: 0 or 1)
+                    body.call(env.value_to_bool_func_id); // Returns i64: 1 for true, 0 for false
+
+                    // Convert i64 to i32 for if/else condition
+                    body.unop(walrus::ir::UnaryOp::I32WrapI64);
+
+                    // Create dangling instruction sequences for then and else branches
+                    // Both branches must produce *mut CelValue (i32) on the stack
+                    let then_seq = body.dangling_instr_seq(Some(ValType::I32));
+                    let then_id = then_seq.id();
+                    let else_seq = body.dangling_instr_seq(Some(ValType::I32));
+                    let else_id = else_seq.id();
+
+                    // Generate the if/else instruction
+                    body.instr(walrus::ir::IfElse {
+                        consequent: then_id,
+                        alternative: else_id,
+                    });
+
+                    // Then branch: evaluate and return true_value
+                    let mut then_body = body.instr_seq(then_id);
+                    compile_expr(&call_expr.args[1].expr, &mut then_body, env, ctx, module)?;
+
+                    // Else branch: evaluate and return false_value
+                    let mut else_body = body.instr_seq(else_id);
+                    compile_expr(&call_expr.args[2].expr, &mut else_body, env, ctx, module)?;
                 }
 
                 // String functions

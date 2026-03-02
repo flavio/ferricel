@@ -84,6 +84,40 @@ pub fn execute_wasm_with_vars(
         },
     )?;
 
+    // Add cel_abort host function for error handling
+    // The guest runtime calls this when a runtime error occurs (divide by zero, overflow, etc.)
+    // The packed parameter contains: upper 32 bits = address, lower 32 bits = length
+    linker.func_wrap(
+        "env",
+        "cel_abort",
+        |mut caller: Caller<'_, HostState>, packed: i64| -> Result<(), wasmtime::Error> {
+            // Unpack address and length from the packed i64
+            let address = ((packed as u64) >> 32) as u32;
+            let length = packed as u32;
+
+            // Get the WASM memory
+            let memory = caller
+                .get_export("memory")
+                .and_then(|e| e.into_memory())
+                .ok_or_else(|| wasmtime::Error::msg("Failed to get WASM memory for error"))?;
+
+            // Read error message from WASM memory
+            let mut buffer = vec![0u8; length as usize];
+            memory.read(&caller, address as usize, &mut buffer)?;
+
+            // Convert to UTF-8 string
+            let error_message = std::str::from_utf8(&buffer).map_err(|e| {
+                wasmtime::Error::msg(format!("Invalid UTF-8 in error message: {}", e))
+            })?;
+
+            // Return an error to terminate WASM execution
+            Err(wasmtime::Error::msg(format!(
+                "CEL runtime error: {}",
+                error_message
+            )))
+        },
+    )?;
+
     // Create an instance using the linker
     let instance = linker.instantiate(&mut store, &module)?;
 

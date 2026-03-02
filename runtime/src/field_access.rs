@@ -1,9 +1,9 @@
 //! Field access operations for CelValue objects.
 //! Supports accessing fields from Object-type CelValues.
 
-use crate::cel_panic;
-use crate::logging::macros::{cel_debug, cel_info};
+use crate::error::abort_with_error;
 use crate::types::CelValue;
+use slog::{debug, error, info};
 use std::slice;
 
 /// Get a field from a CelValue object.
@@ -36,8 +36,9 @@ pub unsafe extern "C" fn cel_get_field(
 
     // Check for null object pointer
     if obj_ptr.is_null() {
-        cel_panic!(log, "Cannot access field on null object";
+        error!(log, "Cannot access field on null object";
             "function" => "cel_get_field");
+        abort_with_error("no such overload");
     }
 
     // SAFETY: Caller guarantees obj_ptr is valid
@@ -47,38 +48,43 @@ pub unsafe extern "C" fn cel_get_field(
     let field_name = unsafe {
         let bytes = slice::from_raw_parts(field_name_ptr as *const u8, field_name_len as usize);
         String::from_utf8(bytes.to_vec()).unwrap_or_else(|_| {
-            cel_panic!(log, "Field name is not valid UTF-8";
+            error!(log, "Field name is not valid UTF-8";
                 "function" => "cel_get_field",
-                "bytes_len" => field_name_len)
+                "bytes_len" => field_name_len);
+            abort_with_error("no such overload")
         })
     };
 
     // Extract the field from the object
     match obj {
         CelValue::Object(map) => {
-            cel_debug!(log, "Accessing field from object"; 
+            debug!(log, "Accessing field from object"; 
                 "field" => field_name.as_str(),
                 "num_fields" => map.len());
             // Look up the field in the hashmap
             match map.get(&field_name) {
                 Some(value) => {
-                    cel_info!(log, "Field found"; "field" => field_name.as_str());
+                    info!(log, "Field found"; "field" => field_name.as_str());
                     // Clone the value and return a new boxed pointer
                     let boxed_value = Box::new(value.clone());
                     Box::into_raw(boxed_value)
                 }
                 None => {
                     let available_fields: Vec<&String> = map.keys().collect();
-                    cel_panic!(log, "Field not found in object";
+                    {
+                        error!(log, "Field not found in object";
                         "field" => field_name,
                         "available_fields" => format!("{:?}", available_fields));
+                        abort_with_error("no such overload")
+                    }
                 }
             }
         }
         _ => {
-            cel_panic!(log, "Cannot access field on non-object value";
+            error!(log, "Cannot access field on non-object value";
                 "field" => field_name,
                 "actual_type" => format!("{:?}", obj));
+            abort_with_error("no such overload")
         }
     }
 }
@@ -112,8 +118,9 @@ pub unsafe extern "C" fn cel_has_field(
 
     // Check for null object pointer
     if obj_ptr.is_null() {
-        cel_panic!(log, "Cannot check field on null object";
+        error!(log, "Cannot check field on null object";
             "function" => "cel_has_field");
+        abort_with_error("no such overload");
     }
 
     // SAFETY: Caller guarantees obj_ptr is valid
@@ -123,9 +130,10 @@ pub unsafe extern "C" fn cel_has_field(
     let field_name = unsafe {
         let bytes = slice::from_raw_parts(field_name_ptr as *const u8, field_name_len as usize);
         String::from_utf8(bytes.to_vec()).unwrap_or_else(|_| {
-            cel_panic!(log, "Field name is not valid UTF-8";
+            error!(log, "Field name is not valid UTF-8";
                 "function" => "cel_has_field",
-                "bytes_len" => field_name_len)
+                "bytes_len" => field_name_len);
+            abort_with_error("no such overload")
         })
     };
 
