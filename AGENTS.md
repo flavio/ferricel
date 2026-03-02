@@ -7,7 +7,9 @@ A file for [guiding coding agents](https://agents.md/).
 - **Build:** `make ferricel`
 - **Test (unit):** `make unit-tests`
 - **Test (end to end):** `make e2e-tests`
-- **Test (conformance):** `make conformance-tests`
+- **Test (conformance):** `make conformance-tests` (runs all conformance tests)
+- **Test (conformance - specific):** `make conformance-<name>` (e.g., `make conformance-basic`, `make conformance-string`)
+- **Test (conformance - list):** `make conformance-list` (lists available conformance test suites)
 - **Test (all):** `make tests`
 - **Formatting**: `make fmt`
 - **Linting**: `make lint`
@@ -58,7 +60,7 @@ The project has three levels of testing:
 - Expensive to run - only add when CLI behavior changes
 - Verify full workflow: build CEL → WASM file → run WASM → check output
 
-### 3. Conformance Tests (`make conformance-tests`)
+### 3. Conformance Tests
 
 - Located in `conformance/tests/conformance.rs`
 - Validate compliance with the official CEL specification
@@ -66,6 +68,16 @@ The project has three levels of testing:
 - Tests requiring unimplemented features are automatically skipped
 - Results show PASSED/FAILED/SKIPPED counts (doesn't fail the build)
 - Track pass rate over time to measure specification compliance
+
+#### Running Conformance Tests
+
+```bash
+# Run all conformance tests
+make conformance-tests
+
+# List available test suites
+make conformance-list
+```
 
 ## Development Principles
 

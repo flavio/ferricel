@@ -55,14 +55,38 @@ impl TestStats {
     }
 
     fn print_summary(&self, test_file: &str) {
+        let total_f64 = self.total as f64;
+        let passed_pct = if self.total > 0 {
+            (self.passed as f64 / total_f64) * 100.0
+        } else {
+            0.0
+        };
+        let failed_pct = if self.total > 0 {
+            (self.failed as f64 / total_f64) * 100.0
+        } else {
+            0.0
+        };
+        let skipped_pct = if self.total > 0 {
+            (self.skipped as f64 / total_f64) * 100.0
+        } else {
+            0.0
+        };
+
         println!("\n{:=<60}", "");
         println!("Conformance Test Results: {}", test_file);
         println!("{:-<60}", "");
-        println!("PASSED:  {:>4}", self.passed);
-        println!("FAILED:  {:>4}", self.failed);
-        println!("SKIPPED: {:>4}", self.skipped);
-        println!("{:-<60}", "");
-        println!("TOTAL:   {:>4}", self.total);
+        println!(
+            "PASSED:  {:>4} / {:>4}  ({:>5.1}%)",
+            self.passed, self.total, passed_pct
+        );
+        println!(
+            "FAILED:  {:>4} / {:>4}  ({:>5.1}%)",
+            self.failed, self.total, failed_pct
+        );
+        println!(
+            "SKIPPED: {:>4} / {:>4}  ({:>5.1}%)",
+            self.skipped, self.total, skipped_pct
+        );
         println!("{:=<60}\n", "");
     }
 }
@@ -443,14 +467,7 @@ fn conformance_basic_tests() {
     let mut runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/basic.textproto");
 
-    let stats = runner.run_test_file(test_file);
-
-    // Report results - don't fail the test, just report
-    println!("\nConformance test summary:");
-    println!(
-        "  Pass rate: {:.1}%",
-        (stats.passed as f64 / stats.total as f64) * 100.0
-    );
+    runner.run_test_file(test_file);
 
     // We'll track this but not fail the build yet while we're implementing
     // assert_eq!(stats.failed, 0, "Some conformance tests failed");
@@ -461,13 +478,7 @@ fn conformance_comparisons_tests() {
     let mut runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/comparisons.textproto");
 
-    let stats = runner.run_test_file(test_file);
-
-    println!("\nConformance test summary:");
-    println!(
-        "  Pass rate: {:.1}%",
-        (stats.passed as f64 / stats.total as f64) * 100.0
-    );
+    runner.run_test_file(test_file);
 }
 
 #[test]
@@ -475,13 +486,7 @@ fn conformance_integer_math_tests() {
     let mut runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/integer_math.textproto");
 
-    let stats = runner.run_test_file(test_file);
-
-    println!("\nConformance test summary:");
-    println!(
-        "  Pass rate: {:.1}%",
-        (stats.passed as f64 / stats.total as f64) * 100.0
-    );
+    runner.run_test_file(test_file);
 }
 
 #[test]
@@ -489,13 +494,7 @@ fn conformance_fp_math_tests() {
     let mut runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/fp_math.textproto");
 
-    let stats = runner.run_test_file(test_file);
-
-    println!("\nConformance test summary:");
-    println!(
-        "  Pass rate: {:.1}%",
-        (stats.passed as f64 / stats.total as f64) * 100.0
-    );
+    runner.run_test_file(test_file);
 }
 
 #[test]
@@ -503,13 +502,7 @@ fn conformance_string_tests() {
     let mut runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/string.textproto");
 
-    let stats = runner.run_test_file(test_file);
-
-    println!("\nConformance test summary:");
-    println!(
-        "  Pass rate: {:.1}%",
-        (stats.passed as f64 / stats.total as f64) * 100.0
-    );
+    runner.run_test_file(test_file);
 }
 
 #[test]
@@ -517,13 +510,7 @@ fn conformance_logic_tests() {
     let mut runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/logic.textproto");
 
-    let stats = runner.run_test_file(test_file);
-
-    println!("\nConformance test summary:");
-    println!(
-        "  Pass rate: {:.1}%",
-        (stats.passed as f64 / stats.total as f64) * 100.0
-    );
+    runner.run_test_file(test_file);
 }
 
 #[test]
@@ -531,13 +518,7 @@ fn conformance_lists_tests() {
     let mut runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/lists.textproto");
 
-    let stats = runner.run_test_file(test_file);
-
-    println!("\nConformance test summary:");
-    println!(
-        "  Pass rate: {:.1}%",
-        (stats.passed as f64 / stats.total as f64) * 100.0
-    );
+    runner.run_test_file(test_file);
 }
 
 #[test]
@@ -545,13 +526,7 @@ fn conformance_conversions_tests() {
     let mut runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/conversions.textproto");
 
-    let stats = runner.run_test_file(test_file);
-
-    println!("\nConformance test summary:");
-    println!(
-        "  Pass rate: {:.1}%",
-        (stats.passed as f64 / stats.total as f64) * 100.0
-    );
+    runner.run_test_file(test_file);
 }
 
 #[test]
@@ -559,11 +534,5 @@ fn conformance_timestamps_tests() {
     let mut runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/timestamps.textproto");
 
-    let stats = runner.run_test_file(test_file);
-
-    println!("\nConformance test summary:");
-    println!(
-        "  Pass rate: {:.1}%",
-        (stats.passed as f64 / stats.total as f64) * 100.0
-    );
+    runner.run_test_file(test_file);
 }

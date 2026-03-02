@@ -1,4 +1,4 @@
-.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests
+.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-list conformance-%
 
 # Default target
 all: ferricel
@@ -51,6 +51,76 @@ conformance-tests: $(RUNTIME_TARGET)
 	cargo build --package ferricel-core
 	cargo test --package conformance --test conformance -- --nocapture
 
+# Run a specific conformance test suite
+# Usage: make conformance-basic, make conformance-string, etc.
+conformance-%: $(RUNTIME_TARGET)
+	@cargo build --package ferricel-core
+	@case "$*" in \
+		basic) \
+			cargo test --package conformance --test conformance conformance_basic_tests -- --nocapture ;; \
+		comparisons) \
+			cargo test --package conformance --test conformance conformance_comparisons_tests -- --nocapture ;; \
+		conversions) \
+			cargo test --package conformance --test conformance conformance_conversions_tests -- --nocapture ;; \
+		fp-math) \
+			cargo test --package conformance --test conformance conformance_fp_math_tests -- --nocapture ;; \
+		int-math) \
+			cargo test --package conformance --test conformance conformance_integer_math_tests -- --nocapture ;; \
+		lists) \
+			cargo test --package conformance --test conformance conformance_lists_tests -- --nocapture ;; \
+		logic) \
+			cargo test --package conformance --test conformance conformance_logic_tests -- --nocapture ;; \
+		string) \
+			cargo test --package conformance --test conformance conformance_string_tests -- --nocapture ;; \
+		timestamps) \
+			cargo test --package conformance --test conformance conformance_timestamps_tests -- --nocapture ;; \
+		all) \
+			$(MAKE) conformance-tests ;; \
+		list) \
+			$(MAKE) conformance-list ;; \
+		*) \
+			echo "Error: Unknown conformance test suite '$*'"; \
+			echo ""; \
+			echo "Available conformance test suites:"; \
+			echo "  conformance-basic       - Basic CEL features (literals, operators, variables)"; \
+			echo "  conformance-comparisons - Comparison operators (==, !=, <, >, <=, >=)"; \
+			echo "  conformance-conversions - Type conversions (int(), uint(), double(), etc.)"; \
+			echo "  conformance-fp-math     - Floating point math operations"; \
+			echo "  conformance-int-math    - Integer math operations"; \
+			echo "  conformance-lists       - List operations (indexing, size, in, etc.)"; \
+			echo "  conformance-logic       - Logical operators (&&, ||, !, ? :)"; \
+			echo "  conformance-string      - String operations (size, contains, matches, etc.)"; \
+			echo "  conformance-timestamps  - Timestamp and duration operations"; \
+			echo "  conformance-all         - Run all conformance tests"; \
+			echo "  conformance-list        - Show this list"; \
+			echo ""; \
+			echo "Examples:"; \
+			echo "  make conformance-basic"; \
+			echo "  make conformance-string"; \
+			echo "  make conformance-all"; \
+			exit 1 ;; \
+	esac
+
+# List available conformance test suites
+conformance-list:
+	@echo "Available conformance test suites:"
+	@echo ""
+	@echo "  conformance-basic       - Basic CEL features (literals, operators, variables)"
+	@echo "  conformance-comparisons - Comparison operators (==, !=, <, >, <=, >=)"
+	@echo "  conformance-conversions - Type conversions (int(), uint(), double(), etc.)"
+	@echo "  conformance-fp-math     - Floating point math operations"
+	@echo "  conformance-int-math    - Integer math operations"
+	@echo "  conformance-lists       - List operations (indexing, size, in, etc.)"
+	@echo "  conformance-logic       - Logical operators (&&, ||, !, ? :)"
+	@echo "  conformance-string      - String operations (size, contains, matches, etc.)"
+	@echo "  conformance-timestamps  - Timestamp and duration operations"
+	@echo "  conformance-all         - Run all conformance tests"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make conformance-basic    # Run basic tests"
+	@echo "  make conformance-string   # Run string tests"
+	@echo "  make conformance-all      # Run all tests"
+
 # Check code formatting (does not modify files)
 .PHONY: fmt
 fmt:
@@ -82,7 +152,9 @@ help:
 	@echo "  unit-tests       - Run unit tests (ferricel-core, runtime)"
 	@echo "  e2e-tests        - Run CLI integration tests"
 	@echo "  tests            - Run all tests (unit + e2e + conformance)"
-	@echo "  conformance-tests - Run official CEL conformance tests"
+	@echo "  conformance-tests - Run all CEL conformance tests"
+	@echo "  conformance-<name> - Run specific conformance test suite"
+	@echo "  conformance-list - List available conformance test suites"
 	@echo "  fmt              - Check code formatting (does not modify files)"
 	@echo "  lint             - Run clippy lints with warnings as errors"
 	@echo "  lint-fix         - Auto-fix clippy warnings where possible"
@@ -103,6 +175,8 @@ help:
 	@echo "  make unit-tests"
 	@echo "  make e2e-tests"
 	@echo "  make conformance-tests"
+	@echo "  make conformance-basic"
+	@echo "  make conformance-list"
 	@echo "  cargo run -p ferricel -- build --expression '10 + 20'"
 	@echo "  cargo run -p ferricel -- build -e '5 + 15' -o output.wasm"
 	@echo "  cargo run -p ferricel -- run output.wasm"
