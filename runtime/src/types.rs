@@ -140,6 +140,13 @@ pub enum CelValue {
     /// Serializes as a type_value object per CEL spec
     #[serde(skip_deserializing)]
     Type(String),
+
+    /// Error - represents a runtime error that occurred during evaluation
+    /// Errors can be propagated through the expression tree and potentially absorbed
+    /// by short-circuit operators like && and ||
+    /// Serializes as an error message string
+    #[serde(skip_deserializing)]
+    Error(String),
 }
 
 // Custom serialization for CelValue to provide untagged JSON output
@@ -170,7 +177,7 @@ impl Serialize for CelValue {
             }
             CelValue::String(s) => serializer.serialize_str(s),
             CelValue::Bytes(bytes) => {
-                use base64::{engine::general_purpose, Engine as _};
+                use base64::{Engine as _, engine::general_purpose};
                 let encoded = general_purpose::STANDARD.encode(bytes);
                 serializer.serialize_str(&encoded)
             }
@@ -202,6 +209,13 @@ impl Serialize for CelValue {
                 use serde::ser::SerializeStruct;
                 let mut state = serializer.serialize_struct("Type", 1)?;
                 state.serialize_field("type_value", type_name)?;
+                state.end()
+            }
+            CelValue::Error(msg) => {
+                // Serialize as {"error": "message"} to indicate this is an error value
+                use serde::ser::SerializeStruct;
+                let mut state = serializer.serialize_struct("Error", 1)?;
+                state.serialize_field("error", msg)?;
                 state.end()
             }
         }

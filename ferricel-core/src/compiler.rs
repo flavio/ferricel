@@ -37,6 +37,11 @@ pub struct CompilerEnv {
     pub conditional_func_id: FunctionId,
     pub is_strictly_false_func_id: FunctionId,
     pub is_strictly_true_func_id: FunctionId,
+    pub is_error_func_id: FunctionId,
+    pub is_bool_or_error_func_id: FunctionId,
+
+    // Error handling
+    pub create_error_func_id: FunctionId,
 
     // JSON serialization
     pub serialize_value_func_id: FunctionId,
@@ -187,6 +192,11 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
         conditional_func_id: module.exports.get_func("cel_conditional")?,
         is_strictly_false_func_id: module.exports.get_func("cel_is_strictly_false")?,
         is_strictly_true_func_id: module.exports.get_func("cel_is_strictly_true")?,
+        is_error_func_id: module.exports.get_func("cel_is_error")?,
+        is_bool_or_error_func_id: module.exports.get_func("cel_is_bool_or_error")?,
+
+        // Error handling
+        create_error_func_id: module.exports.get_func("cel_create_error")?,
 
         // JSON serialization
         serialize_value_func_id: module.exports.get_func("cel_serialize_value")?,
@@ -689,7 +699,8 @@ pub fn compile_expr(
                     //   if is_strictly_false(left):
                     //     return left  // false absorbs errors on right
                     //   else:
-                    //     return evaluate(right_expr)  // Only evaluate right if left is not false
+                    //     let right = evaluate(right_expr)
+                    //     return cel_bool_and(left, right)  // Runtime handles type checking
 
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Logical AND operator expects 2 arguments");
@@ -721,9 +732,14 @@ pub fn compile_expr(
                     // Then branch: return left (which is false)
                     body.instr_seq(then_id).local_get(left_local);
 
-                    // Else branch: evaluate and return right operand
+                    // Else branch: evaluate right and call cel_bool_and
                     let mut else_body = body.instr_seq(else_id);
                     compile_expr(&call_expr.args[1].expr, &mut else_body, env, ctx, module)?;
+                    let right_local = module.locals.add(ValType::I32);
+                    else_body.local_set(right_local); // Store right, consumes stack
+                    else_body.local_get(left_local); // Push left
+                    else_body.local_get(right_local); // Push right
+                    else_body.call(env.and_func_id); // Call and(left, right)
                 }
                 operators::LOGICAL_OR => {
                     // CEL OR semantics: true || <anything> => true (errors absorbed)
@@ -734,7 +750,8 @@ pub fn compile_expr(
                     //   if is_strictly_true(left):
                     //     return left  // true absorbs errors on right
                     //   else:
-                    //     return evaluate(right_expr)  // Only evaluate right if left is not true
+                    //     let right = evaluate(right_expr)
+                    //     return cel_bool_or(left, right)  // Runtime handles type checking
 
                     if call_expr.args.len() != 2 {
                         anyhow::bail!("Logical OR operator expects 2 arguments");
@@ -766,9 +783,14 @@ pub fn compile_expr(
                     // Then branch: return left (which is true)
                     body.instr_seq(then_id).local_get(left_local);
 
-                    // Else branch: evaluate and return right operand
+                    // Else branch: evaluate right and call cel_bool_or
                     let mut else_body = body.instr_seq(else_id);
                     compile_expr(&call_expr.args[1].expr, &mut else_body, env, ctx, module)?;
+                    let right_local = module.locals.add(ValType::I32);
+                    else_body.local_set(right_local); // Store right, consumes stack
+                    else_body.local_get(left_local); // Push left
+                    else_body.local_get(right_local); // Push right
+                    else_body.call(env.or_func_id); // Call or(left, right)
                 }
                 operators::LOGICAL_NOT => {
                     if call_expr.args.len() != 1 {
@@ -790,7 +812,15 @@ pub fn compile_expr(
 
                 operators::CONDITIONAL => {
                     // Ternary/conditional operator: condition ? true_value : false_value
-                    // Only evaluate the branch that is taken
+                    // CEL semantics: if condition is error, return error
+                    // Otherwise evaluate only the appropriate branch
+
+                    // Strategy: Check if condition is error first, then use WASM if/else for branch selection
+                    // This requires:
+                    // 1. Evaluate condition → store in local
+                    // 2. Check if condition is error
+                    //    - If error: return condition
+                    //    - If not error: convert to bool and branch
 
                     if call_expr.args.len() != 3 {
                         anyhow::bail!("Conditional operator expects 3 arguments");
@@ -799,32 +829,51 @@ pub fn compile_expr(
                     // Compile condition
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
 
-                    // Convert condition to boolean (i64: 0 or 1)
-                    body.call(env.value_to_bool_func_id); // Returns i64: 1 for true, 0 for false
+                    // Store condition in local
+                    let cond_local = module.locals.add(ValType::I32);
+                    body.local_tee(cond_local); // Duplicate and store
 
-                    // Convert i64 to i32 for if/else condition
-                    body.unop(walrus::ir::UnaryOp::I32WrapI64);
+                    // Check if condition is error
+                    body.call(env.is_error_func_id); // Returns i32: 1 if error, 0 otherwise
 
-                    // Create dangling instruction sequences for then and else branches
-                    // Both branches must produce *mut CelValue (i32) on the stack
-                    let then_seq = body.dangling_instr_seq(Some(ValType::I32));
-                    let then_id = then_seq.id();
-                    let else_seq = body.dangling_instr_seq(Some(ValType::I32));
-                    let else_id = else_seq.id();
+                    // Create sequences for error check
+                    let is_error_seq = body.dangling_instr_seq(Some(ValType::I32));
+                    let is_error_id = is_error_seq.id();
+                    let not_error_seq = body.dangling_instr_seq(Some(ValType::I32));
+                    let not_error_id = not_error_seq.id();
 
-                    // Generate the if/else instruction
                     body.instr(walrus::ir::IfElse {
-                        consequent: then_id,
-                        alternative: else_id,
+                        consequent: is_error_id,
+                        alternative: not_error_id,
                     });
 
-                    // Then branch: evaluate and return true_value
-                    let mut then_body = body.instr_seq(then_id);
-                    compile_expr(&call_expr.args[1].expr, &mut then_body, env, ctx, module)?;
+                    // If condition is error, return it
+                    body.instr_seq(is_error_id).local_get(cond_local);
 
-                    // Else branch: evaluate and return false_value
-                    let mut else_body = body.instr_seq(else_id);
-                    compile_expr(&call_expr.args[2].expr, &mut else_body, env, ctx, module)?;
+                    // If condition is not error, convert to bool and branch
+                    let mut not_error_body = body.instr_seq(not_error_id);
+                    not_error_body.local_get(cond_local);
+                    not_error_body.call(env.value_to_bool_func_id); // Returns i64: 1 for true, 0 for false
+                    not_error_body.unop(walrus::ir::UnaryOp::I32WrapI64);
+
+                    // Create sequences for true/false branches
+                    let true_branch_seq = not_error_body.dangling_instr_seq(Some(ValType::I32));
+                    let true_branch_id = true_branch_seq.id();
+                    let false_branch_seq = not_error_body.dangling_instr_seq(Some(ValType::I32));
+                    let false_branch_id = false_branch_seq.id();
+
+                    not_error_body.instr(walrus::ir::IfElse {
+                        consequent: true_branch_id,
+                        alternative: false_branch_id,
+                    });
+
+                    // True branch: evaluate and return true_value
+                    let mut true_body = not_error_body.instr_seq(true_branch_id);
+                    compile_expr(&call_expr.args[1].expr, &mut true_body, env, ctx, module)?;
+
+                    // False branch: evaluate and return false_value
+                    let mut false_body = not_error_body.instr_seq(false_branch_id);
+                    compile_expr(&call_expr.args[2].expr, &mut false_body, env, ctx, module)?;
                 }
 
                 // String functions

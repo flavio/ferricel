@@ -468,8 +468,20 @@ impl ConformanceTestRunner {
         };
 
         // Step 4: Parse the JSON result
-        serde_json::from_str(&json_result)
-            .map_err(|e| format!("Failed to parse output '{}': {}", json_result, e))
+        let parsed: JsonValue = serde_json::from_str(&json_result)
+            .map_err(|e| format!("Failed to parse output '{}': {}", json_result, e))?;
+
+        // Step 5: Check if result is an error value and convert to expected format
+        // CEL error values serialize as {"error": "message"}, but tests expect "error: message" string
+        if let Some(obj) = parsed.as_object() {
+            if obj.len() == 1 && obj.contains_key("error") {
+                if let Some(error_msg) = obj.get("error").and_then(|v| v.as_str()) {
+                    return Ok(JsonValue::String(format!("error: {}", error_msg)));
+                }
+            }
+        }
+
+        Ok(parsed)
     }
 
     fn convert_bindings_to_json(

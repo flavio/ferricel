@@ -4,7 +4,7 @@
 use ferricel_core::{compiler::compile_cel_to_wasm, runtime};
 use ferricel_types::LogLevel;
 use rstest::rstest;
-use slog::{o, Drain, Logger};
+use slog::{Drain, Logger, o};
 
 /// Test helper: create a logger for tests
 fn create_test_logger() -> Logger {

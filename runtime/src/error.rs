@@ -63,3 +63,15 @@ macro_rules! cel_abort {
         $crate::error::abort_with_error($msg)
     };
 }
+
+/// Helper function to create a CelValue::Error from a static string.
+/// This is more convenient than cel_create_error when the message is already in Rust.
+///
+/// # Arguments
+/// * `message` - The error message
+///
+/// # Returns
+/// * Pointer to a heap-allocated CelValue::Error
+pub fn create_error_value(message: &str) -> *mut crate::types::CelValue {
+    Box::into_raw(Box::new(crate::types::CelValue::Error(message.to_string())))
+}

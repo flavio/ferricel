@@ -9,8 +9,29 @@
 use crate::helpers::{cel_create_bool, extract_double, extract_int, extract_uint};
 use crate::types::CelValue;
 
+/// Helper function to check if either operand is an error and propagate it.
+/// Returns Some(error_ptr) if either is an error, None otherwise.
+fn check_for_errors(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> Option<*mut CelValue> {
+    unsafe {
+        if !a_ptr.is_null() {
+            if let CelValue::Error(_) = &*a_ptr {
+                return Some(a_ptr);
+            }
+        }
+        if !b_ptr.is_null() {
+            if let CelValue::Error(_) = &*b_ptr {
+                return Some(b_ptr);
+            }
+        }
+    }
+    None
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    if let Some(err) = check_for_errors(a_ptr, b_ptr) {
+        return err;
+    }
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
     cel_create_bool(if a == b { 1 } else { 0 })
@@ -18,6 +39,9 @@ pub extern "C" fn cel_int_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    if let Some(err) = check_for_errors(a_ptr, b_ptr) {
+        return err;
+    }
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
     cel_create_bool(if a != b { 1 } else { 0 })
@@ -25,6 +49,9 @@ pub extern "C" fn cel_int_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    if let Some(err) = check_for_errors(a_ptr, b_ptr) {
+        return err;
+    }
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
     cel_create_bool(if a > b { 1 } else { 0 })
@@ -32,6 +59,9 @@ pub extern "C" fn cel_int_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    if let Some(err) = check_for_errors(a_ptr, b_ptr) {
+        return err;
+    }
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
     cel_create_bool(if a < b { 1 } else { 0 })
@@ -39,6 +69,9 @@ pub extern "C" fn cel_int_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    if let Some(err) = check_for_errors(a_ptr, b_ptr) {
+        return err;
+    }
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
     cel_create_bool(if a >= b { 1 } else { 0 })
@@ -46,6 +79,9 @@ pub extern "C" fn cel_int_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_int_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    if let Some(err) = check_for_errors(a_ptr, b_ptr) {
+        return err;
+    }
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
     cel_create_bool(if a <= b { 1 } else { 0 })

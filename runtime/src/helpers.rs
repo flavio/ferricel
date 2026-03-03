@@ -92,6 +92,32 @@ pub extern "C" fn cel_create_type(type_name_ptr: *const u8, type_name_len: i32) 
     }
 }
 
+/// Creates a CelValue::Error on the heap from a string pointer and returns a pointer to it.
+/// The caller is responsible for freeing the memory using cel_free_value.
+///
+/// # Arguments
+/// * `error_msg_ptr` - Pointer to the error message string in WASM memory
+/// * `error_msg_len` - Length of the error message string
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_create_error(error_msg_ptr: *const u8, error_msg_len: i32) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    unsafe {
+        if error_msg_ptr.is_null() {
+            error!(log, "Null pointer for error message";
+                "function" => "cel_create_error");
+            // Even when creating an error fails, we still need to return an error
+            return Box::into_raw(Box::new(CelValue::Error("unknown error".to_string())));
+        }
+
+        let slice = std::slice::from_raw_parts(error_msg_ptr, error_msg_len as usize);
+        let error_msg = String::from_utf8_lossy(slice).to_string();
+
+        debug!(log, "Creating Error value"; "error_msg" => &error_msg);
+        Box::into_raw(Box::new(CelValue::Error(error_msg)))
+    }
+}
+
 /// Internal helper: Extracts i64 from CelValue or panics with type error.
 /// This is not exported - it's used by arithmetic and comparison operations.
 pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
@@ -110,6 +136,11 @@ pub(crate) fn extract_int_with_log(ptr: *mut CelValue, log: &slog::Logger) -> i6
         }
         match &*ptr {
             CelValue::Int(i) => *i,
+            CelValue::Error(_) => {
+                // Propagate errors by aborting
+                // This allows errors to bubble up through the expression tree
+                abort_with_error("no such overload");
+            }
             other => {
                 error!(log, "Type mismatch in extraction";
                     "function" => "extract_int",
@@ -626,7 +657,7 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                         "type" => "Int",
                         "dividend" => *a,
                         "divisor" => *b);
-                    abort_with_error("divide by zero");
+                    return crate::error::create_error_value("divide by zero");
                 }
                 match a.checked_div(*b) {
                     Some(result) => cel_create_int(result),
@@ -635,7 +666,7 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                             "operation" => "cel_value_div",
                             "dividend" => *a,
                             "divisor" => *b);
-                        abort_with_error("return error for overflow");
+                        return crate::error::create_error_value("return error for overflow");
                     }
                 }
             }
@@ -647,7 +678,7 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                         "type" => "UInt",
                         "dividend" => *a,
                         "divisor" => *b);
-                    abort_with_error("divide by zero");
+                    return crate::error::create_error_value("divide by zero");
                 }
                 cel_create_uint(a / b)
             }
@@ -842,6 +873,14 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             abort_with_error("no such overload");
         }
 
+        // Check for errors and propagate them BEFORE type checking
+        if let CelValue::Error(_) = &*a_ptr {
+            return a_ptr;
+        }
+        if let CelValue::Error(_) = &*b_ptr {
+            return b_ptr;
+        }
+
         let a_val = &*a_ptr;
         let b_val = &*b_ptr;
 
@@ -861,6 +900,14 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             error!(log, "Cannot compare null values";
                 "function" => "cel_value_ne");
             abort_with_error("no such overload");
+        }
+
+        // Check for errors and propagate them BEFORE type checking
+        if let CelValue::Error(_) = &*a_ptr {
+            return a_ptr;
+        }
+        if let CelValue::Error(_) = &*b_ptr {
+            return b_ptr;
         }
 
         let a_val = &*a_ptr;
@@ -924,6 +971,13 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
         let a_val = &*a_ptr;
         let b_val = &*b_ptr;
 
+        // Check if either operand is an error and propagate it
+        match (a_val, b_val) {
+            (CelValue::Error(_), _) => return a_ptr,
+            (_, CelValue::Error(_)) => return b_ptr,
+            _ => {}
+        }
+
         let result = match (a_val, b_val) {
             // Same-type comparisons
             (CelValue::Int(a), CelValue::Int(b)) => a > b,
@@ -978,6 +1032,14 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             error!(log, "Cannot compare null values";
                 "function" => "cel_value_lt");
             abort_with_error("no such overload");
+        }
+
+        // Check for errors and propagate them BEFORE type checking
+        if let CelValue::Error(_) = &*a_ptr {
+            return a_ptr;
+        }
+        if let CelValue::Error(_) = &*b_ptr {
+            return b_ptr;
         }
 
         let a_val = &*a_ptr;
@@ -1039,6 +1101,14 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             abort_with_error("no such overload");
         }
 
+        // Check for errors and propagate them BEFORE type checking
+        if let CelValue::Error(_) = &*a_ptr {
+            return a_ptr;
+        }
+        if let CelValue::Error(_) = &*b_ptr {
+            return b_ptr;
+        }
+
         let a_val = &*a_ptr;
         let b_val = &*b_ptr;
 
@@ -1096,6 +1166,14 @@ pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             error!(log, "Cannot compare null values";
                 "function" => "cel_value_lte");
             abort_with_error("no such overload");
+        }
+
+        // Check for errors and propagate them BEFORE type checking
+        if let CelValue::Error(_) = &*a_ptr {
+            return a_ptr;
+        }
+        if let CelValue::Error(_) = &*b_ptr {
+            return b_ptr;
         }
 
         let a_val = &*a_ptr;

@@ -40,8 +40,8 @@ pub use comparison::{
 };
 
 pub use logical::{
-    cel_bool_and, cel_bool_not, cel_bool_or, cel_conditional, cel_is_strictly_false,
-    cel_is_strictly_true, cel_not_strictly_false,
+    cel_bool_and, cel_bool_not, cel_bool_or, cel_conditional, cel_is_bool_or_error, cel_is_error,
+    cel_is_strictly_false, cel_is_strictly_true, cel_not_strictly_false,
 };
 
 pub use serialization::{cel_serialize_bool, cel_serialize_int, cel_serialize_value};
@@ -62,10 +62,10 @@ pub use array::{cel_array_get, cel_array_len, cel_array_push, cel_create_array};
 pub use map::{cel_create_map, cel_map_insert};
 
 pub use helpers::{
-    cel_create_bool, cel_create_double, cel_create_duration, cel_create_int, cel_create_null,
-    cel_create_timestamp, cel_create_uint, cel_value_add, cel_value_div, cel_value_eq,
-    cel_value_gt, cel_value_gte, cel_value_index, cel_value_lt, cel_value_lte, cel_value_mod,
-    cel_value_mul, cel_value_ne, cel_value_negate, cel_value_size, cel_value_sub,
+    cel_create_bool, cel_create_double, cel_create_duration, cel_create_error, cel_create_int,
+    cel_create_null, cel_create_timestamp, cel_create_uint, cel_value_add, cel_value_div,
+    cel_value_eq, cel_value_gt, cel_value_gte, cel_value_index, cel_value_lt, cel_value_lte,
+    cel_value_mod, cel_value_mul, cel_value_ne, cel_value_negate, cel_value_size, cel_value_sub,
 };
 
 pub use string::{
