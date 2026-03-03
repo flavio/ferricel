@@ -80,13 +80,13 @@ pub fn parse_rfc3339(s: &str) -> Result<DateTime<FixedOffset>, String> {
 /// - `Ok(Duration)` if parse succeeds
 /// - `Err(String)` with error message
 pub fn parse_duration(s: &str) -> Result<Duration, String> {
-    use nom::IResult;
     use nom::branch::alt;
     use nom::bytes::complete::tag;
     use nom::character::complete::char;
     use nom::combinator::{map, opt};
     use nom::multi::many1;
     use nom::number::complete::double;
+    use nom::IResult;
 
     enum Unit {
         Nanosecond,
@@ -306,7 +306,9 @@ pub enum Timezone {
 /// Parse timezone string according to CEL spec grammar:
 /// TimeZone = "UTC" | LongTZ | FixedTZ
 /// LongTZ = IANA timezone database name
-/// FixedTZ = ( "+" | "-" ) Digit Digit ":" Digit Digit
+/// FixedTZ = ( "+" | "-" )? Digit Digit ":" Digit Digit
+///
+/// Note: Fixed offset sign is optional; unsigned offsets are treated as positive.
 ///
 /// # Parameters
 /// - `tz_str`: Timezone string to parse
@@ -321,6 +323,7 @@ pub enum Timezone {
 /// parse_timezone("America/Los_Angeles") // Ok(Timezone::Iana(...))
 /// parse_timezone("+05:30") // Ok(Timezone::Fixed(...))
 /// parse_timezone("-08:00") // Ok(Timezone::Fixed(...))
+/// parse_timezone("02:00") // Ok(Timezone::Fixed(...)) - unsigned, treated as +02:00
 /// ```
 pub fn parse_timezone(tz_str: &str) -> Result<Timezone, String> {
     // Try parsing as IANA timezone name (includes "UTC")
@@ -339,33 +342,48 @@ pub fn parse_timezone(tz_str: &str) -> Result<Timezone, String> {
     ))
 }
 
-/// Parse fixed offset timezone string in format (+|-)HH:MM
+/// Parse fixed offset timezone string in format (+|-)HH:MM or HH:MM
 /// Returns Some(FixedOffset) if successful, None otherwise
+/// If no sign is present, assumes positive offset
 fn parse_fixed_offset(s: &str) -> Option<FixedOffset> {
-    // Must be at least 6 characters: +HH:MM or -HH:MM
-    if s.len() != 6 {
-        return None;
-    }
-
     let bytes = s.as_bytes();
 
-    // Check sign
-    let is_negative = match bytes[0] {
-        b'+' => false,
-        b'-' => true,
+    // Check if string starts with sign or digit
+    let (is_negative, offset) = match bytes.first()? {
+        b'+' => {
+            // Signed format: +HH:MM (6 characters)
+            if s.len() != 6 {
+                return None;
+            }
+            (false, 1)
+        }
+        b'-' => {
+            // Signed format: -HH:MM (6 characters)
+            if s.len() != 6 {
+                return None;
+            }
+            (true, 1)
+        }
+        b'0'..=b'9' => {
+            // Unsigned format: HH:MM (5 characters, assume positive)
+            if s.len() != 5 {
+                return None;
+            }
+            (false, 0)
+        }
         _ => return None,
     };
 
-    // Parse hours (bytes[1..3])
-    let hours = parse_two_digits(&bytes[1..3])?;
+    // Parse hours
+    let hours = parse_two_digits(&bytes[offset..offset + 2])?;
 
     // Check colon separator
-    if bytes[3] != b':' {
+    if bytes[offset + 2] != b':' {
         return None;
     }
 
-    // Parse minutes (bytes[4..6])
-    let minutes = parse_two_digits(&bytes[4..6])?;
+    // Parse minutes
+    let minutes = parse_two_digits(&bytes[offset + 3..offset + 5])?;
 
     // Validate ranges
     if hours > 23 || minutes > 59 {

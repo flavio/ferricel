@@ -1,0 +1,208 @@
+
+running 1 test
+
+============================================================
+Running conformance tests from: timestamps
+============================================================
+
+  Section: timestamp_conversions
+    Conversions of timestamps to other types.
+    ✓ toInt_timestamp
+    ✓ toString_timestamp
+    ✓ toString_timestamp_nanos
+    ✓ toType_timestamp
+    ✗ type_comparison: Execution error: Build failed: Unknown variable: google. Only 'input' and 'data' are supported.
+
+  Section: duration_conversions
+    Conversions of durations to other types.
+    ✗ toString_duration: Expected String("1000000s"), got String("277h46m40s")
+    ✓ toType_duration
+    ✗ type_comparison: Execution error: Build failed: Unknown variable: google. Only 'input' and 'data' are supported.
+
+  Section: timestamp_selectors
+    Timestamp selection operators without timezones
+    ✓ getDate
+    ✓ getDayOfMonth
+    ✓ getDayOfWeek
+    ✓ getDayOfYear
+    ✓ getFullYear
+    ✓ getHours
+    ✓ getMilliseconds
+    ✓ getMinutes
+    ✓ getMonth
+    ✓ getSeconds
+
+  Section: timestamp_selectors_tz
+    Timestamp selection operators with timezones
+    ✓ getDate
+    ✓ getDayOfMonth_name_pos
+    ✓ getDayOfMonth_numerical_pos
+    ✓ getDayOfMonth_numerical_neg
+    ✓ getDayOfMonth_name_neg
+    ✓ getDayOfWeek
+    ✓ getDayOfYear
+    ✓ getFullYear
+    ✗ getHours: Execution error: Run failed: error while executing at wasm backtrace:
+    0:  0x5570f - runtime.wasm!__rustc[d131491b17107b07]::__rust_abort
+    1:  0x556f5 - runtime.wasm!__rustc[d131491b17107b07]::__rust_start_panic
+    2:  0x552c7 - runtime.wasm!__rustc[d131491b17107b07]::rust_panic
+    3:  0x4af8e - runtime.wasm!std::panicking::panic_with_hook::hdd610f6c18026bcb
+    4:  0x4f96f - runtime.wasm!std::panicking::panic_handler::{{closure}}::ha276f0fd86b6d853
+    5:  0x556b0 - runtime.wasm!std::sys::backtrace::__rust_end_short_backtrace::he893bb92b16d0829
+    6:  0x544eb - runtime.wasm!__rustc[d131491b17107b07]::rust_begin_unwind
+    7:  0x538a9 - runtime.wasm!core::panicking::panic_fmt::ha9276d4d9f74c64e
+    8:  0x3ed96 - runtime.wasm!cel_timestamp_get_hours_tz
+    9:  0x4a68b - runtime.wasm!<wasm function 341>
+    ✓ getMinutes
+    ✓ getMonth
+    ✓ getSeconds
+
+  Section: timestamp_equality
+    Equality operations on timestamps.
+    ✓ eq_same
+    ✓ eq_diff
+    ✓ neq_same
+    ✓ neq_diff
+
+  Section: duration_equality
+    Equality tests for durations.
+    ✓ eq_same
+    ✓ eq_diff
+    ✓ neq_same
+    ✓ neq_diff
+
+  Section: timestamp_arithmetic
+    Arithmetic operations on timestamps and/or durations.
+    ✓ add_duration_to_time
+    ✓ add_time_to_duration
+    ✓ add_duration_to_duration
+    ✓ add_time_to_duration_nanos_negative
+    ✓ add_time_to_duration_nanos_positive
+    ✓ subtract_duration_from_time
+    ✓ subtract_time_from_time
+    ✓ subtract_duration_from_duration
+
+  Section: comparisons
+    Comparisons on timestamps and/or durations.
+    ✓ leq_timestamp_true
+    ✓ leq_timestamp_false
+    ✓ leq_duration_true
+    ✓ leq_duration_false
+    ✓ less_timestamp_true
+    ✓ less_duration_true
+    ✓ geq_timestamp_true
+    ✓ geq_timestamp_false
+    ✓ geq_duration_true
+    ✓ geq_duration_false
+    ✓ greater_timestamp_true
+    ✓ greater_duration_true
+
+  Section: duration_converters
+    Conversion functions on durations. Unlike timestamps, we don't, e.g. select the 'minutes' field - we convert the duration to integer minutes.
+    ✗ get_hours: Execution error: Run failed: error while executing at wasm backtrace:
+    0:  0x54ddf - runtime.wasm!runtime::error::abort_with_error::h71280ef722f69ea2
+    1:  0x368c1 - runtime.wasm!runtime::helpers::extract_datetime::hfcd2448a064ae708
+    2:  0x4e5c8 - runtime.wasm!cel_timestamp_get_hours
+    3:  0x52f79 - runtime.wasm!<wasm function 618>
+    ⊘ get_milliseconds (SKIPPED: Type environment not yet supported)
+    ✗ get_minutes: Execution error: Run failed: error while executing at wasm backtrace:
+    0:  0x54dd8 - runtime.wasm!runtime::error::abort_with_error::h71280ef722f69ea2
+    1:  0x368c1 - runtime.wasm!runtime::helpers::extract_datetime::hfcd2448a064ae708
+    2:  0x4dfea - runtime.wasm!cel_timestamp_get_minutes
+    3:  0x534b8 - runtime.wasm!<wasm function 636>
+    ✗ get_seconds: Execution error: Run failed: error while executing at wasm backtrace:
+    0:  0x54dd8 - runtime.wasm!runtime::error::abort_with_error::h71280ef722f69ea2
+    1:  0x368c1 - runtime.wasm!runtime::helpers::extract_datetime::hfcd2448a064ae708
+    2:  0x4e64c - runtime.wasm!cel_timestamp_get_seconds
+    3:  0x534b8 - runtime.wasm!<wasm function 636>
+
+  Section: timestamp_range
+    Tests for out-of-range operations on timestamps.
+    ✗ from_string_under: Expected error, got: String("0000-01-01T00:00:00Z")
+    ✓ from_string_over
+    ✓ add_duration_under
+    ✓ add_duration_over
+    ✓ add_duration_nanos_over
+    ✓ add_duration_nanos_under
+    ✗ sub_time_duration_over: Expected error, got: String("539791h12m25.937622528s")
+    ✗ sub_time_duration_under: Expected error, got: String("-539791h12m25.937622528s")
+
+  Section: duration_range
+    Tests for out-of-range operations on durations.
+    ✗ from_string_under: Expected error, got: String("-2562047h47m16.854775807s")
+    ✗ from_string_over: Expected error, got: String("2562047h47m16.854775807s")
+    ✗ add_under: Expected error, got: String("-5124095h34m33s")
+    ✗ add_over: Expected error, got: String("5124095h34m33s")
+    ✗ sub_under: Expected error, got: String("-5124095h34m33s")
+    ✗ sub_over: Expected error, got: String("5124095h34m33s")
+
+------------------------------------------------------------
+Failed Tests:
+------------------------------------------------------------
+  [timestamp_conversions] type_comparison
+    └─ Execution error: Build failed: Unknown variable: google. Only 'input' and 'data' are supported.
+  [duration_conversions] toString_duration
+    └─ Expected String("1000000s"), got String("277h46m40s")
+  [duration_conversions] type_comparison
+    └─ Execution error: Build failed: Unknown variable: google. Only 'input' and 'data' are supported.
+  [timestamp_selectors_tz] getHours
+    └─ Execution error: Run failed: error while executing at wasm backtrace:
+    0:  0x5570f - runtime.wasm!__rustc[d131491b17107b07]::__rust_abort
+    1:  0x556f5 - runtime.wasm!__rustc[d131491b17107b07]::__rust_start_panic
+    2:  0x552c7 - runtime.wasm!__rustc[d131491b17107b07]::rust_panic
+    3:  0x4af8e - runtime.wasm!std::panicking::panic_with_hook::hdd610f6c18026bcb
+    4:  0x4f96f - runtime.wasm!std::panicking::panic_handler::{{closure}}::ha276f0fd86b6d853
+    5:  0x556b0 - runtime.wasm!std::sys::backtrace::__rust_end_short_backtrace::he893bb92b16d0829
+    6:  0x544eb - runtime.wasm!__rustc[d131491b17107b07]::rust_begin_unwind
+    7:  0x538a9 - runtime.wasm!core::panicking::panic_fmt::ha9276d4d9f74c64e
+    8:  0x3ed96 - runtime.wasm!cel_timestamp_get_hours_tz
+    9:  0x4a68b - runtime.wasm!<wasm function 341>
+  [duration_converters] get_hours
+    └─ Execution error: Run failed: error while executing at wasm backtrace:
+    0:  0x54ddf - runtime.wasm!runtime::error::abort_with_error::h71280ef722f69ea2
+    1:  0x368c1 - runtime.wasm!runtime::helpers::extract_datetime::hfcd2448a064ae708
+    2:  0x4e5c8 - runtime.wasm!cel_timestamp_get_hours
+    3:  0x52f79 - runtime.wasm!<wasm function 618>
+  [duration_converters] get_minutes
+    └─ Execution error: Run failed: error while executing at wasm backtrace:
+    0:  0x54dd8 - runtime.wasm!runtime::error::abort_with_error::h71280ef722f69ea2
+    1:  0x368c1 - runtime.wasm!runtime::helpers::extract_datetime::hfcd2448a064ae708
+    2:  0x4dfea - runtime.wasm!cel_timestamp_get_minutes
+    3:  0x534b8 - runtime.wasm!<wasm function 636>
+  [duration_converters] get_seconds
+    └─ Execution error: Run failed: error while executing at wasm backtrace:
+    0:  0x54dd8 - runtime.wasm!runtime::error::abort_with_error::h71280ef722f69ea2
+    1:  0x368c1 - runtime.wasm!runtime::helpers::extract_datetime::hfcd2448a064ae708
+    2:  0x4e64c - runtime.wasm!cel_timestamp_get_seconds
+    3:  0x534b8 - runtime.wasm!<wasm function 636>
+  [timestamp_range] from_string_under
+    └─ Expected error, got: String("0000-01-01T00:00:00Z")
+  [timestamp_range] sub_time_duration_over
+    └─ Expected error, got: String("539791h12m25.937622528s")
+  [timestamp_range] sub_time_duration_under
+    └─ Expected error, got: String("-539791h12m25.937622528s")
+  [duration_range] from_string_under
+    └─ Expected error, got: String("-2562047h47m16.854775807s")
+  [duration_range] from_string_over
+    └─ Expected error, got: String("2562047h47m16.854775807s")
+  [duration_range] add_under
+    └─ Expected error, got: String("-5124095h34m33s")
+  [duration_range] add_over
+    └─ Expected error, got: String("5124095h34m33s")
+  [duration_range] sub_under
+    └─ Expected error, got: String("-5124095h34m33s")
+  [duration_range] sub_over
+    └─ Expected error, got: String("5124095h34m33s")
+
+============================================================
+Conformance Test Results: timestamps
+------------------------------------------------------------
+PASSED:    59 /   76  ( 77.6%)
+FAILED:    16 /   76  ( 21.1%)
+SKIPPED:    1 /   76  (  1.3%)
+============================================================
+
+test conformance_timestamps_tests ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 51.85s
+
