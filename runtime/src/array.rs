@@ -100,7 +100,8 @@ pub unsafe extern "C" fn cel_array_get(array_ptr: *mut CelValue, index: i32) -> 
             debug!(log, "Accessing array element"; "index" => index, "length" => vec.len());
             let idx = index as usize;
             if idx >= vec.len() {
-                abort_with_error("index out of bounds");
+                // Return error value instead of aborting to allow logical operators to absorb errors
+                return crate::error::create_error_value("index out of bounds");
             }
             // Clone the element and return a new boxed pointer
             let boxed_value = Box::new(vec[idx].clone());

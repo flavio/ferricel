@@ -1396,7 +1396,8 @@ pub extern "C" fn cel_value_index(
                     error!(log, "Array index must be a whole number";
                         "function" => "cel_value_index",
                         "index" => *idx);
-                    abort_with_error("no such overload");
+                    // Return error value instead of aborting to allow logical operators to absorb errors
+                    return crate::error::create_error_value("no such overload");
                 }
                 // Convert to i64
                 let idx_i64 = *idx as i64;
@@ -1426,7 +1427,8 @@ pub extern "C" fn cel_value_index(
                 error!(log, "Array index must be Int, UInt, or Double";
                     "function" => "cel_value_index",
                     "index_type" => format!("{:?}", index));
-                abort_with_error("no such overload");
+                // Return error value instead of aborting to allow logical operators to absorb errors
+                crate::error::create_error_value("no such overload")
             }
             _ => {
                 error!(log, "Index operator not supported for this type";
