@@ -6,6 +6,7 @@
 //! - Timestamp accessors (getFullYear, getMonth, etc.)
 //! - Overflow checking for valid timestamp range
 
+use crate::error::abort_with_error;
 use crate::helpers::{
     cel_create_duration, cel_create_int, extract_datetime, extract_duration,
     extract_duration_chrono, extract_string,
@@ -169,6 +170,57 @@ pub extern "C" fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut CelValue {
 
     let (final_secs, final_nanos) = normalize_duration(neg_secs, neg_nanos);
     cel_create_duration(final_secs, final_nanos as i64)
+}
+
+// ============================================================================
+// Duration Converter Methods
+// ============================================================================
+// These convert the entire duration to a single unit (truncated to integer).
+// Unlike timestamp accessors which extract components, these return total units.
+
+/// duration.getHours() -> int
+/// Converts the entire duration to hours (truncated).
+/// Example: duration('10000s').getHours() returns 2 (not 2.77...)
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_duration_get_hours(dur_ptr: *mut CelValue) -> *mut CelValue {
+    let (secs, _nanos) = extract_duration(dur_ptr);
+    // Convert seconds to hours, truncating fractional part
+    let hours = secs / 3600;
+    cel_create_int(hours)
+}
+
+/// duration.getMinutes() -> int
+/// Converts the entire duration to minutes (truncated).
+/// Example: duration('3730s').getMinutes() returns 62 (not 62.16...)
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mut CelValue {
+    let (secs, _nanos) = extract_duration(dur_ptr);
+    // Convert seconds to minutes, truncating fractional part
+    let minutes = secs / 60;
+    cel_create_int(minutes)
+}
+
+/// duration.getSeconds() -> int
+/// Returns the total seconds in the duration.
+/// Example: duration('3730s').getSeconds() returns 3730
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mut CelValue {
+    let (secs, _nanos) = extract_duration(dur_ptr);
+    cel_create_int(secs)
+}
+
+/// duration.getMilliseconds() -> int
+/// Converts the entire duration to milliseconds (truncated).
+/// Example: duration('1.5s').getMilliseconds() returns 1500
+#[unsafe(no_mangle)]
+pub extern "C" fn cel_duration_get_milliseconds(dur_ptr: *mut CelValue) -> *mut CelValue {
+    let (secs, nanos) = extract_duration(dur_ptr);
+    // Convert to milliseconds: (seconds * 1000) + (nanos / 1_000_000)
+    let millis = secs
+        .checked_mul(1000)
+        .and_then(|s_ms| s_ms.checked_add(nanos as i64 / 1_000_000))
+        .expect("duration milliseconds overflow");
+    cel_create_int(millis)
 }
 
 /// Validates that a DateTime is within the valid CEL range.
@@ -376,13 +428,21 @@ pub extern "C" fn cel_timestamp_get_day_of_year_tz(
     cel_create_int((doy - 1) as i64) // Convert to 0-based
 }
 
-/// timestamp.getHours() -> int
-/// Returns hour component (0-23) in UTC
+/// getHours() method - works on both timestamps and durations
+/// - timestamp.getHours() -> Returns hour component (0-23) in UTC
+/// - duration.getHours() -> Converts total duration to hours (truncated)
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_timestamp_get_hours(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let utc_dt = dt.with_timezone(&Utc);
-    cel_create_int(utc_dt.hour() as i64)
+pub extern "C" fn cel_timestamp_get_hours(value_ptr: *mut CelValue) -> *mut CelValue {
+    let value = unsafe { &*value_ptr };
+    match value {
+        CelValue::Timestamp(_) => {
+            let dt = extract_datetime(value_ptr);
+            let utc_dt = dt.with_timezone(&Utc);
+            cel_create_int(utc_dt.hour() as i64)
+        }
+        CelValue::Duration(_) => cel_duration_get_hours(value_ptr),
+        _ => abort_with_error("getHours() must be called on a timestamp or duration"),
+    }
 }
 
 /// timestamp.getHours(timezone) -> int
@@ -406,13 +466,21 @@ pub extern "C" fn cel_timestamp_get_hours_tz(
     cel_create_int(hour as i64)
 }
 
-/// timestamp.getMinutes() -> int
-/// Returns minutes component (0-59) in UTC
+/// getMinutes() method - works on both timestamps and durations
+/// - timestamp.getMinutes() -> Returns minutes component (0-59) in UTC
+/// - duration.getMinutes() -> Converts total duration to minutes (truncated)
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_timestamp_get_minutes(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let utc_dt = dt.with_timezone(&Utc);
-    cel_create_int(utc_dt.minute() as i64)
+pub extern "C" fn cel_timestamp_get_minutes(value_ptr: *mut CelValue) -> *mut CelValue {
+    let value = unsafe { &*value_ptr };
+    match value {
+        CelValue::Timestamp(_) => {
+            let dt = extract_datetime(value_ptr);
+            let utc_dt = dt.with_timezone(&Utc);
+            cel_create_int(utc_dt.minute() as i64)
+        }
+        CelValue::Duration(_) => cel_duration_get_minutes(value_ptr),
+        _ => abort_with_error("getMinutes() must be called on a timestamp or duration"),
+    }
 }
 
 /// timestamp.getMinutes(timezone) -> int
@@ -436,13 +504,21 @@ pub extern "C" fn cel_timestamp_get_minutes_tz(
     cel_create_int(minute as i64)
 }
 
-/// timestamp.getSeconds() -> int
-/// Returns seconds component (0-59) in UTC
+/// getSeconds() method - works on both timestamps and durations
+/// - timestamp.getSeconds() -> Returns seconds component (0-59) in UTC
+/// - duration.getSeconds() -> Returns total seconds in the duration
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_timestamp_get_seconds(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let utc_dt = dt.with_timezone(&Utc);
-    cel_create_int(utc_dt.second() as i64)
+pub extern "C" fn cel_timestamp_get_seconds(value_ptr: *mut CelValue) -> *mut CelValue {
+    let value = unsafe { &*value_ptr };
+    match value {
+        CelValue::Timestamp(_) => {
+            let dt = extract_datetime(value_ptr);
+            let utc_dt = dt.with_timezone(&Utc);
+            cel_create_int(utc_dt.second() as i64)
+        }
+        CelValue::Duration(_) => cel_duration_get_seconds(value_ptr),
+        _ => abort_with_error("getSeconds() must be called on a timestamp or duration"),
+    }
 }
 
 /// timestamp.getSeconds(timezone) -> int
@@ -466,14 +542,22 @@ pub extern "C" fn cel_timestamp_get_seconds_tz(
     cel_create_int(second as i64)
 }
 
-/// timestamp.getMilliseconds() -> int
-/// Returns milliseconds component (0-999) in UTC
+/// getMilliseconds() method - works on both timestamps and durations
+/// - timestamp.getMilliseconds() -> Returns milliseconds component (0-999) in UTC
+/// - duration.getMilliseconds() -> Converts total duration to milliseconds
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_timestamp_get_milliseconds(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let utc_dt = dt.with_timezone(&Utc);
-    let millis = utc_dt.timestamp_subsec_millis();
-    cel_create_int(millis as i64)
+pub extern "C" fn cel_timestamp_get_milliseconds(value_ptr: *mut CelValue) -> *mut CelValue {
+    let value = unsafe { &*value_ptr };
+    match value {
+        CelValue::Timestamp(_) => {
+            let dt = extract_datetime(value_ptr);
+            let utc_dt = dt.with_timezone(&Utc);
+            let millis = utc_dt.timestamp_subsec_millis();
+            cel_create_int(millis as i64)
+        }
+        CelValue::Duration(_) => cel_duration_get_milliseconds(value_ptr),
+        _ => abort_with_error("getMilliseconds() must be called on a timestamp or duration"),
+    }
 }
 
 /// timestamp.getMilliseconds(timezone) -> int
