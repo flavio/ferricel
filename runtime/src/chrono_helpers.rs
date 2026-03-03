@@ -1,7 +1,7 @@
 //! Chrono helper functions for duration and timestamp conversions.
 //! Provides wrappers around chrono types for FFI boundary and parsing/formatting.
 
-use chrono::{DateTime, Duration, FixedOffset, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Duration, FixedOffset, TimeZone, Utc};
 use chrono_tz::Tz;
 
 /// Convert (seconds, nanos) to chrono::DateTime<FixedOffset>
@@ -58,7 +58,18 @@ pub fn duration_to_parts(d: &Duration) -> (i64, i32) {
 /// - `Ok(DateTime)` if parse succeeds
 /// - `Err(String)` with error message
 pub fn parse_rfc3339(s: &str) -> Result<DateTime<FixedOffset>, String> {
-    DateTime::parse_from_rfc3339(s).map_err(|e| e.to_string())
+    let dt = DateTime::parse_from_rfc3339(s).map_err(|e| e.to_string())?;
+
+    // Validate year range per CEL spec: 0001-01-01 to 9999-12-31
+    let year = dt.year();
+    if year < 1 || year > 9999 {
+        return Err(format!(
+            "timestamp year {} is out of valid CEL range (0001-9999)",
+            year
+        ));
+    }
+
+    Ok(dt)
 }
 
 /// Parse duration string using CEL format
@@ -97,19 +108,6 @@ pub fn parse_duration(s: &str) -> Result<Duration, String> {
         Hour,
     }
 
-    impl Unit {
-        fn nanos(&self) -> i64 {
-            match self {
-                Unit::Nanosecond => 1,
-                Unit::Microsecond => 1_000,
-                Unit::Millisecond => 1_000_000,
-                Unit::Second => 1_000_000_000,
-                Unit::Minute => 60 * 1_000_000_000,
-                Unit::Hour => 60 * 60 * 1_000_000_000,
-            }
-        }
-    }
-
     fn parse_unit(i: &str) -> IResult<&str, Unit> {
         alt((
             map(tag("ms"), |_| Unit::Millisecond),
@@ -121,14 +119,51 @@ pub fn parse_duration(s: &str) -> Result<Duration, String> {
         ))(i)
     }
 
-    fn to_duration(num: f64, unit: Unit) -> Duration {
-        Duration::nanoseconds((num * unit.nanos() as f64).trunc() as i64)
+    fn to_duration(num: f64, unit: Unit) -> Result<Duration, String> {
+        // Use different Duration constructors to avoid overflow when converting to nanoseconds
+        let result = match unit {
+            Unit::Nanosecond => Duration::nanoseconds(num.trunc() as i64),
+            Unit::Microsecond => Duration::microseconds(num.trunc() as i64),
+            Unit::Millisecond => Duration::milliseconds(num.trunc() as i64),
+            Unit::Second => {
+                // For seconds, handle fractional part separately to avoid overflow
+                let secs = num.trunc() as i64;
+                let nanos = ((num.fract() * 1_000_000_000.0).trunc() as i32).abs();
+                match Duration::try_seconds(secs) {
+                    Some(d) => {
+                        if nanos == 0 {
+                            d
+                        } else {
+                            d + Duration::nanoseconds(nanos as i64 * secs.signum())
+                        }
+                    }
+                    None => return Err(format!("duration seconds overflow: {}", secs)),
+                }
+            }
+            Unit::Minute => {
+                let mins = num.trunc() as i64;
+                match Duration::try_minutes(mins) {
+                    Some(d) => d,
+                    None => return Err(format!("duration minutes overflow: {}", mins)),
+                }
+            }
+            Unit::Hour => {
+                let hours = num.trunc() as i64;
+                match Duration::try_hours(hours) {
+                    Some(d) => d,
+                    None => return Err(format!("duration hours overflow: {}", hours)),
+                }
+            }
+        };
+        Ok(result)
     }
 
     fn parse_number_unit(i: &str) -> IResult<&str, Duration> {
         let (i, num) = double(i)?;
         let (i, unit) = parse_unit(i)?;
-        let duration = to_duration(num, unit);
+        let duration = to_duration(num, unit).map_err(|_e| {
+            nom::Err::Failure(nom::error::Error::new(i, nom::error::ErrorKind::Fail))
+        })?;
         Ok((i, duration))
     }
 
@@ -155,6 +190,19 @@ pub fn parse_duration(s: &str) -> Result<Duration, String> {
                     remaining
                 ))
             } else {
+                // Validate duration range (CEL spec)
+                // CEL uses a conservative limit slightly less than the max timestamp span
+                const MIN_DURATION_SECONDS: i64 = -315_537_897_598;
+                const MAX_DURATION_SECONDS: i64 = 315_537_897_598;
+
+                let seconds = duration.num_seconds();
+                if seconds < MIN_DURATION_SECONDS || seconds > MAX_DURATION_SECONDS {
+                    return Err(format!(
+                        "duration out of valid range (±{} seconds): {} seconds",
+                        MAX_DURATION_SECONDS, seconds
+                    ));
+                }
+
                 Ok(duration)
             }
         }

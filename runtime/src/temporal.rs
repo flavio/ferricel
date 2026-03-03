@@ -20,6 +20,14 @@ use chrono::{Datelike, Timelike, Utc};
 const MIN_TIMESTAMP_SECONDS: i64 = -62135596800; // 0001-01-01T00:00:00Z
 const MAX_TIMESTAMP_SECONDS: i64 = 253402300799; // 9999-12-31T23:59:59Z
 
+// Duration range constants (CEL spec)
+// CEL restricts duration range to ensure robustness and prevent edge cases.
+// While protobuf Duration allows ±315576000000s, CEL uses a more conservative
+// limit that's slightly less than the maximum timestamp span (9999-12-31 to 0001-01-01).
+// This prevents durations that span the entire valid timestamp range.
+const MIN_DURATION_SECONDS: i64 = -315_537_897_598;
+const MAX_DURATION_SECONDS: i64 = 315_537_897_598;
+
 /// Normalizes seconds and nanoseconds so nanos is always in [0, 1e9)
 /// and has the same sign as seconds (or is zero).
 fn normalize_duration(mut seconds: i64, mut nanos: i32) -> (i64, i32) {
@@ -118,6 +126,11 @@ pub extern "C" fn cel_timestamp_diff(
     // Chrono subtraction returns Duration
     let duration = dt1.signed_duration_since(dt2);
 
+    // Validate the resulting duration is within range
+    let seconds = duration.num_seconds();
+    let nanos = duration.subsec_nanos() as i32;
+    validate_duration(seconds, nanos);
+
     Box::into_raw(Box::new(CelValue::Duration(duration)))
 }
 
@@ -139,6 +152,7 @@ pub extern "C" fn cel_duration_add(
     let result_nanos = nanos1 + nanos2;
 
     let (final_secs, final_nanos) = normalize_duration(result_secs, result_nanos);
+    validate_duration(final_secs, final_nanos);
     cel_create_duration(final_secs, final_nanos as i64)
 }
 
@@ -156,6 +170,7 @@ pub extern "C" fn cel_duration_sub(
     let result_nanos = nanos1 - nanos2;
 
     let (final_secs, final_nanos) = normalize_duration(result_secs, result_nanos);
+    validate_duration(final_secs, final_nanos);
     cel_create_duration(final_secs, final_nanos as i64)
 }
 
@@ -169,6 +184,7 @@ pub extern "C" fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut CelValue {
     let neg_nanos = -nanos;
 
     let (final_secs, final_nanos) = normalize_duration(neg_secs, neg_nanos);
+    validate_duration(final_secs, final_nanos);
     cel_create_duration(final_secs, final_nanos as i64)
 }
 
@@ -230,6 +246,17 @@ fn validate_datetime(dt: &chrono::DateTime<chrono::FixedOffset>) {
         panic!(
             "timestamp out of valid range (0001-01-01 to 9999-12-31): {} seconds",
             seconds
+        );
+    }
+}
+
+/// Validates that a duration is within the valid CEL range.
+/// Valid range: slightly less than the maximum timestamp span (±315537897598 seconds)
+fn validate_duration(seconds: i64, _nanos: i32) {
+    if seconds < MIN_DURATION_SECONDS || seconds > MAX_DURATION_SECONDS {
+        panic!(
+            "duration out of valid range (±{} seconds): {} seconds",
+            MAX_DURATION_SECONDS, seconds
         );
     }
 }
