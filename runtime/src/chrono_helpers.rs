@@ -178,119 +178,53 @@ pub fn parse_duration(s: &str) -> Result<Duration, String> {
 /// # Returns
 /// Formatted duration string
 pub fn format_duration(d: &Duration) -> String {
-    const SECOND: u64 = 1_000_000_000;
-    const MILLISECOND: u64 = 1_000_000;
-    const MICROSECOND: u64 = 1_000;
+    // Format duration according to CEL spec: seconds with optional fractional part
+    // Examples: "0s", "1s", "1.5s", "0.000000001s", "-1.5s"
 
-    fn format_float(buf: &mut [u8], mut v: u64, prec: usize) -> (usize, u64) {
-        let mut w = buf.len();
-        let mut print = false;
-        for _ in 0..prec {
-            let digit = v % 10;
-            print = print || digit != 0;
-            if print {
-                w -= 1;
-                buf[w] = digit as u8 + b'0';
-            }
-            v /= 10;
-        }
-        if print {
-            w -= 1;
-            buf[w] = b'.';
-        }
-        (w, v)
-    }
-
-    fn format_int(buf: &mut [u8], mut v: u64) -> usize {
-        let mut w = buf.len();
-        if v == 0 {
-            w -= 1;
-            buf[w] = b'0';
+    // Get total nanoseconds, handling overflow for very large durations
+    let (seconds, nanos) = if let Some(total_nanos) = d.num_nanoseconds() {
+        let is_negative = total_nanos < 0;
+        let abs_nanos = total_nanos.unsigned_abs();
+        let secs = (abs_nanos / 1_000_000_000) as i64;
+        let nanos = (abs_nanos % 1_000_000_000) as i64;
+        if is_negative {
+            (-secs, -nanos)
         } else {
-            while v > 0 {
-                w -= 1;
-                buf[w] = (v % 10) as u8 + b'0';
-                v /= 10;
-            }
+            (secs, nanos)
         }
-        w
-    }
-
-    let buf = &mut [0u8; 32];
-    let mut w = buf.len();
-
-    let mut neg = false;
-    let mut u = d
-        .num_nanoseconds()
-        .map(|n| {
-            if n < 0 {
-                neg = true;
-            }
-            n.unsigned_abs()
-        })
-        .unwrap_or_else(|| {
-            let s = d.num_seconds();
-            if s < 0 {
-                neg = true;
-            }
-            s.unsigned_abs() * SECOND
-        });
-
-    if u < SECOND {
-        // Special case: if duration is smaller than a second,
-        // use smaller units, like 1.2ms
-        let mut _prec = 0;
-        w -= 1;
-        buf[w] = b's';
-        w -= 1;
-
-        if u == 0 {
-            return "0s".to_string();
-        } else if u < MICROSECOND {
-            _prec = 0;
-            buf[w] = b'n';
-        } else if u < MILLISECOND {
-            _prec = 3;
-            // U+00B5 'µ' micro sign == 0xC2 0xB5
-            buf[w] = 0xB5;
-            w -= 1;
-            buf[w] = 0xC2;
-        } else {
-            _prec = 6;
-            buf[w] = b'm';
-        }
-        (w, u) = format_float(&mut buf[..w], u, _prec);
-        w = format_int(&mut buf[..w], u);
     } else {
-        w -= 1;
-        buf[w] = b's';
-        (w, u) = format_float(&mut buf[..w], u, 9);
+        // Duration too large for nanoseconds, use seconds
+        let secs = d.num_seconds();
+        (secs, 0)
+    };
 
-        // u is now integer number of seconds
-        w = format_int(&mut buf[..w], u % 60);
-        u /= 60;
+    // Handle zero duration
+    if seconds == 0 && nanos == 0 {
+        return "0s".to_string();
+    }
 
-        // u is now integer number of minutes
-        if u > 0 {
-            w -= 1;
-            buf[w] = b'm';
-            w = format_int(&mut buf[..w], u % 60);
-            u /= 60;
+    // Format with sign
+    let is_negative = seconds < 0 || nanos < 0;
+    let abs_seconds = seconds.unsigned_abs();
+    let abs_nanos = nanos.unsigned_abs();
 
-            // u is now integer number of hours
-            if u > 0 {
-                w -= 1;
-                buf[w] = b'h';
-                w = format_int(&mut buf[..w], u);
-            }
+    // Format fractional part (remove trailing zeros)
+    let fractional = if abs_nanos > 0 {
+        let mut frac_str = format!("{:09}", abs_nanos);
+        // Trim trailing zeros
+        while frac_str.ends_with('0') {
+            frac_str.pop();
         }
-    }
+        format!(".{}", frac_str)
+    } else {
+        String::new()
+    };
 
-    if neg {
-        w -= 1;
-        buf[w] = b'-';
+    if is_negative {
+        format!("-{}{}s", abs_seconds, fractional)
+    } else {
+        format!("{}{}s", abs_seconds, fractional)
     }
-    String::from_utf8_lossy(&buf[w..]).into_owned()
 }
 
 /// Timezone representation for CEL spec compliance
