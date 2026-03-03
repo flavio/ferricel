@@ -1,5 +1,5 @@
-use cel::common::ast::Expr;
 use cel::common::ast::operators;
+use cel::common::ast::Expr;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
 use std::collections::HashMap;
@@ -441,6 +441,58 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
     let wasm_bytes = module.emit_wasm();
 
     Ok(wasm_bytes)
+}
+
+/// Helper function to compile a string literal into a CelValue and store it in a local.
+/// Returns the LocalId containing the pointer to the CelValue::String.
+///
+/// This is used for struct field names and type names to avoid code duplication.
+fn compile_string_to_local(
+    s: &str,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+) -> Result<LocalId, anyhow::Error> {
+    let bytes = s.as_bytes();
+    let len = bytes.len() as i32;
+
+    // Allocate memory for the string data
+    let data_ptr_local = module.locals.add(ValType::I32);
+    body.i32_const(len)
+        .call(env.malloc_func_id)
+        .local_set(data_ptr_local);
+
+    // Get memory reference
+    let memory_id = module
+        .memories
+        .iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("No memory found"))?
+        .id();
+
+    // Write each byte of the string to the allocated memory
+    for (offset, &byte) in bytes.iter().enumerate() {
+        body.local_get(data_ptr_local);
+        body.i32_const(byte as i32);
+        body.store(
+            memory_id,
+            walrus::ir::StoreKind::I32_8 { atomic: false },
+            walrus::ir::MemArg {
+                align: 1,
+                offset: offset as u32,
+            },
+        );
+    }
+
+    // Call cel_create_string(data_ptr, len)
+    body.local_get(data_ptr_local);
+    body.i32_const(len);
+    body.call(env.create_string_func_id);
+
+    // Store the resulting CelValue pointer in a local and return it
+    let result_local = module.locals.add(ValType::I32);
+    body.local_set(result_local);
+    Ok(result_local)
 }
 
 // We pass the inner `Expr` enum to this recursive function
@@ -1652,6 +1704,54 @@ pub fn compile_expr(
             // For all(), this is just @result (the accumulator)
             let result_ctx = ctx.with_local(comp_expr.accu_var.clone(), accu_local);
             compile_expr(&comp_expr.result.expr, body, env, &result_ctx, module)?;
+        }
+
+        // 7. Struct Literals (Protocol Buffer Messages)
+        // e.g., google.protobuf.BoolValue{value: true}
+        // Structs are compiled as maps with string keys + a special "__type__" field
+        Expr::Struct(struct_expr) => {
+            use cel::common::ast::EntryExpr;
+
+            // Create an empty map to represent the struct
+            body.call(env.create_map_func_id);
+            let map_ptr_local = module.locals.add(ValType::I32);
+            body.local_set(map_ptr_local);
+
+            // Insert "__type__" field to preserve type information
+            let type_key_local = compile_string_to_local("__type__", body, env, module)?;
+            let type_value_local =
+                compile_string_to_local(&struct_expr.type_name, body, env, module)?;
+
+            body.local_get(map_ptr_local);
+            body.local_get(type_key_local);
+            body.local_get(type_value_local);
+            body.call(env.map_insert_func_id);
+
+            // Insert each struct field
+            for entry in &struct_expr.entries {
+                match &entry.expr {
+                    EntryExpr::StructField(struct_field) => {
+                        // Compile field name as string key
+                        let field_key_local =
+                            compile_string_to_local(&struct_field.field, body, env, module)?;
+
+                        // Compile field value expression
+                        compile_expr(&struct_field.value.expr, body, env, ctx, module)?;
+                        let field_value_local = module.locals.add(ValType::I32);
+                        body.local_set(field_value_local);
+
+                        // Insert field into map
+                        body.local_get(map_ptr_local);
+                        body.local_get(field_key_local);
+                        body.local_get(field_value_local);
+                        body.call(env.map_insert_func_id);
+                    }
+                    _ => anyhow::bail!("Unsupported struct entry type: {:?}", entry.expr),
+                }
+            }
+
+            // Leave the map pointer on the stack
+            body.local_get(map_ptr_local);
         }
 
         _ => anyhow::bail!("Unsupported expression type: {:?}", expr),
