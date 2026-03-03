@@ -404,11 +404,6 @@ impl ConformanceTestRunner {
             return TestResult::Skipped(reason);
         }
 
-        // Skip tests that require features we know aren't supported
-        if !test.type_env.is_empty() {
-            return TestResult::Skipped("Type environment not yet supported".to_string());
-        }
-
         // Execute the test
         match self.execute_cel_expression(test) {
             Ok(actual_value) => {

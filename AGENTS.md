@@ -70,7 +70,7 @@ The project has three levels of testing:
 - Validate compliance with the official CEL specification
 - Test data from `cel-spec/` git submodule (google/cel-spec repository)
 - Tests requiring unimplemented features are automatically skipped
-- Results show PASSED/FAILED/SKIPPED counts (doesn't fail the build)
+- Results show PASSED/FAILED counts (doesn't fail the build)
 - Track pass rate over time to measure specification compliance
 
 #### Running Conformance Tests
@@ -88,31 +88,37 @@ make conformance-list
 To run specific conformance tests or explore what's available, follow this discovery workflow:
 
 **1. List available test suites:**
+
 ```bash
 make conformance-list
 ```
 
 **2. List sections in a suite:**
+
 ```bash
 make conformance-sections-basic
 ```
 
 **3. List tests in a specific section:**
+
 ```bash
 CONFORMANCE_SECTION="self_eval_zeroish" make conformance-sections-basic
 ```
 
 **4. Run all tests in a specific section:**
+
 ```bash
 CONFORMANCE_SECTION="self_eval_zeroish" make conformance-basic
 ```
 
 **5. Run a single specific test:**
+
 ```bash
 CONFORMANCE_SECTION="self_eval_zeroish" CONFORMANCE_TEST="self_eval_int_zero" make conformance-basic
 ```
 
 **Examples:**
+
 ```bash
 # List sections in the string test suite
 make conformance-sections-string
