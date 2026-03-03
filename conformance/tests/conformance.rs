@@ -68,7 +68,7 @@ impl TestStats {
         }
     }
 
-    fn print_summary(&self, test_file: &str) {
+    fn print_summary(&self, test_file: &str, filtered: bool) {
         let passed = self.passed.load(Ordering::SeqCst);
         let failed = self.failed.load(Ordering::SeqCst);
         let skipped = self.skipped.load(Ordering::SeqCst);
@@ -92,7 +92,11 @@ impl TestStats {
         };
 
         println!("\n{:=<60}", "");
-        println!("Conformance Test Results: {}", test_file);
+        print!("Conformance Test Results: {}", test_file);
+        if filtered {
+            print!(" [FILTERED]");
+        }
+        println!();
         println!("{:-<60}", "");
         println!(
             "PASSED:  {:>4} / {:>4}  ({:>5.1}%)",
@@ -179,11 +183,116 @@ impl ConformanceTestRunner {
         }
     }
 
+    fn list_sections(&self, test_file_path: &Path) {
+        let file_name = test_file_path.file_stem().unwrap().to_str().unwrap();
+        let test_file = self.load_test_file(test_file_path);
+
+        println!("\nAvailable sections in: {}\n", file_name);
+
+        let mut total_sections = 0;
+        let mut total_tests = 0;
+
+        for section in &test_file.section {
+            let test_count = section.test.len();
+            total_sections += 1;
+            total_tests += test_count;
+
+            println!("  {} ({} tests)", section.name, test_count);
+            if !section.description.is_empty() {
+                println!("    {}", section.description);
+            }
+            println!();
+        }
+
+        println!(
+            "Total: {} sections, {} tests\n",
+            total_sections, total_tests
+        );
+    }
+
+    fn list_tests(&self, test_file_path: &Path, section_name: &str) {
+        let file_name = test_file_path.file_stem().unwrap().to_str().unwrap();
+        let test_file = self.load_test_file(test_file_path);
+
+        // Find the specified section
+        let section = test_file.section.iter().find(|s| s.name == section_name);
+
+        match section {
+            Some(section) => {
+                println!("\nTests in section: {} ({})\n", section_name, file_name);
+
+                if !section.description.is_empty() {
+                    println!("{}\n", section.description);
+                }
+
+                for test in &section.test {
+                    println!("  {}", test.name);
+                    println!("    Expression: {:?}", test.expr);
+                    println!();
+                }
+
+                println!("Total: {} tests\n", section.test.len());
+            }
+            None => {
+                eprintln!(
+                    "Error: Section '{}' not found in test file '{}'",
+                    section_name, file_name
+                );
+                eprintln!("\nAvailable sections:");
+                for section in &test_file.section {
+                    eprintln!("  - {}", section.name);
+                }
+                std::process::exit(1);
+            }
+        }
+    }
+
     fn run_test_file(&self, test_file_path: &Path) -> TestStats {
         let file_name = test_file_path.file_stem().unwrap().to_str().unwrap();
 
+        // Check for listing mode
+        let list_mode = std::env::var("CONFORMANCE_LIST").is_ok();
+        if list_mode {
+            let section_filter = std::env::var("CONFORMANCE_SECTION").ok();
+            match section_filter {
+                Some(section_name) => self.list_tests(test_file_path, &section_name),
+                None => self.list_sections(test_file_path),
+            }
+            // Exit after listing - don't run tests
+            std::process::exit(0);
+        }
+
+        // Check for filters
+        let section_filter = std::env::var("CONFORMANCE_SECTION").ok();
+        let test_filter = std::env::var("CONFORMANCE_TEST").ok();
+
+        // Validate: if test filter is set, section filter must also be set
+        if test_filter.is_some() && section_filter.is_none() {
+            eprintln!("Error: CONFORMANCE_TEST requires CONFORMANCE_SECTION to also be set");
+            eprintln!(
+                "Usage: CONFORMANCE_SECTION=<section> CONFORMANCE_TEST=<test> make conformance-<suite>"
+            );
+            std::process::exit(1);
+        }
+
         println!("\n{:=<60}", "");
-        println!("Running conformance tests from: {}", file_name);
+        print!("Running conformance tests from: {}", file_name);
+
+        // Display filter status
+        if section_filter.is_some() || test_filter.is_some() {
+            println!();
+            print!("[Filtered: ");
+            if let Some(ref section) = section_filter {
+                print!("section={}", section);
+                if let Some(ref test) = test_filter {
+                    print!(", test={}", test);
+                }
+            }
+            println!("]");
+        } else {
+            println!();
+        }
+
         println!("{:=<60}", "");
 
         // Load the test file
@@ -194,14 +303,41 @@ impl ConformanceTestRunner {
         // Run each section sequentially (to maintain clean output)
         // but parallelize tests within each section
         for section in &test_file.section {
+            // Apply section filter
+            if let Some(ref filter) = section_filter {
+                if &section.name != filter {
+                    continue; // Skip this section
+                }
+            }
+
             println!("\n  Section: {}", section.name);
             if !section.description.is_empty() {
                 println!("    {}", section.description);
             }
 
+            // Filter tests if needed
+            let tests_to_run: Vec<_> = if let Some(ref filter) = test_filter {
+                section.test.iter().filter(|t| &t.name == filter).collect()
+            } else {
+                section.test.iter().collect()
+            };
+
+            // Check if the test filter didn't match anything
+            if test_filter.is_some() && tests_to_run.is_empty() {
+                eprintln!(
+                    "\nError: Test '{}' not found in section '{}'",
+                    test_filter.as_ref().unwrap(),
+                    section.name
+                );
+                eprintln!("\nAvailable tests in this section:");
+                for test in &section.test {
+                    eprintln!("  - {}", test.name);
+                }
+                std::process::exit(1);
+            }
+
             // Collect results for this section with parallel execution
-            let section_results: Vec<_> = section
-                .test
+            let section_results: Vec<_> = tests_to_run
                 .par_iter()
                 .map(|test| {
                     let result = self.run_single_test(file_name, &section.name, test);
@@ -231,6 +367,21 @@ impl ConformanceTestRunner {
             }
         }
 
+        // Check if section filter didn't match anything
+        if let Some(ref filter) = section_filter {
+            if stats.total.load(Ordering::SeqCst) == 0 {
+                eprintln!(
+                    "\nError: Section '{}' not found in test file '{}'",
+                    filter, file_name
+                );
+                eprintln!("\nAvailable sections:");
+                for section in &test_file.section {
+                    eprintln!("  - {}", section.name);
+                }
+                std::process::exit(1);
+            }
+        }
+
         // Print failed tests at the end
         let failed_tests = failed_tests.into_inner().unwrap();
         if !failed_tests.is_empty() {
@@ -243,7 +394,7 @@ impl ConformanceTestRunner {
             }
         }
 
-        stats.print_summary(file_name);
+        stats.print_summary(file_name, section_filter.is_some() || test_filter.is_some());
         stats
     }
 

@@ -1,4 +1,4 @@
-.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-list conformance-%
+.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-list conformance-% conformance-sections-%
 
 # Default target
 all: ferricel
@@ -101,6 +101,53 @@ conformance-%: $(RUNTIME_TARGET)
 			exit 1 ;; \
 	esac
 
+# List sections or tests in a conformance test suite
+# Usage: make conformance-sections-basic
+#        CONFORMANCE_SECTION=<name> make conformance-sections-basic
+conformance-sections-%: $(RUNTIME_TARGET)
+	@cargo build --package ferricel-core
+	@case "$*" in \
+		basic) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_basic_tests -- --nocapture ;; \
+		comparisons) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_comparisons_tests -- --nocapture ;; \
+		conversions) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_conversions_tests -- --nocapture ;; \
+		fp-math) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_fp_math_tests -- --nocapture ;; \
+		int-math) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_integer_math_tests -- --nocapture ;; \
+		lists) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_lists_tests -- --nocapture ;; \
+		logic) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_logic_tests -- --nocapture ;; \
+		string) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_string_tests -- --nocapture ;; \
+		timestamps) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_timestamps_tests -- --nocapture ;; \
+		*) \
+			echo "Error: Unknown conformance test suite '$*'"; \
+			echo ""; \
+			echo "Available conformance test suites:"; \
+			echo "  conformance-sections-basic       - List sections in basic suite"; \
+			echo "  conformance-sections-comparisons - List sections in comparisons suite"; \
+			echo "  conformance-sections-conversions - List sections in conversions suite"; \
+			echo "  conformance-sections-fp-math     - List sections in fp-math suite"; \
+			echo "  conformance-sections-int-math    - List sections in int-math suite"; \
+			echo "  conformance-sections-lists       - List sections in lists suite"; \
+			echo "  conformance-sections-logic       - List sections in logic suite"; \
+			echo "  conformance-sections-string      - List sections in string suite"; \
+			echo "  conformance-sections-timestamps  - List sections in timestamps suite"; \
+			echo ""; \
+			echo "To list tests in a specific section, use:"; \
+			echo "  CONFORMANCE_SECTION=<section_name> make conformance-sections-<suite>"; \
+			echo ""; \
+			echo "Examples:"; \
+			echo "  make conformance-sections-basic"; \
+			echo "  CONFORMANCE_SECTION=self_eval_zeroish make conformance-sections-basic"; \
+			exit 1 ;; \
+	esac
+
 # List available conformance test suites
 conformance-list:
 	@echo "Available conformance test suites:"
@@ -117,9 +164,23 @@ conformance-list:
 	@echo "  conformance-all         - Run all conformance tests"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make conformance-basic    # Run basic tests"
-	@echo "  make conformance-string   # Run string tests"
+	@echo "  make conformance-basic    # Run all tests in basic suite"
+	@echo "  make conformance-string   # Run all tests in string suite"
 	@echo "  make conformance-all      # Run all tests"
+	@echo ""
+	@echo "Listing sections and tests:"
+	@echo "  make conformance-sections-basic                                  # List all sections"
+	@echo "  CONFORMANCE_SECTION=<section> make conformance-sections-basic    # List tests in section"
+	@echo ""
+	@echo "Running specific sections or tests:"
+	@echo "  CONFORMANCE_SECTION=<section> make conformance-basic             # Run one section"
+	@echo "  CONFORMANCE_SECTION=<section> CONFORMANCE_TEST=<test> make conformance-basic  # Run one test"
+	@echo ""
+	@echo "Discovery workflow example:"
+	@echo "  1. make conformance-list                          # See available suites"
+	@echo "  2. make conformance-sections-basic                # See sections in basic"
+	@echo "  3. CONFORMANCE_SECTION=variables make conformance-sections-basic   # See tests in section"
+	@echo "  4. CONFORMANCE_SECTION=variables make conformance-basic            # Run that section"
 
 # Check code formatting (does not modify files)
 .PHONY: fmt
@@ -154,6 +215,7 @@ help:
 	@echo "  tests            - Run all tests (unit + e2e + conformance)"
 	@echo "  conformance-tests - Run all CEL conformance tests"
 	@echo "  conformance-<name> - Run specific conformance test suite"
+	@echo "  conformance-sections-<name> - List sections in a conformance test suite"
 	@echo "  conformance-list - List available conformance test suites"
 	@echo "  fmt              - Check code formatting (does not modify files)"
 	@echo "  lint             - Run clippy lints with warnings as errors"
@@ -177,6 +239,8 @@ help:
 	@echo "  make conformance-tests"
 	@echo "  make conformance-basic"
 	@echo "  make conformance-list"
+	@echo "  make conformance-sections-basic"
+	@echo "  CONFORMANCE_SECTION=variables make conformance-basic"
 	@echo "  cargo run -p ferricel -- build --expression '10 + 20'"
 	@echo "  cargo run -p ferricel -- build -e '5 + 15' -o output.wasm"
 	@echo "  cargo run -p ferricel -- run output.wasm"
