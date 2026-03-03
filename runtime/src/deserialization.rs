@@ -95,6 +95,7 @@ pub unsafe extern "C" fn cel_free_value(ptr: *mut CelValue) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::CelMapKey;
 
     #[test]
     fn test_decode_ptr_len() {
@@ -198,11 +199,11 @@ mod tests {
         match value {
             CelValue::Object(map) => {
                 assert_eq!(map.len(), 2);
-                match map.get("count") {
+                match map.get(&CelMapKey::String("count".into())) {
                     Some(CelValue::Int(n)) => assert_eq!(*n, 42),
                     _ => panic!("Expected count=42"),
                 }
-                match map.get("enabled") {
+                match map.get(&CelMapKey::String("enabled".into())) {
                     Some(CelValue::Bool(b)) => assert_eq!(*b, true),
                     _ => panic!("Expected enabled=true"),
                 }
@@ -217,14 +218,16 @@ mod tests {
         let value: CelValue = serde_json::from_slice(json).unwrap();
         match value {
             CelValue::Object(map) => {
-                match map.get("user") {
-                    Some(CelValue::Object(user_map)) => match user_map.get("name") {
-                        Some(CelValue::String(s)) => assert_eq!(s, "test"),
-                        _ => panic!("Expected user.name=test"),
-                    },
+                match map.get(&CelMapKey::String("user".into())) {
+                    Some(CelValue::Object(user_map)) => {
+                        match user_map.get(&CelMapKey::String("name".into())) {
+                            Some(CelValue::String(s)) => assert_eq!(s, "test"),
+                            _ => panic!("Expected user.name=test"),
+                        }
+                    }
                     _ => panic!("Expected user object"),
                 }
-                match map.get("id") {
+                match map.get(&CelMapKey::String("id".into())) {
                     Some(CelValue::Int(n)) => assert_eq!(*n, 123),
                     _ => panic!("Expected id=123"),
                 }

@@ -36,6 +36,18 @@ impl CelMapKey {
     }
 }
 
+impl From<String> for CelMapKey {
+    fn from(s: String) -> Self {
+        CelMapKey::String(s)
+    }
+}
+
+impl From<&str> for CelMapKey {
+    fn from(s: &str) -> Self {
+        CelMapKey::String(s.to_string())
+    }
+}
+
 /// Type alias for CEL maps with heterogeneous key types
 type CelMap = HashMap<CelMapKey, CelValue>;
 
@@ -158,7 +170,7 @@ impl Serialize for CelValue {
             }
             CelValue::String(s) => serializer.serialize_str(s),
             CelValue::Bytes(bytes) => {
-                use base64::{Engine as _, engine::general_purpose};
+                use base64::{engine::general_purpose, Engine as _};
                 let encoded = general_purpose::STANDARD.encode(bytes);
                 serializer.serialize_str(&encoded)
             }

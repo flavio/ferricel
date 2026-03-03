@@ -4,7 +4,7 @@
 use ferricel_core::{compiler::compile_cel_to_wasm, runtime};
 use ferricel_types::LogLevel;
 use rstest::rstest;
-use slog::{Drain, Logger, o};
+use slog::{o, Drain, Logger};
 
 /// Test helper: create a logger for tests
 fn create_test_logger() -> Logger {
@@ -1538,6 +1538,84 @@ fn test_cross_type_ordering(#[case] expr: &str, #[case] expected: i64) {
 #[case::ternary_uint("true ? 10u : 20u", 10)]
 #[case::ternary_uint_false("false ? 10u : 20u", 20)]
 fn test_uint_complex_expressions(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
+    );
+}
+
+// String comparison tests
+#[rstest]
+#[case::lt_true("\"a\" < \"b\"", 1)]
+#[case::lt_false("\"b\" < \"a\"", 0)]
+#[case::lt_equal("\"a\" < \"a\"", 0)]
+#[case::lt_empty_to_nonempty("\"\" < \"a\"", 1)]
+#[case::gt_true("\"b\" > \"a\"", 1)]
+#[case::gt_false("\"a\" > \"b\"", 0)]
+#[case::gt_equal("\"a\" > \"a\"", 0)]
+#[case::lte_less("\"a\" <= \"b\"", 1)]
+#[case::lte_equal("\"a\" <= \"a\"", 1)]
+#[case::lte_greater("\"b\" <= \"a\"", 0)]
+#[case::gte_greater("\"b\" >= \"a\"", 1)]
+#[case::gte_equal("\"a\" >= \"a\"", 1)]
+#[case::gte_less("\"a\" >= \"b\"", 0)]
+#[case::lt_case("\"Abc\" < \"aBC\"", 1)] // A < a in lexicographic order
+#[case::gt_case("\"abc\" > \"aBc\"", 1)] // a > B in lexicographic order
+fn test_string_comparisons(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
+    );
+}
+
+// Boolean comparison tests
+#[rstest]
+#[case::lt_false_true("false < true", 1)]
+#[case::lt_true_false("true < false", 0)]
+#[case::lt_false_false("false < false", 0)]
+#[case::lt_true_true("true < true", 0)]
+#[case::gt_true_false("true > false", 1)]
+#[case::gt_false_true("false > true", 0)]
+#[case::gt_false_false("false > false", 0)]
+#[case::lte_false_true("false <= true", 1)]
+#[case::lte_false_false("false <= false", 1)]
+#[case::lte_true_false("false <= true", 1)]
+#[case::gte_true_false("true >= false", 1)]
+#[case::gte_true_true("true >= true", 1)]
+#[case::gte_false_true("false >= true", 0)]
+fn test_bool_comparisons(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
+    );
+}
+
+// Map equality tests with mixed numeric types
+#[rstest]
+#[case::mixed_keys_and_values("{1: 1.0, 2u: 3u} == {1u: 1, 2: 3.0}", 1)]
+#[case::int_uint_keys("{1: 'a', 2: 'b'} == {1u: 'a', 2u: 'b'}", 1)]
+#[case::different_values("{1: 1.0} == {1u: 2.0}", 0)]
+fn test_map_cross_type_equality(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
+    );
+}
+
+// List equality tests with mixed numeric types
+#[rstest]
+#[case::int_uint_equal("[1, 2] == [1u, 2u]", 1)]
+#[case::int_double_equal("[1, 2.0] == [1.0, 2]", 1)]
+#[case::mixed_types("[1, 2u, 3.0] == [1.0, 2, 3u]", 1)]
+fn test_list_cross_type_equality(#[case] expr: &str, #[case] expected: i64) {
     let result = compile_and_execute(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,

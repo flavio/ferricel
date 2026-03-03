@@ -735,11 +735,42 @@ pub(crate) fn cel_equals(a_val: &CelValue, b_val: &CelValue) -> bool {
         (CelValue::Bool(a), CelValue::Bool(b)) => a == b,
         (CelValue::Bytes(a), CelValue::Bytes(b)) => a == b,
         (CelValue::Null, CelValue::Null) => true,
-        (CelValue::Array(a), CelValue::Array(b)) => a == b,
-        (CelValue::Object(a), CelValue::Object(b)) => a == b,
         (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a == b,
         (CelValue::Duration(a), CelValue::Duration(b)) => a == b,
         (CelValue::Type(a), CelValue::Type(b)) => a == b,
+
+        // Array comparison with cross-type numeric equality for elements
+        (CelValue::Array(a), CelValue::Array(b)) => {
+            if a.len() != b.len() {
+                return false;
+            }
+            a.iter().zip(b.iter()).all(|(av, bv)| cel_equals(av, bv))
+        }
+
+        // Map comparison with key normalization and cross-type numeric equality for values
+        (CelValue::Object(a), CelValue::Object(b)) => {
+            if a.len() != b.len() {
+                return false;
+            }
+            // For each key in map a, check if there's an equivalent key in map b with equal value
+            for (a_key, a_value) in a.iter() {
+                // Try to find the key in b, considering numeric key equivalence
+                let mut found = false;
+                for (b_key, b_value) in b.iter() {
+                    if cel_map_keys_equal(a_key, b_key) {
+                        if !cel_equals(a_value, b_value) {
+                            return false;
+                        }
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    return false;
+                }
+            }
+            true
+        }
 
         // Cross-type numeric equality (CEL spec: x == y if !(x < y || x > y))
         (CelValue::Int(a), CelValue::UInt(b)) => {
@@ -762,6 +793,37 @@ pub(crate) fn cel_equals(a_val: &CelValue, b_val: &CelValue) -> bool {
         (CelValue::Double(a), CelValue::UInt(b)) => *a == (*b as f64),
 
         // Different types are not equal
+        _ => false,
+    }
+}
+
+/// Helper function to check if two map keys are equivalent considering numeric type conversions.
+/// Per CEL spec, numeric keys (int, uint) should be compared with cross-type equality.
+fn cel_map_keys_equal(a: &crate::types::CelMapKey, b: &crate::types::CelMapKey) -> bool {
+    use crate::types::CelMapKey;
+    match (a, b) {
+        (CelMapKey::Bool(a), CelMapKey::Bool(b)) => a == b,
+        (CelMapKey::String(a), CelMapKey::String(b)) => a == b,
+
+        // Numeric key comparison with cross-type equality
+        (CelMapKey::Int(a), CelMapKey::Int(b)) => a == b,
+        (CelMapKey::UInt(a), CelMapKey::UInt(b)) => a == b,
+        (CelMapKey::Int(a), CelMapKey::UInt(b)) => {
+            if *a < 0 {
+                false
+            } else {
+                (*a as u64) == *b
+            }
+        }
+        (CelMapKey::UInt(a), CelMapKey::Int(b)) => {
+            if *b < 0 {
+                false
+            } else {
+                *a == (*b as u64)
+            }
+        }
+
+        // Different key types are not equal
         _ => false,
     }
 }
@@ -868,6 +930,8 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::UInt(b)) => a > b,
             (CelValue::Double(a), CelValue::Double(b)) => a > b,
             (CelValue::Bytes(a), CelValue::Bytes(b)) => a > b,
+            (CelValue::String(a), CelValue::String(b)) => a > b,
+            (CelValue::Bool(a), CelValue::Bool(b)) => a > b, // false < true in CEL
             (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a > b,
             (CelValue::Duration(a), CelValue::Duration(b)) => a > b,
 
@@ -925,6 +989,8 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
             (CelValue::UInt(a), CelValue::UInt(b)) => a < b,
             (CelValue::Double(a), CelValue::Double(b)) => a < b,
             (CelValue::Bytes(a), CelValue::Bytes(b)) => a < b,
+            (CelValue::String(a), CelValue::String(b)) => a < b,
+            (CelValue::Bool(a), CelValue::Bool(b)) => a < b, // false < true in CEL
             (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a < b,
             (CelValue::Duration(a), CelValue::Duration(b)) => a < b,
 
@@ -982,6 +1048,8 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             (CelValue::UInt(a), CelValue::UInt(b)) => a >= b,
             (CelValue::Double(a), CelValue::Double(b)) => a >= b,
             (CelValue::Bytes(a), CelValue::Bytes(b)) => a >= b,
+            (CelValue::String(a), CelValue::String(b)) => a >= b,
+            (CelValue::Bool(a), CelValue::Bool(b)) => a >= b, // false < true in CEL
             (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a >= b,
             (CelValue::Duration(a), CelValue::Duration(b)) => a >= b,
 
@@ -1039,6 +1107,8 @@ pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
             (CelValue::UInt(a), CelValue::UInt(b)) => a <= b,
             (CelValue::Double(a), CelValue::Double(b)) => a <= b,
             (CelValue::Bytes(a), CelValue::Bytes(b)) => a <= b,
+            (CelValue::String(a), CelValue::String(b)) => a <= b,
+            (CelValue::Bool(a), CelValue::Bool(b)) => a <= b, // false < true in CEL
             (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a <= b,
             (CelValue::Duration(a), CelValue::Duration(b)) => a <= b,
 
