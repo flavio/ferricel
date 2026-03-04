@@ -34,6 +34,7 @@ pub(crate) fn cel_array_concat(a: &[CelValue], b: &[CelValue]) -> Vec<CelValue> 
 ///
 /// # Safety
 /// - `array_ptr` must be a valid pointer to a CelValue
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_array_len(array_ptr: *mut CelValue) -> i32 {
     let log = crate::logging::get_logger();
@@ -80,6 +81,7 @@ pub unsafe extern "C" fn cel_array_len(array_ptr: *mut CelValue) -> i32 {
 ///
 /// # Safety
 /// - `array_ptr` must be a valid pointer to a CelValue
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_array_get(array_ptr: *mut CelValue, index: i32) -> *mut CelValue {
     let log = crate::logging::get_logger();
@@ -125,6 +127,7 @@ pub unsafe extern "C" fn cel_array_get(array_ptr: *mut CelValue, index: i32) -> 
 /// # Safety
 /// - Caller must ensure the returned pointer is properly freed using cel_free_value
 /// - The returned pointer must not outlive the WASM instance
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_array() -> *mut CelValue {
     let array = CelValue::Array(Vec::new());
@@ -147,6 +150,7 @@ pub unsafe extern "C" fn cel_create_array() -> *mut CelValue {
 /// - `array_ptr` must be a valid pointer to a CelValue
 /// - `element_ptr` must be a valid pointer to a CelValue
 /// - This function mutates the array in place
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_array_push(array_ptr: *mut CelValue, element_ptr: *mut CelValue) {
     let log = crate::logging::get_logger();

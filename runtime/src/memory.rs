@@ -4,6 +4,12 @@ use std::mem;
 
 /// Allocates memory in WASM linear memory.
 /// Returns a pointer to the allocated buffer.
+///
+/// # Safety
+///
+/// This function is unsafe because it returns a raw pointer. The caller must ensure:
+/// - The returned pointer must be freed using `cel_free` with the same length
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_malloc(len: usize) -> *mut u8 {
     let mut buf = Vec::with_capacity(len);
@@ -16,6 +22,7 @@ pub extern "C" fn cel_malloc(len: usize) -> *mut u8 {
 ///
 /// # Safety
 /// The pointer must have been allocated by `cel_malloc` with the same length.
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_free(ptr: *mut u8, len: usize) {
     if !ptr.is_null() && len > 0 {

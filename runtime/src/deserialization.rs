@@ -28,6 +28,7 @@ pub fn decode_ptr_len(encoded: i64) -> (i32, i32) {
 /// # Safety
 /// - The returned pointer must be freed with `cel_free_value`
 /// - Caller must ensure the memory region [ptr, ptr+len) is valid
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_deserialize_json(encoded: i64) -> *mut CelValue {
     let log = crate::logging::get_logger();
@@ -82,6 +83,7 @@ pub unsafe extern "C" fn cel_deserialize_json(encoded: i64) -> *mut CelValue {
 /// - `ptr` must be a valid pointer returned from `cel_deserialize_json`
 /// - `ptr` must not be used after calling this function
 /// - Calling with null pointer is safe (no-op)
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_free_value(ptr: *mut CelValue) {
     if !ptr.is_null() {

@@ -21,6 +21,7 @@ use slog::{debug, error};
 ///
 /// # Safety
 /// - `ptr` must be a valid pointer to a CelValue
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_to_i64(ptr: *mut CelValue) -> i64 {
     let log = crate::logging::get_logger();
@@ -63,6 +64,7 @@ pub unsafe extern "C" fn cel_value_to_i64(ptr: *mut CelValue) -> i64 {
 ///
 /// # Safety
 /// - `ptr` must be a valid pointer to a CelValue
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_to_u64(ptr: *mut CelValue) -> u64 {
     let log = crate::logging::get_logger();
@@ -105,6 +107,7 @@ pub unsafe extern "C" fn cel_value_to_u64(ptr: *mut CelValue) -> u64 {
 ///
 /// # Safety
 /// - `ptr` must be a valid pointer to a CelValue
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
     let log = crate::logging::get_logger();
@@ -142,8 +145,15 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
 /// - uint(int) -> uint (type conversion, panics on negative)
 /// - uint(double) -> uint (rounds toward zero, panics if out of range)
 /// - uint(string) -> uint (parses decimal string, panics on error)
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
+/// - `ptr` is a valid, properly aligned pointer to an initialized CelValue
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -217,8 +227,15 @@ pub extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
 /// - int(uint) -> int (type conversion, panics on overflow)
 /// - int(double) -> int (rounds toward zero, panics if out of range)
 /// - int(string) -> int (parses decimal string, panics on error)
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
+/// - `ptr` is a valid, properly aligned pointer to an initialized CelValue
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -298,8 +315,15 @@ pub extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
 /// - double(int) -> double (type conversion)
 /// - double(uint) -> double (type conversion)
 /// - double(string) -> double (parses string, panics on error)
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
+/// - `ptr` is a valid, properly aligned pointer to an initialized CelValue
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -336,8 +360,15 @@ pub extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
 /// Signatures per CEL spec:
 /// - timestamp(timestamp) -> timestamp (identity)
 /// - timestamp(string) -> timestamp (parses RFC3339 format)
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
+/// - `ptr` is a valid, properly aligned pointer to an initialized CelValue
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_timestamp(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_timestamp(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -402,8 +433,15 @@ pub extern "C" fn cel_timestamp(ptr: *mut CelValue) -> *mut CelValue {
 /// Signatures per CEL spec:
 /// - duration(duration) -> duration (identity)
 /// - duration(string) -> duration (parses CEL duration format like "1h30m")
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
+/// - `ptr` is a valid, properly aligned pointer to an initialized CelValue
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_duration(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_duration(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -445,8 +483,15 @@ pub extern "C" fn cel_duration(ptr: *mut CelValue) -> *mut CelValue {
 /// Signatures per CEL spec:
 /// - bytes(bytes) -> bytes (identity)
 /// - bytes(string) -> bytes (UTF-8 encode string to bytes)
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
+/// - `ptr` is a valid, properly aligned pointer to an initialized CelValue
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_bytes(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_bytes(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -480,8 +525,9 @@ pub extern "C" fn cel_bytes(ptr: *mut CelValue) -> *mut CelValue {
 /// Signatures per CEL spec:
 /// - bool(bool) -> bool (identity)
 /// - bool(string) -> bool (parses "true"/"false" with various cases: "1", "t", "T", "TRUE", "True", "0", "f", "F", "FALSE", "False")
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_bool(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_bool(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -524,8 +570,15 @@ pub extern "C" fn cel_bool(ptr: *mut CelValue) -> *mut CelValue {
 /// CEL string() function - converts values to string.
 /// Handles all CEL types including timestamp, duration, and bytes formatting.
 /// For bytes, validates UTF-8 and panics on invalid sequences per CEL spec.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
+/// - `ptr` is a valid, properly aligned pointer to an initialized CelValue
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -601,8 +654,9 @@ pub extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
 /// CEL type() function - returns the type of a value as a Type value.
 /// Signatures per CEL spec:
 /// - type(value) -> Type (returns runtime type)
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {

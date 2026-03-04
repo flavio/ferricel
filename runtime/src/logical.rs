@@ -4,8 +4,17 @@ use crate::error::create_error_value;
 use crate::helpers::{cel_create_bool, extract_bool};
 use crate::types::CelValue;
 
+/// Boolean AND operator with short-circuit semantics.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_bool_and(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_bool_and(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     unsafe {
         // CEL AND semantics (order matters!):
         // 1. Check short-circuit: false && X => false (don't care about X type)
@@ -16,15 +25,17 @@ pub extern "C" fn cel_bool_and(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
         // Check if left is false (short-circuit, absorbs right)
         if !a_ptr.is_null()
-            && let CelValue::Bool(false) = &*a_ptr {
-                return a_ptr; // false && X => false (X not checked)
-            }
+            && let CelValue::Bool(false) = &*a_ptr
+        {
+            return a_ptr; // false && X => false (X not checked)
+        }
 
         // Check if right is false (short-circuit, absorbs left errors)
         if !b_ptr.is_null()
-            && let CelValue::Bool(false) = &*b_ptr {
-                return b_ptr; // X && false => false (X error absorbed)
-            }
+            && let CelValue::Bool(false) = &*b_ptr
+        {
+            return b_ptr; // X && false => false (X error absorbed)
+        }
 
         // Now type check: both operands must be Bool or Error
         if !a_ptr.is_null() {
@@ -43,14 +54,16 @@ pub extern "C" fn cel_bool_and(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
         // Handle errors (after short-circuit and type check)
         if !a_ptr.is_null()
-            && let CelValue::Error(_) = &*a_ptr {
-                return a_ptr; // error && true => error
-            }
+            && let CelValue::Error(_) = &*a_ptr
+        {
+            return a_ptr; // error && true => error
+        }
 
         if !b_ptr.is_null()
-            && let CelValue::Error(_) = &*b_ptr {
-                return b_ptr; // true && error => error
-            }
+            && let CelValue::Error(_) = &*b_ptr
+        {
+            return b_ptr; // true && error => error
+        }
 
         // Both are true, return true
         let a = extract_bool(a_ptr);
@@ -59,8 +72,17 @@ pub extern "C" fn cel_bool_and(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
     }
 }
 
+/// Boolean OR operator with short-circuit semantics.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     unsafe {
         // CEL OR semantics (order matters!):
         // 1. Check short-circuit: true || X => true (don't care about X type)
@@ -71,15 +93,17 @@ pub extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
 
         // Check if left is true (short-circuit, absorbs right)
         if !a_ptr.is_null()
-            && let CelValue::Bool(true) = &*a_ptr {
-                return a_ptr; // true || X => true (X not checked)
-            }
+            && let CelValue::Bool(true) = &*a_ptr
+        {
+            return a_ptr; // true || X => true (X not checked)
+        }
 
         // Check if right is true (short-circuit, absorbs left errors)
         if !b_ptr.is_null()
-            && let CelValue::Bool(true) = &*b_ptr {
-                return b_ptr; // X || true => true (X error absorbed)
-            }
+            && let CelValue::Bool(true) = &*b_ptr
+        {
+            return b_ptr; // X || true => true (X error absorbed)
+        }
 
         // Now type check: both operands must be Bool or Error
         if !a_ptr.is_null() {
@@ -98,14 +122,16 @@ pub extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
 
         // Handle errors (after short-circuit and type check)
         if !a_ptr.is_null()
-            && let CelValue::Error(_) = &*a_ptr {
-                return a_ptr; // error || false => error
-            }
+            && let CelValue::Error(_) = &*a_ptr
+        {
+            return a_ptr; // error || false => error
+        }
 
         if !b_ptr.is_null()
-            && let CelValue::Error(_) = &*b_ptr {
-                return b_ptr; // false || error => error
-            }
+            && let CelValue::Error(_) = &*b_ptr
+        {
+            return b_ptr; // false || error => error
+        }
 
         // Both are false, return false
         let a = extract_bool(a_ptr);
@@ -114,8 +140,17 @@ pub extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
     }
 }
 
+/// Boolean NOT operator.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - The pointer argument is valid and properly aligned
+/// - The pointer points to an initialized CelValue instance
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_bool_not(a_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_bool_not(a_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_bool(a_ptr);
     cel_create_bool(if !a { 1 } else { 0 })
 }
@@ -124,8 +159,16 @@ pub extern "C" fn cel_bool_not(a_ptr: *mut CelValue) -> *mut CelValue {
 /// Used for comprehension short-circuiting in all() macro.
 /// Returns true (1) if the value is anything other than CelValue::Bool(false).
 /// This includes true, null, errors, and other types.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - The pointer argument is valid and properly aligned (if not null)
+/// - If not null, the pointer points to an initialized CelValue instance
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_not_strictly_false(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_not_strictly_false(ptr: *mut CelValue) -> *mut CelValue {
     unsafe {
         if ptr.is_null() {
             // Null is not strictly false
@@ -143,8 +186,16 @@ pub extern "C" fn cel_not_strictly_false(ptr: *mut CelValue) -> *mut CelValue {
 /// If condition is true, returns true_value, otherwise returns false_value.
 /// If condition is an error, returns the error.
 /// The condition is evaluated as a boolean using extract_bool.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - All pointer arguments are valid and properly aligned
+/// - All pointers point to initialized CelValue instances
+/// - The returned pointer (one of the input pointers) must not be freed prematurely
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_conditional(
+pub unsafe extern "C" fn cel_conditional(
     cond_ptr: *mut CelValue,
     true_ptr: *mut CelValue,
     false_ptr: *mut CelValue,
@@ -152,9 +203,10 @@ pub extern "C" fn cel_conditional(
     // Check if condition is an error and propagate it
     unsafe {
         if !cond_ptr.is_null()
-            && let CelValue::Error(_) = &*cond_ptr {
-                return cond_ptr;
-            }
+            && let CelValue::Error(_) = &*cond_ptr
+        {
+            return cond_ptr;
+        }
     }
 
     let cond = extract_bool(cond_ptr);
@@ -164,8 +216,15 @@ pub extern "C" fn cel_conditional(
 /// Check if a CelValue is strictly false.
 /// Returns 1 if value is CelValue::Bool(false), 0 otherwise.
 /// Used for conditional short-circuit evaluation of && operator.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - The pointer argument is valid and properly aligned (if not null)
+/// - If not null, the pointer points to an initialized CelValue instance
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_is_strictly_false(ptr: *mut CelValue) -> i32 {
+pub unsafe extern "C" fn cel_is_strictly_false(ptr: *mut CelValue) -> i32 {
     unsafe {
         if ptr.is_null() {
             return 0;
@@ -180,8 +239,15 @@ pub extern "C" fn cel_is_strictly_false(ptr: *mut CelValue) -> i32 {
 /// Check if a CelValue is strictly true.
 /// Returns 1 if value is CelValue::Bool(true), 0 otherwise.
 /// Used for conditional short-circuit evaluation of || operator.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - The pointer argument is valid and properly aligned (if not null)
+/// - If not null, the pointer points to an initialized CelValue instance
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_is_strictly_true(ptr: *mut CelValue) -> i32 {
+pub unsafe extern "C" fn cel_is_strictly_true(ptr: *mut CelValue) -> i32 {
     unsafe {
         if ptr.is_null() {
             return 0;
@@ -196,8 +262,15 @@ pub extern "C" fn cel_is_strictly_true(ptr: *mut CelValue) -> i32 {
 /// Check if a CelValue is an error.
 /// Returns 1 if value is CelValue::Error, 0 otherwise.
 /// Used for error propagation and absorption in logical operators.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - The pointer argument is valid and properly aligned (if not null)
+/// - If not null, the pointer points to an initialized CelValue instance
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_is_error(ptr: *mut CelValue) -> i32 {
+pub unsafe extern "C" fn cel_is_error(ptr: *mut CelValue) -> i32 {
     unsafe {
         if ptr.is_null() {
             return 0;
@@ -212,8 +285,15 @@ pub extern "C" fn cel_is_error(ptr: *mut CelValue) -> i32 {
 /// Check if a CelValue is a boolean or error.
 /// Returns 1 if value is CelValue::Bool or CelValue::Error, 0 otherwise.
 /// Used for type checking in logical operators.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - The pointer argument is valid and properly aligned (if not null)
+/// - If not null, the pointer points to an initialized CelValue instance
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_is_bool_or_error(ptr: *mut CelValue) -> i32 {
+pub unsafe extern "C" fn cel_is_bool_or_error(ptr: *mut CelValue) -> i32 {
     unsafe {
         if ptr.is_null() {
             return 0;
@@ -231,25 +311,29 @@ mod tests {
 
     #[test]
     fn test_conditional_true() {
-        let cond = cel_create_bool(1);
-        let true_val = cel_create_bool(1);
-        let false_val = cel_create_bool(0);
-        let result = cel_conditional(cond, true_val, false_val);
-        assert_eq!(
-            result, true_val,
-            "Should return true value when condition is true"
-        );
+        unsafe {
+            let cond = cel_create_bool(1);
+            let true_val = cel_create_bool(1);
+            let false_val = cel_create_bool(0);
+            let result = cel_conditional(cond, true_val, false_val);
+            assert_eq!(
+                result, true_val,
+                "Should return true value when condition is true"
+            );
+        }
     }
 
     #[test]
     fn test_conditional_false() {
-        let cond = cel_create_bool(0);
-        let true_val = cel_create_bool(1);
-        let false_val = cel_create_bool(0);
-        let result = cel_conditional(cond, true_val, false_val);
-        assert_eq!(
-            result, false_val,
-            "Should return false value when condition is false"
-        );
+        unsafe {
+            let cond = cel_create_bool(0);
+            let true_val = cel_create_bool(1);
+            let false_val = cel_create_bool(0);
+            let result = cel_conditional(cond, true_val, false_val);
+            assert_eq!(
+                result, false_val,
+                "Should return false value when condition is false"
+            );
+        }
     }
 }

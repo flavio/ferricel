@@ -26,6 +26,7 @@ use std::slice;
 /// - `obj_ptr` must be a valid pointer to a CelValue
 /// - `field_name_ptr` must point to valid UTF-8 bytes in WASM memory
 /// - `field_name_len` must be the correct length
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_get_field(
     obj_ptr: *mut CelValue,
@@ -119,9 +120,10 @@ fn is_wrapper_field_unset(
         // Check if this field is in the wrapper fields array
         for field in wrapper_fields {
             if let CelValue::String(wrapper_field_name) = field
-                && wrapper_field_name == field_name {
-                    return true;
-                }
+                && wrapper_field_name == field_name
+            {
+                return true;
+            }
         }
     }
 
@@ -139,14 +141,14 @@ fn is_wrapper_field_unset(
 /// - Pointer to a new boxed CelValue::Bool(true) if field exists
 /// - Pointer to a new boxed CelValue::Bool(false) if field missing or obj is not an Object
 ///
-/// # Panics
-/// - If `obj_ptr` is null
-/// - If the field name is invalid UTF-8
-///
 /// # Safety
-/// - `obj_ptr` must be a valid pointer to a CelValue
-/// - `field_name_ptr` must point to valid UTF-8 bytes in WASM memory
-/// - `field_name_len` must be the correct length
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `obj_ptr` is a valid pointer to an initialized CelValue instance
+/// - `field_name_ptr` points to valid UTF-8 bytes in WASM memory
+/// - `field_name_len` is the correct length of the field name
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_has_field(
     obj_ptr: *mut CelValue,

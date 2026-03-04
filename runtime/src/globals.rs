@@ -22,6 +22,7 @@ static mut DATA_VALUE: *mut CelValue = ptr::null_mut();
 /// # Safety
 /// - Must be called before any expression evaluation that uses `input`
 /// - `ptr` must be a valid pointer from cel_deserialize_json or null
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_init_input(ptr: *mut CelValue) {
     // SAFETY: Writing to static mut, single-threaded WASM environment
@@ -39,6 +40,7 @@ pub unsafe extern "C" fn cel_init_input(ptr: *mut CelValue) {
 /// # Safety
 /// - Must be called before any expression evaluation that uses `data`
 /// - `ptr` must be a valid pointer from cel_deserialize_json or null
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_init_data(ptr: *mut CelValue) {
     // SAFETY: Writing to static mut, single-threaded WASM environment
@@ -59,6 +61,7 @@ pub unsafe extern "C" fn cel_init_data(ptr: *mut CelValue) {
 /// # Safety
 /// - Safe to call after cel_init_input in single-threaded WASM environment
 /// - Returned pointer is valid until cel_reset_globals is called
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_get_input() -> *mut CelValue {
     // SAFETY: Reading from static, single-threaded WASM environment
@@ -77,6 +80,7 @@ pub unsafe extern "C" fn cel_get_input() -> *mut CelValue {
 /// # Safety
 /// - Safe to call after cel_init_data in single-threaded WASM environment
 /// - Returned pointer is valid until cel_reset_globals is called
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_get_data() -> *mut CelValue {
     // SAFETY: Reading from static, single-threaded WASM environment
@@ -90,6 +94,7 @@ pub unsafe extern "C" fn cel_get_data() -> *mut CelValue {
 /// # Safety
 /// - Safe to call at any time
 /// - Does not free the pointed-to values (caller must call cel_free_value separately)
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_reset_globals() {
     // SAFETY: Writing to static mut, single-threaded WASM environment

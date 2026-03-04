@@ -8,73 +8,118 @@ use crate::{arithmetic, array, bytes, string, temporal};
 use slog::{debug, error};
 
 /// Creates a CelValue::Int on the heap and returns a pointer to it.
-/// The caller is responsible for freeing the memory using cel_free_value.
+///
+/// # Safety
+///
+/// This function is unsafe because it returns a raw pointer. The caller must ensure:
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_create_int(value: i64) -> *mut CelValue {
+pub unsafe extern "C" fn cel_create_int(value: i64) -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::Int(value)))
 }
 
 /// Creates a CelValue::UInt on the heap and returns a pointer to it.
-/// The caller is responsible for freeing the memory using cel_free_value.
+///
+/// # Safety
+///
+/// This function is unsafe because it returns a raw pointer. The caller must ensure:
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_create_uint(value: u64) -> *mut CelValue {
+pub unsafe extern "C" fn cel_create_uint(value: u64) -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::UInt(value)))
 }
 
 /// Creates a CelValue::Bool on the heap and returns a pointer to it.
 /// Input: i64 where 0 = false, non-zero = true
-/// The caller is responsible for freeing the memory using cel_free_value.
+///
+/// # Safety
+///
+/// This function is unsafe because it returns a raw pointer. The caller must ensure:
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_create_bool(value: i64) -> *mut CelValue {
+pub unsafe extern "C" fn cel_create_bool(value: i64) -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::Bool(value != 0)))
 }
 
 /// Creates a CelValue::Double on the heap and returns a pointer to it.
-/// The caller is responsible for freeing the memory using cel_free_value.
+///
+/// # Safety
+///
+/// This function is unsafe because it returns a raw pointer. The caller must ensure:
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_create_double(value: f64) -> *mut CelValue {
+pub unsafe extern "C" fn cel_create_double(value: f64) -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::Double(value)))
 }
 
 /// Creates a CelValue::Timestamp on the heap and returns a pointer to it.
-/// The caller is responsible for freeing the memory using cel_free_value.
 ///
 /// # Arguments
 /// * `seconds` - Seconds since Unix epoch (1970-01-01T00:00:00Z)
 /// * `nanos` - Nanoseconds component (0-999,999,999)
+///
+/// # Safety
+///
+/// This function is unsafe because it returns a raw pointer. The caller must ensure:
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_create_timestamp(seconds: i64, nanos: i64) -> *mut CelValue {
+pub unsafe extern "C" fn cel_create_timestamp(seconds: i64, nanos: i64) -> *mut CelValue {
     let dt = crate::chrono_helpers::parts_to_datetime(seconds, nanos);
     Box::into_raw(Box::new(CelValue::Timestamp(dt)))
 }
 
 /// Creates a CelValue::Duration on the heap and returns a pointer to it.
-/// The caller is responsible for freeing the memory using cel_free_value.
 ///
 /// # Arguments
 /// * `seconds` - Number of seconds (can be negative)
 /// * `nanos` - Nanoseconds component (0-999,999,999 or negative)
+///
+/// # Safety
+///
+/// This function is unsafe because it returns a raw pointer. The caller must ensure:
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_create_duration(seconds: i64, nanos: i64) -> *mut CelValue {
+pub unsafe extern "C" fn cel_create_duration(seconds: i64, nanos: i64) -> *mut CelValue {
     let duration = crate::chrono_helpers::parts_to_duration(seconds, nanos);
     Box::into_raw(Box::new(CelValue::Duration(duration)))
 }
 
 /// Creates a CelValue::Null on the heap and returns a pointer to it.
-/// The caller is responsible for freeing the memory using cel_free_value.
+///
+/// # Safety
+///
+/// This function is unsafe because it returns a raw pointer. The caller must ensure:
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_create_null() -> *mut CelValue {
+pub unsafe extern "C" fn cel_create_null() -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::Null))
 }
 
 /// Creates a CelValue::Type on the heap from a string pointer and returns a pointer to it.
-/// The caller is responsible for freeing the memory using cel_free_value.
 ///
 /// # Arguments
 /// * `type_name_ptr` - Pointer to the type name string in WASM memory
 /// * `type_name_len` - Length of the type name string
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `type_name_ptr` points to valid UTF-8 bytes in WASM memory
+/// - `type_name_len` is the correct length of the type name
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_create_type(type_name_ptr: *const u8, type_name_len: i32) -> *mut CelValue {
+pub unsafe extern "C" fn cel_create_type(
+    type_name_ptr: *const u8,
+    type_name_len: i32,
+) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -93,13 +138,23 @@ pub extern "C" fn cel_create_type(type_name_ptr: *const u8, type_name_len: i32) 
 }
 
 /// Creates a CelValue::Error on the heap from a string pointer and returns a pointer to it.
-/// The caller is responsible for freeing the memory using cel_free_value.
 ///
 /// # Arguments
 /// * `error_msg_ptr` - Pointer to the error message string in WASM memory
 /// * `error_msg_len` - Length of the error message string
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `error_msg_ptr` points to valid bytes in WASM memory (if not null)
+/// - `error_msg_len` is the correct length of the error message
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_create_error(error_msg_ptr: *const u8, error_msg_len: i32) -> *mut CelValue {
+pub unsafe extern "C" fn cel_create_error(
+    error_msg_ptr: *const u8,
+    error_msg_len: i32,
+) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -418,8 +473,12 @@ pub(crate) fn extract_timestamp_with_log(
 /// - If the operand types don't match
 /// - If the operation is not supported for the given types
 /// - On integer overflow (for Int addition)
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_add(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -502,8 +561,18 @@ pub extern "C" fn cel_value_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 /// Dispatches to type-specific implementations based on operand types.
 ///
 /// Note: Following CEL spec, there is NO automatic type coercion.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_sub(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -574,8 +643,18 @@ pub extern "C" fn cel_value_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 }
 
 /// Polymorphic multiplication operator for CelValue objects.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_mul(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -634,8 +713,18 @@ pub extern "C" fn cel_value_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 }
 
 /// Polymorphic division operator for CelValue objects.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_div(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -700,8 +789,18 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
 /// Polymorphic modulo operator for CelValue objects.
 /// Note: Per CEL spec, modulo is only defined for int and uint.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_mod(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -925,8 +1024,15 @@ fn cel_map_keys_equal(a: &crate::types::CelMapKey, b: &crate::types::CelMapKey) 
 /// Polymorphic equality operator for CelValue objects.
 /// Implements CEL spec cross-type numeric equality: int, uint, and double
 /// are compared as if they exist on a continuous number line.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -954,8 +1060,15 @@ pub extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
 /// Polymorphic inequality operator for CelValue objects.
 /// Implements CEL spec cross-type numeric inequality (negation of equality).
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -1020,8 +1133,15 @@ pub extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
 /// Polymorphic greater-than operator for CelValue objects.
 /// Implements CEL spec cross-type numeric ordering.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -1086,8 +1206,15 @@ pub extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
 /// Polymorphic less-than operator for CelValue objects.
 /// Implements CEL spec cross-type numeric ordering.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -1153,8 +1280,18 @@ pub extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 
 /// Polymorphic greater-than-or-equal operator for CelValue objects.
 /// Implements CEL spec cross-type numeric ordering.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_gte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -1220,8 +1357,18 @@ pub extern "C" fn cel_value_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 
 /// Polymorphic less-than-or-equal operator for CelValue objects.
 /// Implements CEL spec cross-type numeric ordering.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
+/// - The returned pointer must be freed using `cel_free` when no longer needed
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_lte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -1304,8 +1451,9 @@ pub extern "C" fn cel_value_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 /// # Panics
 /// - If the pointer is null
 /// - If the type doesn't support size operation
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
+pub unsafe extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -1351,8 +1499,9 @@ pub extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
 /// - If the pointer is null
 /// - If the type doesn't support negation
 /// - On integer overflow (negating i64::MIN)
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     unsafe {
@@ -1409,8 +1558,9 @@ pub extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
 ///
 /// # Safety
 /// - Both pointers must be valid CelValue pointers
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_value_index(
+pub unsafe extern "C" fn cel_value_index(
     container_ptr: *mut CelValue,
     index_ptr: *mut CelValue,
 ) -> *mut CelValue {
@@ -1512,8 +1662,8 @@ mod tests {
 
     #[test]
     fn test_create_int() {
-        let ptr = cel_create_int(42);
         unsafe {
+            let ptr = cel_create_int(42);
             assert_eq!(*ptr, CelValue::Int(42));
             // Clean up
             let _ = Box::from_raw(ptr);
@@ -1522,8 +1672,8 @@ mod tests {
 
     #[test]
     fn test_create_bool_true() {
-        let ptr = cel_create_bool(1);
         unsafe {
+            let ptr = cel_create_bool(1);
             assert_eq!(*ptr, CelValue::Bool(true));
             let _ = Box::from_raw(ptr);
         }
@@ -1531,8 +1681,8 @@ mod tests {
 
     #[test]
     fn test_create_bool_false() {
-        let ptr = cel_create_bool(0);
         unsafe {
+            let ptr = cel_create_bool(0);
             assert_eq!(*ptr, CelValue::Bool(false));
             let _ = Box::from_raw(ptr);
         }
@@ -1540,8 +1690,8 @@ mod tests {
 
     #[test]
     fn test_create_bool_nonzero() {
-        let ptr = cel_create_bool(42);
         unsafe {
+            let ptr = cel_create_bool(42);
             assert_eq!(*ptr, CelValue::Bool(true));
             let _ = Box::from_raw(ptr);
         }
@@ -1549,38 +1699,38 @@ mod tests {
 
     #[test]
     fn test_extract_int() {
-        let ptr = cel_create_int(123);
-        let value = extract_int(ptr);
-        assert_eq!(value, 123);
         unsafe {
+            let ptr = cel_create_int(123);
+            let value = extract_int(ptr);
+            assert_eq!(value, 123);
             let _ = Box::from_raw(ptr);
         }
     }
 
     #[test]
     fn test_extract_bool_true() {
-        let ptr = cel_create_bool(1);
-        let value = extract_bool(ptr);
-        assert_eq!(value, true);
         unsafe {
+            let ptr = cel_create_bool(1);
+            let value = extract_bool(ptr);
+            assert_eq!(value, true);
             let _ = Box::from_raw(ptr);
         }
     }
 
     #[test]
     fn test_extract_bool_false() {
-        let ptr = cel_create_bool(0);
-        let value = extract_bool(ptr);
-        assert_eq!(value, false);
         unsafe {
+            let ptr = cel_create_bool(0);
+            let value = extract_bool(ptr);
+            assert_eq!(value, false);
             let _ = Box::from_raw(ptr);
         }
     }
 
     #[test]
     fn test_create_double() {
-        let ptr = cel_create_double(3.14);
         unsafe {
+            let ptr = cel_create_double(3.14);
             assert_eq!(*ptr, CelValue::Double(3.14));
             let _ = Box::from_raw(ptr);
         }
@@ -1588,8 +1738,8 @@ mod tests {
 
     #[test]
     fn test_create_double_negative() {
-        let ptr = cel_create_double(-2.5);
         unsafe {
+            let ptr = cel_create_double(-2.5);
             assert_eq!(*ptr, CelValue::Double(-2.5));
             let _ = Box::from_raw(ptr);
         }
@@ -1597,10 +1747,10 @@ mod tests {
 
     #[test]
     fn test_extract_double() {
-        let ptr = cel_create_double(123.456);
-        let value = extract_double(ptr);
-        assert_eq!(value, 123.456);
         unsafe {
+            let ptr = cel_create_double(123.456);
+            let value = extract_double(ptr);
+            assert_eq!(value, 123.456);
             let _ = Box::from_raw(ptr);
         }
     }
@@ -1670,8 +1820,8 @@ mod tests {
 
     #[test]
     fn test_create_uint() {
-        let ptr = cel_create_uint(123);
         unsafe {
+            let ptr = cel_create_uint(123);
             assert_eq!(*ptr, CelValue::UInt(123));
             let _ = Box::from_raw(ptr);
         }
@@ -1679,8 +1829,8 @@ mod tests {
 
     #[test]
     fn test_create_uint_max() {
-        let ptr = cel_create_uint(u64::MAX);
         unsafe {
+            let ptr = cel_create_uint(u64::MAX);
             assert_eq!(*ptr, CelValue::UInt(u64::MAX));
             let _ = Box::from_raw(ptr);
         }
@@ -1688,10 +1838,10 @@ mod tests {
 
     #[test]
     fn test_extract_uint() {
-        let ptr = cel_create_uint(12345);
-        let value = extract_uint(ptr);
-        assert_eq!(value, 12345);
         unsafe {
+            let ptr = cel_create_uint(12345);
+            let value = extract_uint(ptr);
+            assert_eq!(value, 12345);
             let _ = Box::from_raw(ptr);
         }
     }

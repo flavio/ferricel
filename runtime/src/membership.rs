@@ -22,12 +22,13 @@ use slog::{debug, error, info};
 /// # Returns
 /// - Pointer to CelValue::Bool(true) if element is found, false otherwise
 ///
-/// # Panics
-/// - If either pointer is null
-/// - If types don't match CEL specification (no_matching_overload)
-///
 /// # Safety
-/// - Both pointers must be valid CelValue pointers
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_in(
     element_ptr: *mut CelValue,

@@ -61,8 +61,17 @@ pub(crate) fn double_div(a: f64, b: f64) -> f64 {
     a / b
 }
 
+/// Subtracts two integers with overflow checking.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Int instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
     match a.checked_sub(b) {
@@ -71,8 +80,17 @@ pub extern "C" fn cel_int_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
     }
 }
 
+/// Multiplies two integers with overflow checking.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Int instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
     match a.checked_mul(b) {
@@ -81,8 +99,17 @@ pub extern "C" fn cel_int_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
     }
 }
 
+/// Divides two integers with overflow and division-by-zero checking.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Int instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
 
@@ -97,8 +124,17 @@ pub extern "C" fn cel_int_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
     }
 }
 
+/// Computes modulus of two integers with overflow and modulus-by-zero checking.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Int instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_int(a_ptr);
     let b = extract_int(b_ptr);
 
@@ -113,11 +149,17 @@ pub extern "C" fn cel_int_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
     }
 }
 
-// Unsigned integer arithmetic operations (FFI wrappers)
-// Following same pattern as signed integer operations
-
+/// Adds two unsigned integers with overflow checking.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     match a.checked_add(b) {
@@ -126,8 +168,17 @@ pub extern "C" fn cel_uint_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
     }
 }
 
+/// Subtracts two unsigned integers with underflow checking.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     match a.checked_sub(b) {
@@ -136,8 +187,17 @@ pub extern "C" fn cel_uint_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
     }
 }
 
+/// Multiplies two unsigned integers with overflow checking.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     match a.checked_mul(b) {
@@ -146,8 +206,17 @@ pub extern "C" fn cel_uint_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
     }
 }
 
+/// Divides two unsigned integers with division-by-zero checking.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     if b == 0 {
@@ -156,8 +225,17 @@ pub extern "C" fn cel_uint_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
     cel_create_uint(a / b)
 }
 
+/// Computes modulus of two unsigned integers with modulus-by-zero checking.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     if b == 0 {
@@ -166,35 +244,81 @@ pub extern "C" fn cel_uint_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
     cel_create_uint(a % b)
 }
 
-// Double arithmetic operations (FFI wrappers)
-// Note: No modulo for doubles - CEL spec only defines modulo for int and uint
-
+/// Adds two doubles using IEEE 754 floating point arithmetic.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Double instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double_add(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double_add(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
     let result = double_add(a, b);
     cel_create_double(result)
 }
 
+/// Subtracts two doubles using IEEE 754 floating point arithmetic.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Double instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double_sub(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double_sub(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
     let result = double_sub(a, b);
     cel_create_double(result)
 }
 
+/// Multiplies two doubles using IEEE 754 floating point arithmetic.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Double instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double_mul(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double_mul(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
     let result = double_mul(a, b);
     cel_create_double(result)
 }
 
+/// Divides two doubles using IEEE 754 floating point arithmetic.
+/// Division by zero yields Infinity or NaN per IEEE 754.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Double instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double_div(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let log = crate::logging::get_logger();
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
@@ -316,11 +440,13 @@ mod tests {
     #[case::add_zero(5, 0, 5)]
     #[case::add_large(u64::MAX - 100, 50, u64::MAX - 50)]
     fn test_uint_add(#[case] a: u64, #[case] b: u64, #[case] expected: u64) {
-        let a_val = cel_create_uint(a);
-        let b_val = cel_create_uint(b);
-        let result_ptr = cel_uint_add(a_val, b_val);
-        let result = extract_uint(result_ptr);
-        assert_eq!(result, expected);
+        unsafe {
+            let a_val = cel_create_uint(a);
+            let b_val = cel_create_uint(b);
+            let result_ptr = cel_uint_add(a_val, b_val);
+            let result = extract_uint(result_ptr);
+            assert_eq!(result, expected);
+        }
     }
 
     #[rstest]
@@ -328,11 +454,13 @@ mod tests {
     #[case::sub_zero(5, 0, 5)]
     #[case::sub_same(100, 100, 0)]
     fn test_uint_sub(#[case] a: u64, #[case] b: u64, #[case] expected: u64) {
-        let a_val = cel_create_uint(a);
-        let b_val = cel_create_uint(b);
-        let result_ptr = cel_uint_sub(a_val, b_val);
-        let result = extract_uint(result_ptr);
-        assert_eq!(result, expected);
+        unsafe {
+            let a_val = cel_create_uint(a);
+            let b_val = cel_create_uint(b);
+            let result_ptr = cel_uint_sub(a_val, b_val);
+            let result = extract_uint(result_ptr);
+            assert_eq!(result, expected);
+        }
     }
 
     #[rstest]
@@ -340,11 +468,13 @@ mod tests {
     #[case::mul_zero(5, 0, 0)]
     #[case::mul_one(100, 1, 100)]
     fn test_uint_mul(#[case] a: u64, #[case] b: u64, #[case] expected: u64) {
-        let a_val = cel_create_uint(a);
-        let b_val = cel_create_uint(b);
-        let result_ptr = cel_uint_mul(a_val, b_val);
-        let result = extract_uint(result_ptr);
-        assert_eq!(result, expected);
+        unsafe {
+            let a_val = cel_create_uint(a);
+            let b_val = cel_create_uint(b);
+            let result_ptr = cel_uint_mul(a_val, b_val);
+            let result = extract_uint(result_ptr);
+            assert_eq!(result, expected);
+        }
     }
 
     #[rstest]
@@ -352,11 +482,13 @@ mod tests {
     #[case::div_one(100, 1, 100)]
     #[case::div_truncate(7, 3, 2)]
     fn test_uint_div(#[case] a: u64, #[case] b: u64, #[case] expected: u64) {
-        let a_val = cel_create_uint(a);
-        let b_val = cel_create_uint(b);
-        let result_ptr = cel_uint_div(a_val, b_val);
-        let result = extract_uint(result_ptr);
-        assert_eq!(result, expected);
+        unsafe {
+            let a_val = cel_create_uint(a);
+            let b_val = cel_create_uint(b);
+            let result_ptr = cel_uint_div(a_val, b_val);
+            let result = extract_uint(result_ptr);
+            assert_eq!(result, expected);
+        }
     }
 
     #[rstest]
@@ -364,11 +496,13 @@ mod tests {
     #[case::mod_zero(10, 5, 0)]
     #[case::mod_large(100, 7, 2)]
     fn test_uint_mod(#[case] a: u64, #[case] b: u64, #[case] expected: u64) {
-        let a_val = cel_create_uint(a);
-        let b_val = cel_create_uint(b);
-        let result_ptr = cel_uint_mod(a_val, b_val);
-        let result = extract_uint(result_ptr);
-        assert_eq!(result, expected);
+        unsafe {
+            let a_val = cel_create_uint(a);
+            let b_val = cel_create_uint(b);
+            let result_ptr = cel_uint_mod(a_val, b_val);
+            let result = extract_uint(result_ptr);
+            assert_eq!(result, expected);
+        }
     }
 
     // Note: Panic tests for overflow/underflow/division by zero removed

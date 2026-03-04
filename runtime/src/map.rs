@@ -13,7 +13,10 @@ use std::collections::HashMap;
 /// - Pointer to a new CelValue::Object (empty HashMap)
 ///
 /// # Safety
-/// - Returns a heap-allocated pointer that must be properly managed
+///
+/// This function is unsafe because it returns a raw pointer. The caller must ensure:
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_map() -> *mut CelValue {
     let map = CelValue::Object(HashMap::new());
@@ -25,19 +28,16 @@ pub unsafe extern "C" fn cel_create_map() -> *mut CelValue {
 ///
 /// # Parameters
 /// - `map_ptr`: Pointer to a CelValue (must be an Object/HashMap variant)
-/// - `key_ptr`: Pointer to a CelValue to use as the key (must be a String)
+/// - `key_ptr`: Pointer to a CelValue to use as the key (must be bool, int, uint, or string)
 /// - `value_ptr`: Pointer to a CelValue to use as the value
 ///
-/// # Panics
-/// - If `map_ptr` is null
-/// - If `key_ptr` is null
-/// - If `value_ptr` is null
-/// - If the map CelValue is not an Object
-/// - If the key CelValue is not a String
-///
 /// # Safety
-/// - All pointers must be valid CelValue pointers
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - All pointer arguments are valid and properly aligned
+/// - All pointers point to initialized CelValue instances
 /// - This function mutates the map in place
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_map_insert(
     map_ptr: *mut CelValue,

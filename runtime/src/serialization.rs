@@ -32,16 +32,28 @@ fn serialize_to_json(value: &CelValue) -> i64 {
 
 /// Convert i64 result to CelValue::Int and serialize to JSON.
 /// Returns encoded (ptr, len) as i64.
+///
+/// # Safety
+///
+/// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64. The caller must ensure:
+/// - The returned pointer (decoded from low 32 bits) must be freed using `cel_free` with the length (decoded from high 32 bits)
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_serialize_int(value: i64) -> i64 {
+pub unsafe extern "C" fn cel_serialize_int(value: i64) -> i64 {
     let cel_value = CelValue::Int(value);
     serialize_to_json(&cel_value)
 }
 
 /// Convert i64 boolean (0 or 1) to CelValue::Bool and serialize to JSON.
 /// Returns encoded (ptr, len) as i64.
+///
+/// # Safety
+///
+/// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64. The caller must ensure:
+/// - The returned pointer (decoded from low 32 bits) must be freed using `cel_free` with the length (decoded from high 32 bits)
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_serialize_bool(value: i64) -> i64 {
+pub unsafe extern "C" fn cel_serialize_bool(value: i64) -> i64 {
     let cel_value = CelValue::Bool(value != 0);
     serialize_to_json(&cel_value)
 }
@@ -49,8 +61,15 @@ pub extern "C" fn cel_serialize_bool(value: i64) -> i64 {
 /// Serialize a CelValue pointer to JSON.
 /// Takes a *mut CelValue and serializes it to JSON.
 /// Returns encoded (ptr, len) as i64.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers and allocates memory. The caller must ensure:
+/// - `value_ptr` is a valid pointer to an initialized CelValue instance
+/// - The returned pointer (decoded from low 32 bits) must be freed using `cel_free` with the length (decoded from high 32 bits)
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_serialize_value(value_ptr: *mut CelValue) -> i64 {
+pub unsafe extern "C" fn cel_serialize_value(value_ptr: *mut CelValue) -> i64 {
     unsafe {
         if value_ptr.is_null() {
             panic!("Null pointer passed to cel_serialize_value");

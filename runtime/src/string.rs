@@ -27,17 +27,20 @@ pub(crate) fn cel_string_concat(a: &str, b: &str) -> String {
 
 /// Creates a CelValue::String from a raw UTF-8 byte sequence.
 ///
-/// # Safety
-/// - `data_ptr` must point to valid UTF-8 bytes
-/// - `len` must be the correct length of the UTF-8 sequence
-/// - The caller retains ownership of the input data
-///
 /// # Arguments
 /// - `data_ptr`: Pointer to UTF-8 bytes
 /// - `len`: Length of the UTF-8 sequence in bytes
 ///
 /// # Returns
 /// Pointer to a heap-allocated CelValue::String
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `data_ptr` points to valid UTF-8 bytes
+/// - `len` is the correct length of the UTF-8 sequence
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_string(data_ptr: *const u8, len: usize) -> *mut CelValue {
     // Read the UTF-8 bytes from memory
@@ -55,14 +58,17 @@ pub unsafe extern "C" fn cel_create_string(data_ptr: *const u8, len: usize) -> *
 
 /// Returns the size of a string in Unicode codepoints.
 ///
-/// # Safety
-/// - `string_ptr` must be a valid pointer to a CelValue::String
-///
 /// # Arguments
 /// - `string_ptr`: Pointer to a CelValue containing a string
 ///
 /// # Returns
 /// The number of Unicode codepoints in the string
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - `string_ptr` is a valid pointer to an initialized CelValue instance
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_size(string_ptr: *const CelValue) -> i64 {
     // SAFETY: Caller guarantees string_ptr is valid
@@ -76,15 +82,20 @@ pub unsafe extern "C" fn cel_string_size(string_ptr: *const CelValue) -> i64 {
 
 /// Tests whether a string starts with a given prefix.
 ///
-/// # Safety
-/// - Both pointers must be valid CelValue::String pointers
-///
 /// # Arguments
 /// - `string_ptr`: Pointer to the string to test
 /// - `prefix_ptr`: Pointer to the prefix to check
 ///
 /// # Returns
 /// Pointer to CelValue::Bool(true) if string starts with prefix, false otherwise
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_starts_with(
     string_ptr: *const CelValue,
@@ -104,15 +115,20 @@ pub unsafe extern "C" fn cel_string_starts_with(
 
 /// Tests whether a string ends with a given suffix.
 ///
-/// # Safety
-/// - Both pointers must be valid CelValue::String pointers
-///
 /// # Arguments
 /// - `string_ptr`: Pointer to the string to test
 /// - `suffix_ptr`: Pointer to the suffix to check
 ///
 /// # Returns
 /// Pointer to CelValue::Bool(true) if string ends with suffix, false otherwise
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_ends_with(
     string_ptr: *const CelValue,
@@ -132,15 +148,20 @@ pub unsafe extern "C" fn cel_string_ends_with(
 
 /// Tests whether a string contains a given substring.
 ///
-/// # Safety
-/// - Both pointers must be valid CelValue::String pointers
-///
 /// # Arguments
 /// - `string_ptr`: Pointer to the string to test
 /// - `substring_ptr`: Pointer to the substring to find
 ///
 /// # Returns
 /// Pointer to CelValue::Bool(true) if string contains substring, false otherwise
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_contains(
     string_ptr: *const CelValue,
@@ -163,10 +184,6 @@ pub unsafe extern "C" fn cel_string_contains(
 /// Matches succeed if the pattern matches ANY substring of the input string.
 /// Use anchors (^ and $) to force full-string matching.
 ///
-/// # Safety
-/// - `string_ptr` must be a valid pointer to a CelValue::String
-/// - `pattern_ptr` must be a valid pointer to a CelValue::String
-///
 /// # Arguments
 /// - `string_ptr`: Pointer to a CelValue containing the string to test
 /// - `pattern_ptr`: Pointer to a CelValue containing the regex pattern
@@ -174,10 +191,13 @@ pub unsafe extern "C" fn cel_string_contains(
 /// # Returns
 /// Pointer to a heap-allocated CelValue::Bool
 ///
-/// # Panics
-/// - If the regex pattern is invalid
-/// - If either argument is not a String
-/// - If either argument is Null
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue instances (must be String variants)
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_matches(
     string_ptr: *const CelValue,

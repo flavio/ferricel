@@ -14,19 +14,30 @@ use crate::types::CelValue;
 fn check_for_errors(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> Option<*mut CelValue> {
     unsafe {
         if !a_ptr.is_null()
-            && let CelValue::Error(_) = &*a_ptr {
-                return Some(a_ptr);
-            }
+            && let CelValue::Error(_) = &*a_ptr
+        {
+            return Some(a_ptr);
+        }
         if !b_ptr.is_null()
-            && let CelValue::Error(_) = &*b_ptr {
-                return Some(b_ptr);
-            }
+            && let CelValue::Error(_) = &*b_ptr
+        {
+            return Some(b_ptr);
+        }
     }
     None
 }
 
+/// Compares two integers for equality.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Int instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     if let Some(err) = check_for_errors(a_ptr, b_ptr) {
         return err;
     }
@@ -35,8 +46,17 @@ pub extern "C" fn cel_int_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut
     cel_create_bool(if a == b { 1 } else { 0 })
 }
 
+/// Compares two integers for inequality.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Int instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     if let Some(err) = check_for_errors(a_ptr, b_ptr) {
         return err;
     }
@@ -45,8 +65,17 @@ pub extern "C" fn cel_int_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut
     cel_create_bool(if a != b { 1 } else { 0 })
 }
 
+/// Tests if first integer is greater than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Int instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     if let Some(err) = check_for_errors(a_ptr, b_ptr) {
         return err;
     }
@@ -55,8 +84,17 @@ pub extern "C" fn cel_int_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut
     cel_create_bool(if a > b { 1 } else { 0 })
 }
 
+/// Tests if first integer is less than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Int instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     if let Some(err) = check_for_errors(a_ptr, b_ptr) {
         return err;
     }
@@ -65,8 +103,17 @@ pub extern "C" fn cel_int_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut
     cel_create_bool(if a < b { 1 } else { 0 })
 }
 
+/// Tests if first integer is greater than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Int instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     if let Some(err) = check_for_errors(a_ptr, b_ptr) {
         return err;
     }
@@ -75,8 +122,17 @@ pub extern "C" fn cel_int_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
     cel_create_bool(if a >= b { 1 } else { 0 })
 }
 
+/// Tests if first integer is less than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Int instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_int_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_int_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     if let Some(err) = check_for_errors(a_ptr, b_ptr) {
         return err;
     }
@@ -87,43 +143,97 @@ pub extern "C" fn cel_int_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
 
 // Unsigned integer comparison operations
 
+/// Compares two unsigned integers for equality.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     cel_create_bool(if a == b { 1 } else { 0 })
 }
 
+/// Compares two unsigned integers for inequality.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     cel_create_bool(if a != b { 1 } else { 0 })
 }
 
+/// Tests if first unsigned integer is greater than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     cel_create_bool(if a > b { 1 } else { 0 })
 }
 
+/// Tests if first unsigned integer is less than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     cel_create_bool(if a < b { 1 } else { 0 })
 }
 
+/// Tests if first unsigned integer is greater than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     cel_create_bool(if a >= b { 1 } else { 0 })
 }
 
+/// Tests if first unsigned integer is less than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::UInt instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_uint_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_uint_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_uint(a_ptr);
     let b = extract_uint(b_ptr);
     cel_create_bool(if a <= b { 1 } else { 0 })
@@ -132,43 +242,115 @@ pub extern "C" fn cel_uint_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
 // Double comparison operations
 // Note: These follow IEEE 754 semantics where NaN != NaN is true
 
+/// Compares two doubles for equality (IEEE 754 semantics).
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Double instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double_eq(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
     cel_create_bool(if a == b { 1 } else { 0 })
 }
 
+/// Compares two doubles for inequality (IEEE 754 semantics).
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Double instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double_ne(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
     cel_create_bool(if a != b { 1 } else { 0 })
 }
 
+/// Tests if first double is greater than second (IEEE 754 semantics).
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Double instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double_gt(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
     cel_create_bool(if a > b { 1 } else { 0 })
 }
 
+/// Tests if first double is less than second (IEEE 754 semantics).
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Double instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double_lt(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
     cel_create_bool(if a < b { 1 } else { 0 })
 }
 
+/// Tests if first double is greater than or equal to second (IEEE 754 semantics).
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Double instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double_gte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
     cel_create_bool(if a >= b { 1 } else { 0 })
 }
 
+/// Tests if first double is less than or equal to second (IEEE 754 semantics).
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Double instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_double_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_double_lte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_double(a_ptr);
     let b = extract_double(b_ptr);
     cel_create_bool(if a <= b { 1 } else { 0 })
@@ -187,10 +369,10 @@ mod tests {
         op: unsafe extern "C" fn(*mut CelValue, *mut CelValue) -> *mut CelValue,
         expected: bool,
     ) {
-        let a_ptr = crate::helpers::cel_create_double(a);
-        let b_ptr = crate::helpers::cel_create_double(b);
-
         unsafe {
+            let a_ptr = crate::helpers::cel_create_double(a);
+            let b_ptr = crate::helpers::cel_create_double(b);
+
             let result_ptr = op(a_ptr, b_ptr);
             let result = match &*result_ptr {
                 CelValue::Bool(b) => *b,
@@ -267,10 +449,10 @@ mod tests {
         op: unsafe extern "C" fn(*mut CelValue, *mut CelValue) -> *mut CelValue,
         expected: bool,
     ) {
-        let a_ptr = crate::helpers::cel_create_uint(a);
-        let b_ptr = crate::helpers::cel_create_uint(b);
-
         unsafe {
+            let a_ptr = crate::helpers::cel_create_uint(a);
+            let b_ptr = crate::helpers::cel_create_uint(b);
+
             let result_ptr = op(a_ptr, b_ptr);
             let result = match &*result_ptr {
                 CelValue::Bool(b) => *b,
@@ -339,29 +521,77 @@ mod tests {
 // Timestamp comparison functions
 use crate::helpers::extract_timestamp;
 
+/// Tests if first timestamp is less than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Timestamp instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_timestamp_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_timestamp_lt(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_timestamp(a_ptr);
     let b = extract_timestamp(b_ptr);
     cel_create_bool(if a < b { 1 } else { 0 })
 }
 
+/// Tests if first timestamp is less than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Timestamp instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_timestamp_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_timestamp_lte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_timestamp(a_ptr);
     let b = extract_timestamp(b_ptr);
     cel_create_bool(if a <= b { 1 } else { 0 })
 }
 
+/// Tests if first timestamp is greater than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Timestamp instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_timestamp_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_timestamp_gt(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_timestamp(a_ptr);
     let b = extract_timestamp(b_ptr);
     cel_create_bool(if a > b { 1 } else { 0 })
 }
 
+/// Tests if first timestamp is greater than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Timestamp instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_timestamp_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_timestamp_gte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_timestamp(a_ptr);
     let b = extract_timestamp(b_ptr);
     cel_create_bool(if a >= b { 1 } else { 0 })
@@ -370,29 +600,77 @@ pub extern "C" fn cel_timestamp_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) 
 // Duration comparison functions
 use crate::helpers::extract_duration_chrono;
 
+/// Tests if first duration is less than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Duration instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_duration_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_duration_lt(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_duration_chrono(a_ptr);
     let b = extract_duration_chrono(b_ptr);
     cel_create_bool(if a < b { 1 } else { 0 })
 }
 
+/// Tests if first duration is less than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Duration instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_duration_lte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_duration_lte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_duration_chrono(a_ptr);
     let b = extract_duration_chrono(b_ptr);
     cel_create_bool(if a <= b { 1 } else { 0 })
 }
 
+/// Tests if first duration is greater than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Duration instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_duration_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_duration_gt(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_duration_chrono(a_ptr);
     let b = extract_duration_chrono(b_ptr);
     cel_create_bool(if a > b { 1 } else { 0 })
 }
 
+/// Tests if first duration is greater than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Duration instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub extern "C" fn cel_duration_gte(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe extern "C" fn cel_duration_gte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
     let a = extract_duration_chrono(a_ptr);
     let b = extract_duration_chrono(b_ptr);
     cel_create_bool(if a >= b { 1 } else { 0 })
