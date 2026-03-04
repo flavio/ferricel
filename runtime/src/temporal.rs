@@ -242,7 +242,7 @@ pub extern "C" fn cel_duration_get_milliseconds(dur_ptr: *mut CelValue) -> *mut 
 /// Validates that a DateTime is within the valid CEL range.
 fn validate_datetime(dt: &chrono::DateTime<chrono::FixedOffset>) {
     let seconds = dt.timestamp();
-    if seconds < MIN_TIMESTAMP_SECONDS || seconds > MAX_TIMESTAMP_SECONDS {
+    if !(MIN_TIMESTAMP_SECONDS..=MAX_TIMESTAMP_SECONDS).contains(&seconds) {
         panic!(
             "timestamp out of valid range (0001-01-01 to 9999-12-31): {} seconds",
             seconds
@@ -253,7 +253,7 @@ fn validate_datetime(dt: &chrono::DateTime<chrono::FixedOffset>) {
 /// Validates that a duration is within the valid CEL range.
 /// Valid range: slightly less than the maximum timestamp span (±315537897598 seconds)
 fn validate_duration(seconds: i64, _nanos: i32) {
-    if seconds < MIN_DURATION_SECONDS || seconds > MAX_DURATION_SECONDS {
+    if !(MIN_DURATION_SECONDS..=MAX_DURATION_SECONDS).contains(&seconds) {
         panic!(
             "duration out of valid range (±{} seconds): {} seconds",
             MAX_DURATION_SECONDS, seconds

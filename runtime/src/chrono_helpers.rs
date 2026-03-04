@@ -62,7 +62,7 @@ pub fn parse_rfc3339(s: &str) -> Result<DateTime<FixedOffset>, String> {
 
     // Validate year range per CEL spec: 0001-01-01 to 9999-12-31
     let year = dt.year();
-    if year < 1 || year > 9999 {
+    if !(1..=9999).contains(&year) {
         return Err(format!(
             "timestamp year {} is out of valid CEL range (0001-9999)",
             year
@@ -91,13 +91,13 @@ pub fn parse_rfc3339(s: &str) -> Result<DateTime<FixedOffset>, String> {
 /// - `Ok(Duration)` if parse succeeds
 /// - `Err(String)` with error message
 pub fn parse_duration(s: &str) -> Result<Duration, String> {
-    use nom::IResult;
     use nom::branch::alt;
     use nom::bytes::complete::tag;
     use nom::character::complete::char;
     use nom::combinator::{map, opt};
     use nom::multi::many1;
     use nom::number::complete::double;
+    use nom::IResult;
 
     enum Unit {
         Nanosecond,
@@ -196,7 +196,7 @@ pub fn parse_duration(s: &str) -> Result<Duration, String> {
                 const MAX_DURATION_SECONDS: i64 = 315_537_897_598;
 
                 let seconds = duration.num_seconds();
-                if seconds < MIN_DURATION_SECONDS || seconds > MAX_DURATION_SECONDS {
+                if !(MIN_DURATION_SECONDS..=MAX_DURATION_SECONDS).contains(&seconds) {
                     return Err(format!(
                         "duration out of valid range (±{} seconds): {} seconds",
                         MAX_DURATION_SECONDS, seconds
