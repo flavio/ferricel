@@ -118,11 +118,10 @@ fn is_wrapper_field_unset(
     if let Some(CelValue::Array(wrapper_fields)) = map.get(&wrapper_fields_key) {
         // Check if this field is in the wrapper fields array
         for field in wrapper_fields {
-            if let CelValue::String(wrapper_field_name) = field {
-                if wrapper_field_name == field_name {
+            if let CelValue::String(wrapper_field_name) = field
+                && wrapper_field_name == field_name {
                     return true;
                 }
-            }
         }
     }
 

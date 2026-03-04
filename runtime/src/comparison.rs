@@ -13,16 +13,14 @@ use crate::types::CelValue;
 /// Returns Some(error_ptr) if either is an error, None otherwise.
 fn check_for_errors(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> Option<*mut CelValue> {
     unsafe {
-        if !a_ptr.is_null() {
-            if let CelValue::Error(_) = &*a_ptr {
+        if !a_ptr.is_null()
+            && let CelValue::Error(_) = &*a_ptr {
                 return Some(a_ptr);
             }
-        }
-        if !b_ptr.is_null() {
-            if let CelValue::Error(_) = &*b_ptr {
+        if !b_ptr.is_null()
+            && let CelValue::Error(_) = &*b_ptr {
                 return Some(b_ptr);
             }
-        }
     }
     None
 }

@@ -15,18 +15,16 @@ pub extern "C" fn cel_bool_and(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
         // 5. Apply boolean AND
 
         // Check if left is false (short-circuit, absorbs right)
-        if !a_ptr.is_null() {
-            if let CelValue::Bool(false) = &*a_ptr {
+        if !a_ptr.is_null()
+            && let CelValue::Bool(false) = &*a_ptr {
                 return a_ptr; // false && X => false (X not checked)
             }
-        }
 
         // Check if right is false (short-circuit, absorbs left errors)
-        if !b_ptr.is_null() {
-            if let CelValue::Bool(false) = &*b_ptr {
+        if !b_ptr.is_null()
+            && let CelValue::Bool(false) = &*b_ptr {
                 return b_ptr; // X && false => false (X error absorbed)
             }
-        }
 
         // Now type check: both operands must be Bool or Error
         if !a_ptr.is_null() {
@@ -44,17 +42,15 @@ pub extern "C" fn cel_bool_and(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *m
         }
 
         // Handle errors (after short-circuit and type check)
-        if !a_ptr.is_null() {
-            if let CelValue::Error(_) = &*a_ptr {
+        if !a_ptr.is_null()
+            && let CelValue::Error(_) = &*a_ptr {
                 return a_ptr; // error && true => error
             }
-        }
 
-        if !b_ptr.is_null() {
-            if let CelValue::Error(_) = &*b_ptr {
+        if !b_ptr.is_null()
+            && let CelValue::Error(_) = &*b_ptr {
                 return b_ptr; // true && error => error
             }
-        }
 
         // Both are true, return true
         let a = extract_bool(a_ptr);
@@ -74,18 +70,16 @@ pub extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
         // 5. Apply boolean OR
 
         // Check if left is true (short-circuit, absorbs right)
-        if !a_ptr.is_null() {
-            if let CelValue::Bool(true) = &*a_ptr {
+        if !a_ptr.is_null()
+            && let CelValue::Bool(true) = &*a_ptr {
                 return a_ptr; // true || X => true (X not checked)
             }
-        }
 
         // Check if right is true (short-circuit, absorbs left errors)
-        if !b_ptr.is_null() {
-            if let CelValue::Bool(true) = &*b_ptr {
+        if !b_ptr.is_null()
+            && let CelValue::Bool(true) = &*b_ptr {
                 return b_ptr; // X || true => true (X error absorbed)
             }
-        }
 
         // Now type check: both operands must be Bool or Error
         if !a_ptr.is_null() {
@@ -103,17 +97,15 @@ pub extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mu
         }
 
         // Handle errors (after short-circuit and type check)
-        if !a_ptr.is_null() {
-            if let CelValue::Error(_) = &*a_ptr {
+        if !a_ptr.is_null()
+            && let CelValue::Error(_) = &*a_ptr {
                 return a_ptr; // error || false => error
             }
-        }
 
-        if !b_ptr.is_null() {
-            if let CelValue::Error(_) = &*b_ptr {
+        if !b_ptr.is_null()
+            && let CelValue::Error(_) = &*b_ptr {
                 return b_ptr; // false || error => error
             }
-        }
 
         // Both are false, return false
         let a = extract_bool(a_ptr);
@@ -159,11 +151,10 @@ pub extern "C" fn cel_conditional(
 ) -> *mut CelValue {
     // Check if condition is an error and propagate it
     unsafe {
-        if !cond_ptr.is_null() {
-            if let CelValue::Error(_) = &*cond_ptr {
+        if !cond_ptr.is_null()
+            && let CelValue::Error(_) = &*cond_ptr {
                 return cond_ptr;
             }
-        }
     }
 
     let cond = extract_bool(cond_ptr);
