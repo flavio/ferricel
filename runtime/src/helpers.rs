@@ -1712,7 +1712,7 @@ mod tests {
         unsafe {
             let ptr = cel_create_bool(1);
             let value = extract_bool(ptr);
-            assert_eq!(value, true);
+            assert!(value);
             let _ = Box::from_raw(ptr);
         }
     }
@@ -1722,7 +1722,7 @@ mod tests {
         unsafe {
             let ptr = cel_create_bool(0);
             let value = extract_bool(ptr);
-            assert_eq!(value, false);
+            assert!(!value);
             let _ = Box::from_raw(ptr);
         }
     }

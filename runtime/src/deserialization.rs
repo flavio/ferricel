@@ -139,7 +139,7 @@ mod tests {
         let json = b"true";
         let value: CelValue = serde_json::from_slice(json).unwrap();
         match value {
-            CelValue::Bool(b) => assert_eq!(b, true),
+            CelValue::Bool(b) => assert!(b),
             _ => panic!("Expected Bool, got {:?}", value),
         }
     }
@@ -206,7 +206,7 @@ mod tests {
                     _ => panic!("Expected count=42"),
                 }
                 match map.get(&CelMapKey::String("enabled".into())) {
-                    Some(CelValue::Bool(b)) => assert_eq!(*b, true),
+                    Some(CelValue::Bool(b)) => assert!(*b),
                     _ => panic!("Expected enabled=true"),
                 }
             }
