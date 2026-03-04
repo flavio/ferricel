@@ -1730,8 +1730,8 @@ mod tests {
     #[test]
     fn test_create_double() {
         unsafe {
-            let ptr = cel_create_double(3.14);
-            assert_eq!(*ptr, CelValue::Double(3.14));
+            let ptr = cel_create_double(3.15);
+            assert_eq!(*ptr, CelValue::Double(3.15));
             let _ = Box::from_raw(ptr);
         }
     }

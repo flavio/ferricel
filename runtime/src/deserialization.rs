@@ -146,10 +146,10 @@ mod tests {
 
     #[test]
     fn test_parse_json_double() {
-        let json = b"3.14";
+        let json = b"3.15";
         let value: CelValue = serde_json::from_slice(json).unwrap();
         match value {
-            CelValue::Double(d) => assert_eq!(d, 3.14),
+            CelValue::Double(d) => assert_eq!(d, 3.15),
             _ => panic!("Expected Double, got {:?}", value),
         }
     }

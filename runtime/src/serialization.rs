@@ -115,9 +115,9 @@ mod tests {
 
     #[test]
     fn test_celvalue_json_double() {
-        let value = CelValue::Double(3.14);
+        let value = CelValue::Double(3.15);
         let json = serde_json::to_string(&value).unwrap();
-        assert_eq!(json, "3.14");
+        assert_eq!(json, "3.15");
     }
 
     #[test]

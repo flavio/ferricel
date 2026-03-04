@@ -547,8 +547,8 @@ mod tests {
     // Double comparison tests with IEEE 754 semantics
 
     #[rstest]
-    #[case::eq_same(3.14, 3.14, true)]
-    #[case::eq_different(3.14, 2.71, false)]
+    #[case::eq_same(3.15, 3.15, true)]
+    #[case::eq_different(3.15, 2.71, false)]
     #[case::eq_negative(-5.0, -5.0, true)]
     #[case::eq_nan(f64::NAN, f64::NAN, false)] // IEEE 754: NaN != NaN
     fn test_double_eq(#[case] a: f64, #[case] b: f64, #[case] expected: bool) {
@@ -556,8 +556,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ne_same(3.14, 3.14, false)]
-    #[case::ne_different(3.14, 2.71, true)]
+    #[case::ne_same(3.15, 3.15, false)]
+    #[case::ne_different(3.15, 2.71, true)]
     #[case::ne_nan(f64::NAN, f64::NAN, true)] // IEEE 754: NaN != NaN is true
     fn test_double_ne(#[case] a: f64, #[case] b: f64, #[case] expected: bool) {
         assert_double_comparison(a, b, cel_double_ne, expected);

@@ -167,8 +167,8 @@ mod tests {
         true
     )]
     #[case::double_in_list(
-        CelValue::Double(3.14),
-        CelValue::Array(vec![CelValue::Double(1.0), CelValue::Double(2.0), CelValue::Double(3.14)]),
+        CelValue::Double(3.15),
+        CelValue::Array(vec![CelValue::Double(1.0), CelValue::Double(2.0), CelValue::Double(3.15)]),
         true
     )]
     #[case::bytes_in_list(
