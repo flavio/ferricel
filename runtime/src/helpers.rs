@@ -666,7 +666,7 @@ pub extern "C" fn cel_value_div(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
                             "operation" => "cel_value_div",
                             "dividend" => *a,
                             "divisor" => *b);
-                        return crate::error::create_error_value("return error for overflow");
+                        crate::error::create_error_value("return error for overflow")
                     }
                 }
             }
