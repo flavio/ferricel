@@ -356,6 +356,164 @@ pub unsafe extern "C" fn cel_double_lte(
     cel_create_bool(if a <= b { 1 } else { 0 })
 }
 
+// Timestamp comparison functions
+use crate::helpers::extract_timestamp;
+
+/// Tests if first timestamp is less than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Timestamp instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_timestamp_lt(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let a = extract_timestamp(a_ptr);
+    let b = extract_timestamp(b_ptr);
+    cel_create_bool(if a < b { 1 } else { 0 })
+}
+
+/// Tests if first timestamp is less than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Timestamp instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_timestamp_lte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let a = extract_timestamp(a_ptr);
+    let b = extract_timestamp(b_ptr);
+    cel_create_bool(if a <= b { 1 } else { 0 })
+}
+
+/// Tests if first timestamp is greater than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Timestamp instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_timestamp_gt(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let a = extract_timestamp(a_ptr);
+    let b = extract_timestamp(b_ptr);
+    cel_create_bool(if a > b { 1 } else { 0 })
+}
+
+/// Tests if first timestamp is greater than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Timestamp instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_timestamp_gte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let a = extract_timestamp(a_ptr);
+    let b = extract_timestamp(b_ptr);
+    cel_create_bool(if a >= b { 1 } else { 0 })
+}
+
+// Duration comparison functions
+use crate::helpers::extract_duration_chrono;
+
+/// Tests if first duration is less than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Duration instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_duration_lt(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let a = extract_duration_chrono(a_ptr);
+    let b = extract_duration_chrono(b_ptr);
+    cel_create_bool(if a < b { 1 } else { 0 })
+}
+
+/// Tests if first duration is less than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Duration instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_duration_lte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let a = extract_duration_chrono(a_ptr);
+    let b = extract_duration_chrono(b_ptr);
+    cel_create_bool(if a <= b { 1 } else { 0 })
+}
+
+/// Tests if first duration is greater than second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Duration instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_duration_gt(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let a = extract_duration_chrono(a_ptr);
+    let b = extract_duration_chrono(b_ptr);
+    cel_create_bool(if a > b { 1 } else { 0 })
+}
+
+/// Tests if first duration is greater than or equal to second.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid and properly aligned
+/// - Both pointers point to initialized CelValue::Duration instances
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_duration_gte(
+    a_ptr: *mut CelValue,
+    b_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let a = extract_duration_chrono(a_ptr);
+    let b = extract_duration_chrono(b_ptr);
+    cel_create_bool(if a >= b { 1 } else { 0 })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -516,162 +674,4 @@ mod tests {
     fn test_uint_lte(#[case] a: u64, #[case] b: u64, #[case] expected: bool) {
         assert_uint_comparison(a, b, cel_uint_lte, expected);
     }
-}
-
-// Timestamp comparison functions
-use crate::helpers::extract_timestamp;
-
-/// Tests if first timestamp is less than second.
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Timestamp instances
-/// - The returned pointer must be freed using the appropriate cleanup function
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_timestamp_lt(
-    a_ptr: *mut CelValue,
-    b_ptr: *mut CelValue,
-) -> *mut CelValue {
-    let a = extract_timestamp(a_ptr);
-    let b = extract_timestamp(b_ptr);
-    cel_create_bool(if a < b { 1 } else { 0 })
-}
-
-/// Tests if first timestamp is less than or equal to second.
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Timestamp instances
-/// - The returned pointer must be freed using the appropriate cleanup function
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_timestamp_lte(
-    a_ptr: *mut CelValue,
-    b_ptr: *mut CelValue,
-) -> *mut CelValue {
-    let a = extract_timestamp(a_ptr);
-    let b = extract_timestamp(b_ptr);
-    cel_create_bool(if a <= b { 1 } else { 0 })
-}
-
-/// Tests if first timestamp is greater than second.
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Timestamp instances
-/// - The returned pointer must be freed using the appropriate cleanup function
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_timestamp_gt(
-    a_ptr: *mut CelValue,
-    b_ptr: *mut CelValue,
-) -> *mut CelValue {
-    let a = extract_timestamp(a_ptr);
-    let b = extract_timestamp(b_ptr);
-    cel_create_bool(if a > b { 1 } else { 0 })
-}
-
-/// Tests if first timestamp is greater than or equal to second.
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Timestamp instances
-/// - The returned pointer must be freed using the appropriate cleanup function
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_timestamp_gte(
-    a_ptr: *mut CelValue,
-    b_ptr: *mut CelValue,
-) -> *mut CelValue {
-    let a = extract_timestamp(a_ptr);
-    let b = extract_timestamp(b_ptr);
-    cel_create_bool(if a >= b { 1 } else { 0 })
-}
-
-// Duration comparison functions
-use crate::helpers::extract_duration_chrono;
-
-/// Tests if first duration is less than second.
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Duration instances
-/// - The returned pointer must be freed using the appropriate cleanup function
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_lt(
-    a_ptr: *mut CelValue,
-    b_ptr: *mut CelValue,
-) -> *mut CelValue {
-    let a = extract_duration_chrono(a_ptr);
-    let b = extract_duration_chrono(b_ptr);
-    cel_create_bool(if a < b { 1 } else { 0 })
-}
-
-/// Tests if first duration is less than or equal to second.
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Duration instances
-/// - The returned pointer must be freed using the appropriate cleanup function
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_lte(
-    a_ptr: *mut CelValue,
-    b_ptr: *mut CelValue,
-) -> *mut CelValue {
-    let a = extract_duration_chrono(a_ptr);
-    let b = extract_duration_chrono(b_ptr);
-    cel_create_bool(if a <= b { 1 } else { 0 })
-}
-
-/// Tests if first duration is greater than second.
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Duration instances
-/// - The returned pointer must be freed using the appropriate cleanup function
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_gt(
-    a_ptr: *mut CelValue,
-    b_ptr: *mut CelValue,
-) -> *mut CelValue {
-    let a = extract_duration_chrono(a_ptr);
-    let b = extract_duration_chrono(b_ptr);
-    cel_create_bool(if a > b { 1 } else { 0 })
-}
-
-/// Tests if first duration is greater than or equal to second.
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Duration instances
-/// - The returned pointer must be freed using the appropriate cleanup function
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_gte(
-    a_ptr: *mut CelValue,
-    b_ptr: *mut CelValue,
-) -> *mut CelValue {
-    let a = extract_duration_chrono(a_ptr);
-    let b = extract_duration_chrono(b_ptr);
-    cel_create_bool(if a >= b { 1 } else { 0 })
 }
