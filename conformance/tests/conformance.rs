@@ -130,15 +130,12 @@ struct SkipRule {
 impl SkipList {
     fn new() -> Self {
         // Start with a default skip list for known limitations
-        let mut rules = Vec::new();
-
-        // Skip protocol buffer tests (not supported yet)
-        rules.push(SkipRule {
+        let rules = vec![SkipRule {
             file: Some("proto2".to_string()),
             section: None,
             test: None,
             reason: "Protocol buffer support not implemented".to_string(),
-        });
+        }];
 
         // Note: proto3 tests are now partially supported with wrapper type semantics
         // Individual tests may still fail for unimplemented features
@@ -148,9 +145,9 @@ impl SkipList {
 
     fn should_skip(&self, file: &str, section: &str, test: &str) -> Option<String> {
         for rule in &self.rules {
-            let file_match = rule.file.as_ref().map_or(true, |f| f == file);
-            let section_match = rule.section.as_ref().map_or(true, |s| s == section);
-            let test_match = rule.test.as_ref().map_or(true, |t| t == test);
+            let file_match = rule.file.as_ref().is_none_or(|f| f == file);
+            let section_match = rule.section.as_ref().is_none_or(|s| s == section);
+            let test_match = rule.test.as_ref().is_none_or(|t| t == test);
 
             if file_match && section_match && test_match {
                 return Some(rule.reason.clone());
@@ -305,10 +302,10 @@ impl ConformanceTestRunner {
         // but parallelize tests within each section
         for section in &test_file.section {
             // Apply section filter
-            if let Some(ref filter) = section_filter {
-                if &section.name != filter {
-                    continue; // Skip this section
-                }
+            if let Some(ref filter) = section_filter
+                && &section.name != filter
+            {
+                continue; // Skip this section
             }
 
             println!("\n  Section: {}", section.name);
@@ -324,11 +321,12 @@ impl ConformanceTestRunner {
             };
 
             // Check if the test filter didn't match anything
-            if test_filter.is_some() && tests_to_run.is_empty() {
+            if let Some(ref filter) = test_filter
+                && tests_to_run.is_empty()
+            {
                 eprintln!(
                     "\nError: Test '{}' not found in section '{}'",
-                    test_filter.as_ref().unwrap(),
-                    section.name
+                    filter, section.name
                 );
                 eprintln!("\nAvailable tests in this section:");
                 for test in &section.test {
@@ -369,18 +367,18 @@ impl ConformanceTestRunner {
         }
 
         // Check if section filter didn't match anything
-        if let Some(ref filter) = section_filter {
-            if stats.total.load(Ordering::SeqCst) == 0 {
-                eprintln!(
-                    "\nError: Section '{}' not found in test file '{}'",
-                    filter, file_name
-                );
-                eprintln!("\nAvailable sections:");
-                for section in &test_file.section {
-                    eprintln!("  - {}", section.name);
-                }
-                std::process::exit(1);
+        if let Some(ref filter) = section_filter
+            && stats.total.load(Ordering::SeqCst) == 0
+        {
+            eprintln!(
+                "\nError: Section '{}' not found in test file '{}'",
+                filter, file_name
+            );
+            eprintln!("\nAvailable sections:");
+            for section in &test_file.section {
+                eprintln!("  - {}", section.name);
             }
+            std::process::exit(1);
         }
 
         // Print failed tests at the end
@@ -476,12 +474,12 @@ impl ConformanceTestRunner {
 
         // Step 5: Check if result is an error value and convert to expected format
         // CEL error values serialize as {"error": "message"}, but tests expect "error: message" string
-        if let Some(obj) = parsed.as_object() {
-            if obj.len() == 1 && obj.contains_key("error") {
-                if let Some(error_msg) = obj.get("error").and_then(|v| v.as_str()) {
-                    return Ok(JsonValue::String(format!("error: {}", error_msg)));
-                }
-            }
+        if let Some(obj) = parsed.as_object()
+            && obj.len() == 1
+            && obj.contains_key("error")
+            && let Some(error_msg) = obj.get("error").and_then(|v| v.as_str())
+        {
+            return Ok(JsonValue::String(format!("error: {}", error_msg)));
         }
 
         Ok(parsed)
@@ -635,8 +633,7 @@ impl ConformanceTestRunner {
         match (expected, actual) {
             (JsonValue::Number(e), JsonValue::Number(a)) => {
                 // Handle NaN specially
-                if e.as_f64().map_or(false, |f| f.is_nan())
-                    && a.as_f64().map_or(false, |f| f.is_nan())
+                if e.as_f64().is_some_and(|f| f.is_nan()) && a.as_f64().is_some_and(|f| f.is_nan())
                 {
                     return true;
                 }
@@ -664,7 +661,7 @@ impl ConformanceTestRunner {
                     return false;
                 }
                 e.iter()
-                    .all(|(k, v)| a.get(k).map_or(false, |av| self.values_equal(v, av)))
+                    .all(|(k, v)| a.get(k).is_some_and(|av| self.values_equal(v, av)))
             }
             _ => expected == actual,
         }
