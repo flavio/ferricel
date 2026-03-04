@@ -238,10 +238,7 @@ mod tests {
 
     #[test]
     fn test_array_push_logic() {
-        let mut vec = Vec::new();
-        vec.push(CelValue::Int(42));
-        vec.push(CelValue::Bool(true));
-        vec.push(CelValue::Int(3));
+        let vec = vec![CelValue::Int(42), CelValue::Bool(true), CelValue::Int(3)];
 
         assert_eq!(vec.len(), 3);
         assert_eq!(vec[0], CelValue::Int(42));
