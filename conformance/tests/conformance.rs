@@ -16,7 +16,7 @@ use serde_json::Value as JsonValue;
 use slog::{Drain, Logger, o};
 
 // Import compiler and runtime functions from ferricel-core
-use ferricel_core::compiler::compile_cel_to_wasm;
+use ferricel_core::compiler::{CompilerOptions, compile_cel_to_wasm};
 use ferricel_core::runtime;
 
 // Include the generated protobuf types
@@ -140,12 +140,8 @@ impl SkipList {
             reason: "Protocol buffer support not implemented".to_string(),
         });
 
-        rules.push(SkipRule {
-            file: Some("proto3".to_string()),
-            section: None,
-            test: None,
-            reason: "Protocol buffer support not implemented".to_string(),
-        });
+        // Note: proto3 tests are now partially supported with wrapper type semantics
+        // Individual tests may still fail for unimplemented features
 
         Self { rules }
     }
@@ -168,6 +164,7 @@ impl SkipList {
 struct ConformanceTestRunner {
     skip_list: SkipList,
     logger: Logger,
+    proto_descriptor: Option<Vec<u8>>,
 }
 
 impl ConformanceTestRunner {
@@ -177,9 +174,13 @@ impl ConformanceTestRunner {
         let drain = slog_term::FullFormat::new(decorator).build().fuse();
         let logger = Logger::root(drain, o!());
 
+        // Load the proto descriptor generated at build time
+        let proto_descriptor = std::fs::read(env!("PROTO_DESCRIPTOR_PATH")).ok();
+
         Self {
             skip_list: SkipList::new(),
             logger,
+            proto_descriptor,
         }
     }
 
@@ -416,7 +417,14 @@ impl ConformanceTestRunner {
 
     fn execute_cel_expression(&self, test: &SimpleTest) -> Result<JsonValue, String> {
         // Step 1: Compile the CEL expression to WASM (in memory)
-        let wasm_bytes = match compile_cel_to_wasm(&test.expr) {
+        let compiler_options = if let Some(ref descriptor) = self.proto_descriptor {
+            CompilerOptions {
+                proto_descriptor: Some(descriptor.clone()),
+            }
+        } else {
+            CompilerOptions::default()
+        };
+        let wasm_bytes = match compile_cel_to_wasm(&test.expr, compiler_options) {
             Ok(bytes) => bytes,
             Err(e) => {
                 // Check if this test expects an error (eval_error or any error)

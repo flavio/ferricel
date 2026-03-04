@@ -11,7 +11,8 @@ fn main() -> Result<(), anyhow::Error> {
             expression,
             expression_file,
             output,
-        } => cmd::build::run(expression, expression_file, &output),
+            proto_descriptors,
+        } => cmd::build::run(expression, expression_file, &output, proto_descriptors),
         cli::Commands::Run {
             wasm,
             input_json,

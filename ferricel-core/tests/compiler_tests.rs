@@ -4,7 +4,7 @@
 use ferricel_core::{compiler::compile_cel_to_wasm, runtime};
 use ferricel_types::LogLevel;
 use rstest::rstest;
-use slog::{o, Drain, Logger};
+use slog::{Drain, Logger, o};
 
 /// Test helper: create a logger for tests
 fn create_test_logger() -> Logger {
@@ -1716,7 +1716,10 @@ fn test_struct_multiple_fields() {
     0
 )]
 #[case::empty_structs_equal("TestAllTypes{} == TestAllTypes{}", 1)]
-#[case::multi_field_equal("TestAllTypes{single_int64: 1234, single_string: '1234'} == TestAllTypes{single_int64: 1234, single_string: '1234'}", 1)]
+#[case::multi_field_equal(
+    "TestAllTypes{single_int64: 1234, single_string: '1234'} == TestAllTypes{single_int64: 1234, single_string: '1234'}",
+    1
+)]
 #[case::multi_field_not_equal(
     "TestAllTypes{single_int64: 1234} == TestAllTypes{single_int64: 5678}",
     0

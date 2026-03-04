@@ -54,6 +54,11 @@ pub enum Commands {
         /// Output file path
         #[arg(short, long, default_value = "final_cel_program.wasm")]
         output: PathBuf,
+
+        /// Path to protocol buffer descriptor file(s) (can be specified multiple times)
+        /// Use protoc --descriptor_set_out to generate these files
+        #[arg(long = "proto-descriptor")]
+        proto_descriptors: Vec<PathBuf>,
     },
     /// Run a compiled WebAssembly module
     Run {

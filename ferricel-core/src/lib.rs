@@ -26,48 +26,9 @@
 
 pub mod compiler;
 pub mod runtime;
+pub mod schema;
 
 // Re-export commonly used functions for convenience
-pub use compiler::compile_cel_to_wasm;
+pub use compiler::{CompilerOptions, compile_cel_to_wasm};
 pub use runtime::execute_wasm_with_vars;
-
-/// Convenience function that compiles and executes a CEL expression in one step.
-///
-/// This is useful for quick evaluation without needing to manage WASM bytes.
-///
-/// # Arguments
-///
-/// * `expr` - The CEL expression to evaluate
-/// * `input` - Optional JSON string containing input variables
-/// * `data` - Optional JSON string containing data variables
-/// * `log_level` - Logging level for execution
-/// * `logger` - slog Logger instance
-///
-/// # Returns
-///
-/// JSON string with the result, e.g. `{"result": 42}`
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use ferricel_core::evaluate_cel;
-/// use ferricel_types::LogLevel;
-///
-/// let result = evaluate_cel(
-///     "input.x + input.y",
-///     Some(r#"{"x": 10, "y": 20}"#),
-///     None,
-///     LogLevel::Error,
-///     logger
-/// )?;
-/// ```
-pub fn evaluate_cel(
-    expr: &str,
-    input: Option<&str>,
-    data: Option<&str>,
-    log_level: ferricel_types::LogLevel,
-    logger: slog::Logger,
-) -> Result<String, anyhow::Error> {
-    let wasm_bytes = compile_cel_to_wasm(expr)?;
-    execute_wasm_with_vars(&wasm_bytes, input, data, log_level, logger)
-}
+pub use schema::ProtoSchema;

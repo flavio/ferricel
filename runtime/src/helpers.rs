@@ -756,7 +756,70 @@ pub extern "C" fn cel_value_mod(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *
 /// Internal helper function to check CEL equality between two CelValue references.
 /// This implements CEL spec cross-type numeric equality.
 /// Used by both the `==` operator and the `in` operator.
+/// Check if a CelValue is a wrapper type and extract its wrapped value.
+/// Returns Some(value) if it's a wrapper, None otherwise.
+///
+/// CEL wrapper types from google/protobuf/wrappers.proto:
+/// - google.protobuf.BoolValue -> wraps bool
+/// - google.protobuf.BytesValue -> wraps bytes
+/// - google.protobuf.DoubleValue/FloatValue -> wraps double
+/// - google.protobuf.Int32Value/Int64Value -> wraps int
+/// - google.protobuf.StringValue -> wraps string
+/// - google.protobuf.UInt32Value/UInt64Value -> wraps uint
+fn unwrap_if_wrapper(value: &CelValue) -> Option<CelValue> {
+    if let CelValue::Object(map) = value {
+        // Check if this is a wrapper type by looking at __type__ field
+        use crate::types::CelMapKey;
+        let type_key = CelMapKey::String("__type__".into());
+        if let Some(CelValue::String(type_name)) = map.get(&type_key) {
+            // Check if it's one of the 9 official wrapper types
+            let is_wrapper = matches!(
+                type_name.as_str(),
+                "google.protobuf.BoolValue"
+                    | "google.protobuf.BytesValue"
+                    | "google.protobuf.DoubleValue"
+                    | "google.protobuf.FloatValue"
+                    | "google.protobuf.Int32Value"
+                    | "google.protobuf.Int64Value"
+                    | "google.protobuf.StringValue"
+                    | "google.protobuf.UInt32Value"
+                    | "google.protobuf.UInt64Value"
+            );
+
+            if is_wrapper {
+                // Extract the "value" field (or return zero value if empty wrapper)
+                let value_key = CelMapKey::String("value".into());
+                if let Some(wrapped_value) = map.get(&value_key) {
+                    return Some(wrapped_value.clone());
+                } else {
+                    // Empty wrapper - return zero value per CEL spec
+                    return Some(get_wrapper_zero_value(type_name));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Get the zero value for a wrapper type (per CEL spec, empty wrappers equal their zero value).
+fn get_wrapper_zero_value(type_name: &str) -> CelValue {
+    match type_name {
+        "google.protobuf.BoolValue" => CelValue::Bool(false),
+        "google.protobuf.BytesValue" => CelValue::Bytes(Vec::new()),
+        "google.protobuf.DoubleValue" | "google.protobuf.FloatValue" => CelValue::Double(0.0),
+        "google.protobuf.Int32Value" | "google.protobuf.Int64Value" => CelValue::Int(0),
+        "google.protobuf.StringValue" => CelValue::String(String::new()),
+        "google.protobuf.UInt32Value" | "google.protobuf.UInt64Value" => CelValue::UInt(0),
+        _ => CelValue::Null, // Shouldn't happen
+    }
+}
+
 pub(crate) fn cel_equals(a_val: &CelValue, b_val: &CelValue) -> bool {
+    // Unwrap wrapper types before comparison (per CEL spec)
+    let a_unwrapped = unwrap_if_wrapper(a_val).unwrap_or_else(|| a_val.clone());
+    let b_unwrapped = unwrap_if_wrapper(b_val).unwrap_or_else(|| b_val.clone());
+    let a_val = &a_unwrapped;
+    let b_val = &b_unwrapped;
     match (a_val, b_val) {
         // Same-type comparisons
         (CelValue::Int(a), CelValue::Int(b)) => a == b,

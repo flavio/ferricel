@@ -7,6 +7,8 @@ edition = "2024"
 anyhow = { workspace = true }
 cel = "0.12"
 ferricel-types = { path = "../ferricel-types" }
+prost = "0.14"
+prost-types = "0.14"
 serde_json = { workspace = true }
 slog = { workspace = true }
 walrus = "0.25"

@@ -1,5 +1,6 @@
-use cel::common::ast::operators;
+use crate::schema::ProtoSchema;
 use cel::common::ast::Expr;
+use cel::common::ast::operators;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
 use std::collections::HashMap;
@@ -134,32 +135,88 @@ pub struct CompilerEnv {
     pub type_func_id: FunctionId,
 }
 
+/// Options for CEL compilation
+#[derive(Default)]
+pub struct CompilerOptions {
+    /// Optional Protocol Buffer schema for proper wrapper type semantics
+    /// This should be a FileDescriptorSet binary (output of `protoc --descriptor_set_out`)
+    pub proto_descriptor: Option<Vec<u8>>,
+}
+
 /// Compilation context that holds state during expression compilation
 /// This includes local variable bindings for comprehensions and other scoped contexts
-#[derive(Default)]
+#[derive(Clone)]
 pub struct CompilerContext {
     /// Maps variable names to their local IDs in the WASM function
     /// Used for iteration variables in comprehensions (e.g., "x" in [1,2,3].all(x, x > 0))
     pub local_vars: HashMap<String, LocalId>,
+    /// Optional Protocol Buffer schema for wrapper type semantics
+    pub schema: Option<ProtoSchema>,
 }
 
 impl CompilerContext {
+    /// Create a new empty context
+    pub fn new(schema: Option<ProtoSchema>) -> Self {
+        Self {
+            local_vars: HashMap::new(),
+            schema,
+        }
+    }
+
     /// Create a child context with an additional local variable binding
     /// This is used when entering a new scope (e.g., comprehension)
     pub fn with_local(&self, name: String, local_id: LocalId) -> Self {
         let mut local_vars = self.local_vars.clone();
         local_vars.insert(name, local_id);
-        Self { local_vars }
+        Self {
+            local_vars,
+            schema: self.schema.clone(),
+        }
     }
 }
 
-/// Compile a CEL expression into a WebAssembly module
+/// Compile a CEL expression into a WebAssembly module with options
 ///
-/// Takes a CEL expression string and returns the compiled WASM module as bytes.
+/// Takes a CEL expression string and compilation options, returns the compiled WASM module as bytes.
 /// The resulting module exports a `validate` function with signature (i32, i32) -> i64.
 /// The returned i64 encodes a pointer (low 32 bits) and length (high 32 bits) to
 /// JSON-serialized result in WASM memory.
-pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
+///
+/// # Arguments
+///
+/// * `cel_code` - The CEL expression to compile
+/// * `options` - Compilation options including optional proto schema
+///
+/// # Example
+///
+/// ```no_run
+/// use ferricel_core::{compile_cel_to_wasm, CompilerOptions, ProtoSchema};
+///
+/// let descriptor_bytes = std::fs::read("types.pb").unwrap();
+/// let options = CompilerOptions {
+///     proto_descriptor: Some(descriptor_bytes),
+/// };
+/// let wasm_bytes = compile_cel_to_wasm("TestAllTypes{}.field", options).unwrap();
+/// ```
+pub fn compile_cel_to_wasm(
+    cel_code: &str,
+    options: CompilerOptions,
+) -> Result<Vec<u8>, anyhow::Error> {
+    // Parse proto schema if provided
+    let schema = options
+        .proto_descriptor
+        .as_ref()
+        .map(|bytes| ProtoSchema::from_descriptor_set(bytes))
+        .transpose()?;
+
+    compile_cel_to_wasm_internal(cel_code, schema)
+}
+
+/// Internal compilation function that does the actual work
+fn compile_cel_to_wasm_internal(
+    cel_code: &str,
+    schema: Option<ProtoSchema>,
+) -> Result<Vec<u8>, anyhow::Error> {
     // 1. Load the runtime template from embedded bytes
     let mut module = ModuleConfig::new().parse(RUNTIME_BYTES)?;
 
@@ -420,7 +477,7 @@ pub fn compile_cel_to_wasm(cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
 
     // 7. Walk the AST and compile to WASM instructions
     // This leaves a *mut CelValue on the stack
-    let ctx = CompilerContext::default();
+    let ctx = CompilerContext::new(schema);
     compile_expr(&root_ast.expr, &mut body, &env, &ctx, &mut module)?;
 
     // 8. Serialize the result to JSON
@@ -1726,6 +1783,42 @@ pub fn compile_expr(
             body.local_get(type_key_local);
             body.local_get(type_value_local);
             body.call(env.map_insert_func_id);
+
+            // If we have a schema, check if this type has wrapper fields and add metadata
+            if let Some(schema) = &ctx.schema {
+                let wrapper_fields = schema.get_wrapper_fields(&struct_expr.type_name);
+                if !wrapper_fields.is_empty() {
+                    // Create an array of wrapper field names
+                    body.call(env.create_array_func_id);
+                    let array_ptr_local = module.locals.add(ValType::I32);
+                    body.local_set(array_ptr_local);
+
+                    // Add each wrapper field name to the array
+                    for field_name in &wrapper_fields {
+                        let field_name_local =
+                            compile_string_to_local(field_name, body, env, module)?;
+                        body.local_get(array_ptr_local);
+                        body.local_get(field_name_local);
+                        body.call(env.array_push_func_id);
+                    }
+
+                    // Insert "__wrapper_fields__" metadata into the struct map
+                    let wrapper_key_local =
+                        compile_string_to_local("__wrapper_fields__", body, env, module)?;
+                    body.local_get(map_ptr_local);
+                    body.local_get(wrapper_key_local);
+                    body.local_get(array_ptr_local);
+                    body.call(env.map_insert_func_id);
+                }
+            } else if struct_expr.type_name.contains('.') {
+                // Warn if struct type looks like a proto message but no schema provided
+                eprintln!(
+                    "Warning: Struct '{}' looks like a protobuf message, but no schema provided.",
+                    struct_expr.type_name
+                );
+                eprintln!("         Wrapper type semantics will not be available.");
+                eprintln!("         Use --proto-descriptor to provide schema.");
+            }
 
             // Insert each struct field
             for entry in &struct_expr.entries {

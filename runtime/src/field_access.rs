@@ -61,6 +61,10 @@ pub unsafe extern "C" fn cel_get_field(
             debug!(log, "Accessing field from object"; 
                 "field" => field_name.as_str(),
                 "num_fields" => map.len());
+
+            // Check if this is a wrapper field that should return null when unset
+            let is_wrapper_field = is_wrapper_field_unset(map, &field_name);
+
             // Look up the field in the hashmap using string key
             use crate::types::CelMapKey;
             let key = CelMapKey::String(field_name.clone());
@@ -72,6 +76,15 @@ pub unsafe extern "C" fn cel_get_field(
                     Box::into_raw(boxed_value)
                 }
                 None => {
+                    // If this is a wrapper field that's unset, return null (per CEL spec)
+                    if is_wrapper_field {
+                        info!(log, "Unset wrapper field, returning null"; 
+                            "field" => field_name.as_str());
+                        let boxed_value = Box::new(CelValue::Null);
+                        return Box::into_raw(boxed_value);
+                    }
+
+                    // Otherwise, field not found is an error
                     let available_fields: Vec<String> =
                         map.keys().map(|k| k.to_string_key()).collect();
                     {
@@ -90,6 +103,30 @@ pub unsafe extern "C" fn cel_get_field(
             abort_with_error("no such overload")
         }
     }
+}
+
+/// Helper function to check if a field is a wrapper field that's unset.
+/// Returns true if the object has __wrapper_fields__ metadata and the field is in that list.
+fn is_wrapper_field_unset(
+    map: &std::collections::HashMap<crate::types::CelMapKey, CelValue>,
+    field_name: &str,
+) -> bool {
+    use crate::types::CelMapKey;
+
+    // Check if __wrapper_fields__ metadata exists
+    let wrapper_fields_key = CelMapKey::String("__wrapper_fields__".into());
+    if let Some(CelValue::Array(wrapper_fields)) = map.get(&wrapper_fields_key) {
+        // Check if this field is in the wrapper fields array
+        for field in wrapper_fields {
+            if let CelValue::String(wrapper_field_name) = field {
+                if wrapper_field_name == field_name {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
 }
 
 /// Check if a field exists in a CelValue object (for has() macro).

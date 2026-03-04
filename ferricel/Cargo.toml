@@ -8,6 +8,8 @@ anyhow         = { workspace = true }
 clap           = { version = "4.5", features = ["derive"] }
 ferricel-core  = { path = "../ferricel-core" }
 ferricel-types = { path = "../ferricel-types" }
+prost          = { workspace = true }
+prost-types    = { workspace = true }
 slog           = { workspace = true }
 slog-term      = "2.9"
 
