@@ -3,6 +3,7 @@ use cel::common::ast::Expr;
 use cel::common::ast::operators;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
+use slog::error;
 use std::collections::HashMap;
 use walrus::{FunctionBuilder, FunctionId, InstrSeqBuilder, LocalId, ModuleConfig, ValType};
 
@@ -136,11 +137,12 @@ pub struct CompilerEnv {
 }
 
 /// Options for CEL compilation
-#[derive(Default)]
 pub struct CompilerOptions {
     /// Optional Protocol Buffer schema for proper wrapper type semantics
     /// This should be a FileDescriptorSet binary (output of `protoc --descriptor_set_out`)
     pub proto_descriptor: Option<Vec<u8>>,
+    /// Logger for compilation warnings and errors
+    pub logger: slog::Logger,
 }
 
 /// Compilation context that holds state during expression compilation
@@ -152,14 +154,17 @@ pub struct CompilerContext {
     pub local_vars: HashMap<String, LocalId>,
     /// Optional Protocol Buffer schema for wrapper type semantics
     pub schema: Option<ProtoSchema>,
+    /// Logger for compilation warnings and errors
+    pub logger: slog::Logger,
 }
 
 impl CompilerContext {
     /// Create a new empty context
-    pub fn new(schema: Option<ProtoSchema>) -> Self {
+    pub fn new(schema: Option<ProtoSchema>, logger: slog::Logger) -> Self {
         Self {
             local_vars: HashMap::new(),
             schema,
+            logger,
         }
     }
 
@@ -171,6 +176,7 @@ impl CompilerContext {
         Self {
             local_vars,
             schema: self.schema.clone(),
+            logger: self.logger.clone(),
         }
     }
 }
@@ -209,13 +215,14 @@ pub fn compile_cel_to_wasm(
         .map(|bytes| ProtoSchema::from_descriptor_set(bytes))
         .transpose()?;
 
-    compile_cel_to_wasm_internal(cel_code, schema)
+    compile_cel_to_wasm_internal(cel_code, schema, options.logger)
 }
 
 /// Internal compilation function that does the actual work
 fn compile_cel_to_wasm_internal(
     cel_code: &str,
     schema: Option<ProtoSchema>,
+    logger: slog::Logger,
 ) -> Result<Vec<u8>, anyhow::Error> {
     // 1. Load the runtime template from embedded bytes
     let mut module = ModuleConfig::new().parse(RUNTIME_BYTES)?;
@@ -477,7 +484,7 @@ fn compile_cel_to_wasm_internal(
 
     // 7. Walk the AST and compile to WASM instructions
     // This leaves a *mut CelValue on the stack
-    let ctx = CompilerContext::new(schema);
+    let ctx = CompilerContext::new(schema, logger);
     compile_expr(&root_ast.expr, &mut body, &env, &ctx, &mut module)?;
 
     // 8. Serialize the result to JSON
@@ -1786,6 +1793,24 @@ pub fn compile_expr(
 
             // If we have a schema, check if this type has wrapper fields and add metadata
             if let Some(schema) = &ctx.schema {
+                // Check if the type exists in the schema
+                if struct_expr.type_name.contains('.')
+                    && !schema.has_message_type(&struct_expr.type_name)
+                {
+                    // Warn if struct type looks like a proto message but is not in the schema
+                    error!(
+                        ctx.logger,
+                        "Struct '{}' looks like a protobuf message, but is not defined in the provided schema",
+                        struct_expr.type_name;
+                        "struct_type" => &struct_expr.type_name
+                    );
+                    error!(ctx.logger, "Wrapper type semantics will not be available");
+                    error!(
+                        ctx.logger,
+                        "Ensure the correct proto descriptor files are provided with --proto-descriptor"
+                    );
+                }
+
                 let wrapper_fields = schema.get_wrapper_fields(&struct_expr.type_name);
                 if !wrapper_fields.is_empty() {
                     // Create an array of wrapper field names
@@ -1812,12 +1837,14 @@ pub fn compile_expr(
                 }
             } else if struct_expr.type_name.contains('.') {
                 // Warn if struct type looks like a proto message but no schema provided
-                eprintln!(
-                    "Warning: Struct '{}' looks like a protobuf message, but no schema provided.",
-                    struct_expr.type_name
+                error!(
+                    ctx.logger,
+                    "Struct '{}' looks like a protobuf message, but no schema provided",
+                    struct_expr.type_name;
+                    "struct_type" => &struct_expr.type_name
                 );
-                eprintln!("         Wrapper type semantics will not be available.");
-                eprintln!("         Use --proto-descriptor to provide schema.");
+                error!(ctx.logger, "Wrapper type semantics will not be available");
+                error!(ctx.logger, "Use --proto-descriptor to provide schema");
             }
 
             // Insert each struct field

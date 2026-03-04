@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package test.fixtures;
+
+import "google/protobuf/wrappers.proto";
+
+// Simple test message for e2e tests
+message TestMessage {
+  int64 id = 1;
+  string name = 2;
+  google.protobuf.Int64Value wrapped_id = 3;
+}
+
+// Another message for testing different types
+message AnotherMessage {
+  bool active = 1;
+  double value = 2;
+}

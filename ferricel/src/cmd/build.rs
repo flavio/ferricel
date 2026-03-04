@@ -5,6 +5,7 @@ use anyhow::Context;
 use ferricel_core::compiler::{self, CompilerOptions};
 use prost::Message;
 use prost_types::FileDescriptorSet;
+use slog::{Drain, Logger, o};
 
 pub fn run(
     expression: Option<String>,
@@ -55,12 +56,14 @@ pub fn run(
     };
 
     // Compile the CEL expression to WASM bytes
-    let compiler_options = if let Some(descriptor) = &merged_descriptor {
-        CompilerOptions {
-            proto_descriptor: Some(descriptor.clone()),
-        }
-    } else {
-        CompilerOptions::default()
+    // Create a logger to stderr for compilation warnings
+    let decorator = slog_term::PlainSyncDecorator::new(std::io::stderr());
+    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let logger = Logger::root(drain, o!());
+
+    let compiler_options = CompilerOptions {
+        proto_descriptor: merged_descriptor,
+        logger,
     };
 
     let wasm_bytes = compiler::compile_cel_to_wasm(&cel_code, compiler_options)?;

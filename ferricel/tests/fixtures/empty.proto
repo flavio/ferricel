@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+package test.empty;
+
+// Intentionally empty - no message types defined
+// Used to test warnings when proto is provided but doesn't contain the type

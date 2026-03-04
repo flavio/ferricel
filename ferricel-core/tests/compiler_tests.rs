@@ -1,7 +1,8 @@
 // Integration tests for the ferricel-core compiler
 // These tests compile CEL expressions to WASM and execute them to verify correctness
 
-use ferricel_core::{compiler::compile_cel_to_wasm, runtime};
+use ferricel_core::compiler::{CompilerOptions, compile_cel_to_wasm};
+use ferricel_core::runtime;
 use ferricel_types::LogLevel;
 use rstest::rstest;
 use slog::{Drain, Logger, o};
@@ -15,8 +16,12 @@ fn create_test_logger() -> Logger {
 
 /// Test helper: compile CEL expression and execute it, returning the result
 fn compile_and_execute(cel_expr: &str) -> Result<i64, anyhow::Error> {
-    let wasm_bytes = compile_cel_to_wasm(cel_expr)?;
     let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)?;
 
@@ -39,8 +44,12 @@ fn compile_and_execute_with_vars(
     input_json: Option<&str>,
     data_json: Option<&str>,
 ) -> Result<i64, anyhow::Error> {
-    let wasm_bytes = compile_cel_to_wasm(cel_expr)?;
     let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
     let json_result = runtime::execute_wasm_with_vars(
         &wasm_bytes,
         input_json,
@@ -63,8 +72,12 @@ fn compile_and_execute_with_vars(
 
 /// Test helper: compile and execute CEL expression, expecting a double result
 fn compile_and_execute_double(cel_expr: &str) -> Result<f64, anyhow::Error> {
-    let wasm_bytes = compile_cel_to_wasm(cel_expr)?;
     let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)?;
 
@@ -156,7 +169,12 @@ fn test_large_expressions(#[case] expr: &str, #[case] expected: i64) {
 
 #[test]
 fn test_compile_cel_to_wasm_returns_valid_bytes() {
-    let wasm_bytes = compile_cel_to_wasm("42").expect("Failed to compile");
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger,
+    };
+    let wasm_bytes = compile_cel_to_wasm("42", compiler_options).expect("Failed to compile");
     assert!(!wasm_bytes.is_empty(), "WASM bytes should not be empty");
 
     // WASM files start with magic number: 0x00 0x61 0x73 0x6D (\\0asm)
@@ -169,7 +187,12 @@ fn test_compile_cel_to_wasm_returns_valid_bytes() {
 
 #[test]
 fn test_invalid_cel_expression() {
-    let result = compile_cel_to_wasm("1 + + 2");
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger,
+    };
+    let result = compile_cel_to_wasm("1 + + 2", compiler_options);
     assert!(
         result.is_err(),
         "Invalid CEL expression should return error"
@@ -178,7 +201,12 @@ fn test_invalid_cel_expression() {
 
 #[test]
 fn test_unsupported_operation() {
-    let result = compile_cel_to_wasm("my_var");
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger,
+    };
+    let result = compile_cel_to_wasm("my_var", compiler_options);
     assert!(
         result.is_err(),
         "Variable access should not be supported yet"
@@ -688,8 +716,12 @@ fn test_positive_overflow_subtraction() {
 #[test]
 fn test_json_output_integer() {
     // Test that integers are serialized as raw JSON numbers
-    let wasm_bytes = compile_cel_to_wasm("42").expect("Failed to compile");
     let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm("42", compiler_options).expect("Failed to compile");
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
             .expect("Failed to execute");
@@ -702,8 +734,12 @@ fn test_json_output_integer() {
 #[test]
 fn test_json_output_boolean_true() {
     // Test that true is serialized as raw JSON boolean
-    let wasm_bytes = compile_cel_to_wasm("5 > 3").expect("Failed to compile");
     let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm("5 > 3", compiler_options).expect("Failed to compile");
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
             .expect("Failed to execute");
@@ -716,8 +752,12 @@ fn test_json_output_boolean_true() {
 #[test]
 fn test_json_output_boolean_false() {
     // Test that false is serialized as raw JSON boolean
-    let wasm_bytes = compile_cel_to_wasm("5 < 3").expect("Failed to compile");
     let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm("5 < 3", compiler_options).expect("Failed to compile");
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
             .expect("Failed to execute");
@@ -730,8 +770,12 @@ fn test_json_output_boolean_false() {
 #[test]
 fn test_json_output_negative_integer() {
     // Test that negative integers are properly serialized
-    let wasm_bytes = compile_cel_to_wasm("-123").expect("Failed to compile");
     let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm("-123", compiler_options).expect("Failed to compile");
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
             .expect("Failed to execute");
@@ -744,8 +788,13 @@ fn test_json_output_negative_integer() {
 #[test]
 fn test_json_output_arithmetic_result() {
     // Test that arithmetic results are serialized correctly
-    let wasm_bytes = compile_cel_to_wasm("10 + 20 * 2").expect("Failed to compile");
     let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes =
+        compile_cel_to_wasm("10 + 20 * 2", compiler_options).expect("Failed to compile");
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
             .expect("Failed to execute");
@@ -770,7 +819,12 @@ fn test_json_output_arithmetic_result() {
 #[case::concatenation_empty("[] + []", "[]")]
 #[case::concatenation_with_empty("[1, 2, 3] + []", "[1,2,3]")]
 fn test_list_literals(#[case] expr: &str, #[case] expected: &str) {
-    let wasm_bytes = compile_cel_to_wasm(expr).expect("Failed to compile");
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
@@ -791,7 +845,12 @@ fn test_list_literals(#[case] expr: &str, #[case] expected: &str) {
 #[case::single_false("[1, 2, 3, 0].all(x, x > 0)", "false")]
 #[case::with_expressions("[1+1, 2*3, 10-5].all(x, x > 1)", "true")]
 fn test_all_macro(#[case] expr: &str, #[case] expected: &str) {
-    let wasm_bytes = compile_cel_to_wasm(expr).expect("Failed to compile");
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
@@ -812,7 +871,12 @@ fn test_all_macro(#[case] expr: &str, #[case] expected: &str) {
 #[case::first_element_true("[10, 1, 2].exists(x, x > 5)", "true")]
 #[case::last_element_true("[1, 2, 10].exists(x, x > 5)", "true")]
 fn test_exists_macro(#[case] expr: &str, #[case] expected: &str) {
-    let wasm_bytes = compile_cel_to_wasm(expr).expect("Failed to compile");
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
@@ -833,7 +897,12 @@ fn test_exists_macro(#[case] expr: &str, #[case] expected: &str) {
 #[case::last_element_only("[1, 2, 10].exists_one(x, x > 5)", "true")]
 #[case::two_elements("[10, 20, 1].exists_one(x, x > 5)", "false")]
 fn test_exists_one_macro(#[case] expr: &str, #[case] expected: &str) {
-    let wasm_bytes = compile_cel_to_wasm(expr).expect("Failed to compile");
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
@@ -855,7 +924,12 @@ fn test_exists_one_macro(#[case] expr: &str, #[case] expected: &str) {
 #[case::first_element_only("[10, 1, 2, 3].filter(x, x > 5)", "[10]")]
 #[case::last_element_only("[1, 2, 3, 10].filter(x, x > 5)", "[10]")]
 fn test_filter_macro(#[case] expr: &str, #[case] expected: &str) {
-    let wasm_bytes = compile_cel_to_wasm(expr).expect("Failed to compile");
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
@@ -880,7 +954,12 @@ fn test_filter_macro(#[case] expr: &str, #[case] expected: &str) {
 #[case::negative_numbers("[-1, -2, -3].map(x, x * -1)", "[1,2,3]")]
 #[case::modulo("[10, 11, 12].map(x, x % 3)", "[1,2,0]")]
 fn test_map_macro(#[case] expr: &str, #[case] expected: &str) {
-    let wasm_bytes = compile_cel_to_wasm(expr).expect("Failed to compile");
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
@@ -1151,8 +1230,12 @@ fn test_has_macro_multiple_fields(
 
 /// Test helper: compile CEL expression and execute it, returning string result
 fn compile_and_execute_string(cel_expr: &str) -> Result<String, anyhow::Error> {
-    let wasm_bytes = compile_cel_to_wasm(cel_expr)?;
     let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)?;
 
@@ -1626,8 +1709,8 @@ fn test_list_cross_type_equality(#[case] expr: &str, #[case] expected: i64) {
 
 // Helper to get raw JSON result for struct tests
 fn compile_and_execute_json(cel_expr: &str) -> Result<serde_json::Value, anyhow::Error> {
-    let wasm_bytes = compile_cel_to_wasm(cel_expr)?;
     let logger = create_test_logger();
+    let wasm_bytes = compile_cel_to_wasm(cel_expr, logger.clone())?;
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)?;
     Ok(serde_json::from_str(&json_result)?)

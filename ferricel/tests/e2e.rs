@@ -10,6 +10,7 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
+use std::path::PathBuf;
 use tempfile::NamedTempFile;
 
 /// Helper function to get a Command for the ferricel binary
@@ -496,4 +497,90 @@ fn test_run_invalid_json_in_file() {
         .failure();
     // The error might be in stderr or could cause a panic/error
     // Just verify it fails - the specific error message may vary
+}
+
+// ============================================================================
+// PROTO DESCRIPTOR TESTS - WARNINGS
+// ============================================================================
+
+#[test]
+fn test_build_no_warning_without_structs_no_proto() {
+    // When expression doesn't use structs and no proto is provided,
+    // there should be no warnings
+    let output_file = NamedTempFile::new().unwrap();
+
+    ferricel()
+        .args(["build", "-e", "5 + 10", "-o"])
+        .arg(output_file.path())
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("ERRO").not())
+        .stderr(predicate::str::contains("schema").not());
+}
+
+#[test]
+fn test_build_warning_struct_without_proto() {
+    // When using a protobuf-looking struct without providing proto descriptor,
+    // a warning should be shown
+    let output_file = NamedTempFile::new().unwrap();
+
+    ferricel()
+        .args([
+            "build",
+            "-e",
+            "google.protobuf.BoolValue{value: true}",
+            "-o",
+        ])
+        .arg(output_file.path())
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("ERRO"))
+        .stderr(predicate::str::contains("looks like a protobuf message"))
+        .stderr(predicate::str::contains("no schema provided"))
+        .stderr(predicate::str::contains("--proto-descriptor"));
+}
+
+#[test]
+fn test_build_warning_proto_missing_type_definition() {
+    // When proto descriptor is provided but doesn't contain the type being used,
+    // a warning should be shown
+    let output_file = NamedTempFile::new().unwrap();
+    let proto_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/empty_types.pb");
+
+    ferricel()
+        .args(["build", "-e", "test.missing.UnknownType{field: 42}", "-o"])
+        .arg(output_file.path())
+        .arg("--proto-descriptor")
+        .arg(&proto_path)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("ERRO"))
+        .stderr(predicate::str::contains("looks like a protobuf message"))
+        .stderr(predicate::str::contains(
+            "not defined in the provided schema",
+        ));
+}
+
+#[test]
+fn test_build_no_warning_with_matching_proto() {
+    // When struct type is properly defined in the provided proto,
+    // no warning should be shown
+    let output_file = NamedTempFile::new().unwrap();
+    let proto_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/simple_types.pb");
+
+    ferricel()
+        .args([
+            "build",
+            "-e",
+            "test.fixtures.TestMessage{id: 123, name: 'test'}",
+            "-o",
+        ])
+        .arg(output_file.path())
+        .arg("--proto-descriptor")
+        .arg(&proto_path)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("ERRO").not());
 }

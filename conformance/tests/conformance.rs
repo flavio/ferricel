@@ -415,12 +415,9 @@ impl ConformanceTestRunner {
 
     fn execute_cel_expression(&self, test: &SimpleTest) -> Result<JsonValue, String> {
         // Step 1: Compile the CEL expression to WASM (in memory)
-        let compiler_options = if let Some(ref descriptor) = self.proto_descriptor {
-            CompilerOptions {
-                proto_descriptor: Some(descriptor.clone()),
-            }
-        } else {
-            CompilerOptions::default()
+        let compiler_options = CompilerOptions {
+            proto_descriptor: self.proto_descriptor.clone(),
+            logger: self.logger.clone(),
         };
         let wasm_bytes = match compile_cel_to_wasm(&test.expr, compiler_options) {
             Ok(bytes) => bytes,
