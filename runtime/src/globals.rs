@@ -55,6 +55,10 @@ pub unsafe extern "C" fn cel_init_data(ptr: *mut CelValue) {
 ///
 /// # Panics
 /// - Panics if called before cel_init_input
+///
+/// # Safety
+/// - Safe to call after cel_init_input in single-threaded WASM environment
+/// - Returned pointer is valid until cel_reset_globals is called
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_get_input() -> *mut CelValue {
     // SAFETY: Reading from static, single-threaded WASM environment
@@ -69,6 +73,10 @@ pub unsafe extern "C" fn cel_get_input() -> *mut CelValue {
 ///
 /// # Panics
 /// - Panics if called before cel_init_data
+///
+/// # Safety
+/// - Safe to call after cel_init_data in single-threaded WASM environment
+/// - Returned pointer is valid until cel_reset_globals is called
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_get_data() -> *mut CelValue {
     // SAFETY: Reading from static, single-threaded WASM environment
