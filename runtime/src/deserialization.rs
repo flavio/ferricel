@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn test_decode_ptr_len() {
-        let encoded: i64 = ((0x5678 as i64) << 32) | (0x1234 as i64);
+        let encoded: i64 = (0x5678_i64 << 32) | 0x1234_i64;
         let (ptr, len) = decode_ptr_len(encoded);
 
         assert_eq!(ptr, 0x1234);
