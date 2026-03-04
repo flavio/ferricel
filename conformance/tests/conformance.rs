@@ -417,6 +417,11 @@ impl ConformanceTestRunner {
         // Step 1: Compile the CEL expression to WASM (in memory)
         let compiler_options = CompilerOptions {
             proto_descriptor: self.proto_descriptor.clone(),
+            container: if test.container.is_empty() {
+                None
+            } else {
+                Some(test.container.clone())
+            },
             logger: self.logger.clone(),
         };
         let wasm_bytes = match compile_cel_to_wasm(&test.expr, compiler_options) {

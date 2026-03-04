@@ -12,7 +12,14 @@ fn main() -> Result<(), anyhow::Error> {
             expression_file,
             output,
             proto_descriptors,
-        } => cmd::build::run(expression, expression_file, &output, proto_descriptors),
+            container,
+        } => cmd::build::run(
+            expression,
+            expression_file,
+            &output,
+            proto_descriptors,
+            container,
+        ),
         cli::Commands::Run {
             wasm,
             input_json,

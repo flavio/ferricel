@@ -59,6 +59,11 @@ pub enum Commands {
         /// Use protoc --descriptor_set_out to generate these files
         #[arg(long = "proto-descriptor")]
         proto_descriptors: Vec<PathBuf>,
+
+        /// Container (namespace) for type name resolution
+        /// Example: "google.protobuf" allows using "Timestamp" instead of "google.protobuf.Timestamp"
+        #[arg(long)]
+        container: Option<String>,
     },
     /// Run a compiled WebAssembly module
     Run {

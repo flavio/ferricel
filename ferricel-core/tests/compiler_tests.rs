@@ -19,6 +19,7 @@ fn compile_and_execute(cel_expr: &str) -> Result<i64, anyhow::Error> {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
@@ -47,6 +48,7 @@ fn compile_and_execute_with_vars(
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
@@ -75,6 +77,7 @@ fn compile_and_execute_double(cel_expr: &str) -> Result<f64, anyhow::Error> {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
@@ -172,6 +175,7 @@ fn test_compile_cel_to_wasm_returns_valid_bytes() {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger,
     };
     let wasm_bytes = compile_cel_to_wasm("42", compiler_options).expect("Failed to compile");
@@ -190,6 +194,7 @@ fn test_invalid_cel_expression() {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger,
     };
     let result = compile_cel_to_wasm("1 + + 2", compiler_options);
@@ -204,6 +209,7 @@ fn test_unsupported_operation() {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger,
     };
     let result = compile_cel_to_wasm("my_var", compiler_options);
@@ -719,6 +725,7 @@ fn test_json_output_integer() {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm("42", compiler_options).expect("Failed to compile");
@@ -737,6 +744,7 @@ fn test_json_output_boolean_true() {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm("5 > 3", compiler_options).expect("Failed to compile");
@@ -755,6 +763,7 @@ fn test_json_output_boolean_false() {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm("5 < 3", compiler_options).expect("Failed to compile");
@@ -773,6 +782,7 @@ fn test_json_output_negative_integer() {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm("-123", compiler_options).expect("Failed to compile");
@@ -791,6 +801,7 @@ fn test_json_output_arithmetic_result() {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes =
@@ -822,6 +833,7 @@ fn test_list_literals(#[case] expr: &str, #[case] expected: &str) {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
@@ -848,6 +860,7 @@ fn test_all_macro(#[case] expr: &str, #[case] expected: &str) {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
@@ -874,6 +887,7 @@ fn test_exists_macro(#[case] expr: &str, #[case] expected: &str) {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
@@ -900,6 +914,7 @@ fn test_exists_one_macro(#[case] expr: &str, #[case] expected: &str) {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
@@ -927,6 +942,7 @@ fn test_filter_macro(#[case] expr: &str, #[case] expected: &str) {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
@@ -957,6 +973,7 @@ fn test_map_macro(#[case] expr: &str, #[case] expected: &str) {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
@@ -1233,6 +1250,7 @@ fn compile_and_execute_string(cel_expr: &str) -> Result<String, anyhow::Error> {
     let logger = create_test_logger();
     let compiler_options = CompilerOptions {
         proto_descriptor: None,
+        container: None,
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
@@ -1710,7 +1728,12 @@ fn test_list_cross_type_equality(#[case] expr: &str, #[case] expected: i64) {
 // Helper to get raw JSON result for struct tests
 fn compile_and_execute_json(cel_expr: &str) -> Result<serde_json::Value, anyhow::Error> {
     let logger = create_test_logger();
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, logger.clone())?;
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        container: None,
+        logger: logger.clone(),
+    };
+    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
     let json_result =
         runtime::execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)?;
     Ok(serde_json::from_str(&json_result)?)
@@ -1815,3 +1838,47 @@ fn test_struct_equality(#[case] expr: &str, #[case] expected: i64) {
         expr, expected
     );
 }
+
+// ============================================================
+// Container Resolution Tests
+// ============================================================
+
+/// Test helper: compile CEL with container and optional proto descriptor
+fn compile_with_container(
+    cel_expr: &str,
+    container: Option<&str>,
+    proto_descriptor: Option<Vec<u8>>,
+) -> Result<Vec<u8>, anyhow::Error> {
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor,
+        container: container.map(|s| s.to_string()),
+        logger,
+    };
+    compile_cel_to_wasm(cel_expr, compiler_options)
+}
+
+#[test]
+fn test_container_no_schema_no_container() {
+    // Without schema or container, unqualified names should still work (treated as arbitrary structs)
+    let result = compile_with_container("MyType{field: 42}", None, None);
+    assert!(
+        result.is_ok(),
+        "Should compile unqualified struct name without schema"
+    );
+}
+
+#[test]
+fn test_container_with_container_but_no_schema() {
+    // With container but no schema, resolution should fall back to using the name as-is
+    // This is a graceful degradation case
+    let result = compile_with_container("MyType{field: 42}", Some("com.example"), None);
+    assert!(
+        result.is_ok(),
+        "Should compile with container but no schema (graceful degradation)"
+    );
+}
+
+// Note: More comprehensive tests with proto descriptors would require building
+// the proto files first with protoc. For now, these tests verify the basic
+// container resolution logic compiles correctly.

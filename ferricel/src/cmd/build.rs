@@ -12,6 +12,7 @@ pub fn run(
     expression_file: Option<PathBuf>,
     output_path: &Path,
     proto_descriptors: Vec<PathBuf>,
+    container: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Determine CEL source - clap ensures exactly one is Some
     let cel_code = match (expression, expression_file) {
@@ -63,6 +64,7 @@ pub fn run(
 
     let compiler_options = CompilerOptions {
         proto_descriptor: merged_descriptor,
+        container,
         logger,
     };
 

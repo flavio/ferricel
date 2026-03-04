@@ -141,6 +141,10 @@ pub struct CompilerOptions {
     /// Optional Protocol Buffer schema for proper wrapper type semantics
     /// This should be a FileDescriptorSet binary (output of `protoc --descriptor_set_out`)
     pub proto_descriptor: Option<Vec<u8>>,
+    /// Optional container (namespace) for type name resolution
+    /// Example: "google.protobuf" allows using "Timestamp" instead of "google.protobuf.Timestamp"
+    /// Follows CEL-go hierarchical resolution: tries container.name, parent.name, ..., name
+    pub container: Option<String>,
     /// Logger for compilation warnings and errors
     pub logger: slog::Logger,
 }
@@ -154,16 +158,23 @@ pub struct CompilerContext {
     pub local_vars: HashMap<String, LocalId>,
     /// Optional Protocol Buffer schema for wrapper type semantics
     pub schema: Option<ProtoSchema>,
+    /// Optional container (namespace) for type name resolution
+    pub container: Option<String>,
     /// Logger for compilation warnings and errors
     pub logger: slog::Logger,
 }
 
 impl CompilerContext {
     /// Create a new empty context
-    pub fn new(schema: Option<ProtoSchema>, logger: slog::Logger) -> Self {
+    pub fn new(
+        schema: Option<ProtoSchema>,
+        container: Option<String>,
+        logger: slog::Logger,
+    ) -> Self {
         Self {
             local_vars: HashMap::new(),
             schema,
+            container,
             logger,
         }
     }
@@ -176,9 +187,69 @@ impl CompilerContext {
         Self {
             local_vars,
             schema: self.schema.clone(),
+            container: self.container.clone(),
             logger: self.logger.clone(),
         }
     }
+}
+
+/// Resolves a type name using container-based hierarchical resolution
+///
+/// This implements the CEL container resolution algorithm:
+/// For a name like "MyType" with container "A.B.C", tries in order:
+/// 1. A.B.C.MyType (most specific)
+/// 2. A.B.MyType (parent level)
+/// 3. A.MyType (grandparent level)
+/// 4. MyType (root level)
+///
+/// Special case: Leading dot (.MyType) bypasses container and only tries root level
+///
+/// Returns the resolved fully-qualified type name, or None if not found
+fn resolve_type_name(
+    name: &str,
+    container: &Option<String>,
+    schema: &Option<ProtoSchema>,
+) -> Option<String> {
+    // Early return if no schema - can't resolve anything
+    let schema = schema.as_ref()?;
+
+    // Special case: Leading dot means root scope only
+    // ".MyType" -> try only "MyType" (bypass container)
+    if let Some(stripped) = name.strip_prefix('.') {
+        return if schema.has_message_type(stripped) {
+            Some(stripped.to_string())
+        } else {
+            None
+        };
+    }
+
+    // Try exact name first (optimization for fully-qualified names)
+    if schema.has_message_type(name) {
+        return Some(name.to_string());
+    }
+
+    // Try container-based hierarchical resolution
+    if let Some(container_str) = container {
+        let parts: Vec<&str> = container_str.split('.').collect();
+
+        // Try from most specific to least: A.B.C.name -> A.B.name -> A.name -> name
+        for i in (1..=parts.len()).rev() {
+            let prefix = parts[0..i].join(".");
+            let qualified = format!("{}.{}", prefix, name);
+
+            if schema.has_message_type(&qualified) {
+                return Some(qualified);
+            }
+        }
+    }
+
+    // Final attempt: try name at root level again
+    // (This handles the case where container is set but name is at root)
+    if schema.has_message_type(name) {
+        return Some(name.to_string());
+    }
+
+    None
 }
 
 /// Compile a CEL expression into a WebAssembly module with options
@@ -215,13 +286,14 @@ pub fn compile_cel_to_wasm(
         .map(|bytes| ProtoSchema::from_descriptor_set(bytes))
         .transpose()?;
 
-    compile_cel_to_wasm_internal(cel_code, schema, options.logger)
+    compile_cel_to_wasm_internal(cel_code, schema, options.container, options.logger)
 }
 
 /// Internal compilation function that does the actual work
 fn compile_cel_to_wasm_internal(
     cel_code: &str,
     schema: Option<ProtoSchema>,
+    container: Option<String>,
     logger: slog::Logger,
 ) -> Result<Vec<u8>, anyhow::Error> {
     // 1. Load the runtime template from embedded bytes
@@ -484,7 +556,7 @@ fn compile_cel_to_wasm_internal(
 
     // 7. Walk the AST and compile to WASM instructions
     // This leaves a *mut CelValue on the stack
-    let ctx = CompilerContext::new(schema, logger);
+    let ctx = CompilerContext::new(schema, container, logger);
     compile_expr(&root_ast.expr, &mut body, &env, &ctx, &mut module)?;
 
     // 8. Serialize the result to JSON
@@ -1776,15 +1848,20 @@ pub fn compile_expr(
         Expr::Struct(struct_expr) => {
             use cel::common::ast::EntryExpr;
 
+            // Resolve the type name using container-based resolution
+            let resolved_type_name =
+                resolve_type_name(&struct_expr.type_name, &ctx.container, &ctx.schema)
+                    .unwrap_or_else(|| struct_expr.type_name.clone());
+
             // Create an empty map to represent the struct
             body.call(env.create_map_func_id);
             let map_ptr_local = module.locals.add(ValType::I32);
             body.local_set(map_ptr_local);
 
             // Insert "__type__" field to preserve type information
+            // Use the resolved (fully-qualified) type name
             let type_key_local = compile_string_to_local("__type__", body, env, module)?;
-            let type_value_local =
-                compile_string_to_local(&struct_expr.type_name, body, env, module)?;
+            let type_value_local = compile_string_to_local(&resolved_type_name, body, env, module)?;
 
             body.local_get(map_ptr_local);
             body.local_get(type_key_local);
@@ -1793,16 +1870,16 @@ pub fn compile_expr(
 
             // If we have a schema, check if this type has wrapper fields and add metadata
             if let Some(schema) = &ctx.schema {
-                // Check if the type exists in the schema
-                if struct_expr.type_name.contains('.')
-                    && !schema.has_message_type(&struct_expr.type_name)
+                // Check if the type exists in the schema (using resolved name)
+                if resolved_type_name.contains('.') && !schema.has_message_type(&resolved_type_name)
                 {
                     // Warn if struct type looks like a proto message but is not in the schema
                     error!(
                         ctx.logger,
                         "Struct '{}' looks like a protobuf message, but is not defined in the provided schema",
                         struct_expr.type_name;
-                        "struct_type" => &struct_expr.type_name
+                        "struct_type" => &struct_expr.type_name,
+                        "resolved_type" => &resolved_type_name
                     );
                     error!(ctx.logger, "Wrapper type semantics will not be available");
                     error!(
@@ -1811,7 +1888,7 @@ pub fn compile_expr(
                     );
                 }
 
-                let wrapper_fields = schema.get_wrapper_fields(&struct_expr.type_name);
+                let wrapper_fields = schema.get_wrapper_fields(&resolved_type_name);
                 if !wrapper_fields.is_empty() {
                     // Create an array of wrapper field names
                     body.call(env.create_array_func_id);
@@ -1835,13 +1912,14 @@ pub fn compile_expr(
                     body.local_get(array_ptr_local);
                     body.call(env.map_insert_func_id);
                 }
-            } else if struct_expr.type_name.contains('.') {
+            } else if resolved_type_name.contains('.') {
                 // Warn if struct type looks like a proto message but no schema provided
                 error!(
                     ctx.logger,
                     "Struct '{}' looks like a protobuf message, but no schema provided",
                     struct_expr.type_name;
-                    "struct_type" => &struct_expr.type_name
+                    "struct_type" => &struct_expr.type_name,
+                    "resolved_type" => &resolved_type_name
                 );
                 error!(ctx.logger, "Wrapper type semantics will not be available");
                 error!(ctx.logger, "Use --proto-descriptor to provide schema");
