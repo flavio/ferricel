@@ -614,6 +614,23 @@ fn compile_string_to_local(
     Ok(result_local)
 }
 
+/// Attempt to collect a `Select` (or `Ident`) chain into a dotted qualified name.
+///
+/// Returns `Some("a.b.c")` when the entire expression is of the form
+/// `Ident("a") -> select "b" -> select "c"` with no `has()` test nodes.
+/// Returns `None` as soon as any node is not a simple ident or a non-test select,
+/// which means the expression represents a real runtime field access.
+fn try_collect_qualified_ident(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Ident(name) => Some(name.clone()),
+        Expr::Select(s) if !s.test => {
+            let base = try_collect_qualified_ident(&s.operand.expr)?;
+            Some(format!("{}.{}", base, s.field))
+        }
+        _ => None,
+    }
+}
+
 // We pass the inner `Expr` enum to this recursive function
 // This always leaves a *mut CelValue (i32) on the stack
 pub fn compile_expr(
@@ -1585,66 +1602,97 @@ pub fn compile_expr(
 
         // 4. Field selection (e.g., object.field, input.user.name)
         Expr::Select(select_expr) => {
-            // Recursively compile the operand as a pointer (e.g., `input` or `input.user`)
-            // This will leave a *mut CelValue (i32) on the stack
-            compile_expr(&select_expr.operand.expr, body, env, ctx, module)?;
-
-            // Now we need to get the field from the object
-            // The operand (object pointer) is on the stack
-            // We need to pass: (obj_ptr, field_name_ptr, field_name_len)
-
-            let field_name = &select_expr.field;
-            let field_bytes = field_name.as_bytes();
-            let field_len = field_bytes.len() as i32;
-
-            // Create a local to store the field name pointer
-            let field_ptr_local = module.locals.add(ValType::I32);
-
-            // Allocate memory for the field name
-            body.i32_const(field_len)
-                .call(env.malloc_func_id) // Returns field_name_ptr
-                .local_tee(field_ptr_local); // Store in local and keep on stack
-
-            // Stack is now: [obj_ptr, field_name_ptr]
-
-            // We need to write the field name bytes to the allocated memory
-            // Get memory reference
-            let memory_id = module
-                .memories
-                .iter()
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("No memory found"))?
-                .id();
-
-            // Write each byte of the field name
-            for (offset, &byte) in field_bytes.iter().enumerate() {
-                // Load field_name_ptr
-                body.local_get(field_ptr_local);
-                // Load byte value
-                body.i32_const(byte as i32);
-                // Store byte at offset
-                body.store(
-                    memory_id,
-                    walrus::ir::StoreKind::I32_8 { atomic: false },
-                    walrus::ir::MemArg {
-                        align: 1,
-                        offset: offset as u32,
-                    },
-                );
-            }
-
-            // Now call the appropriate field function
-            // Stack currently has: [obj_ptr, field_name_ptr]
-            // We need: [obj_ptr, field_name_ptr, field_len]
-            body.i32_const(field_len);
-
-            // Call appropriate function based on whether this is has() macro
-            if select_expr.test {
-                // has() macro: check field existence, returns Bool
-                body.call(env.has_field_func_id);
+            // Before treating this as a runtime field access, check whether the entire
+            // Select chain forms a qualified type name that exists in the proto schema.
+            // For example, `google.protobuf.Timestamp` is parsed as:
+            //   Select(Select(Ident("google"), "protobuf"), "Timestamp")
+            // When that fully-qualified name is a known message type, it should be
+            // compiled as a CEL type denotation (CelValue::Type), not a field access.
+            let qualified_name = if !select_expr.test {
+                try_collect_qualified_ident(&Expr::Select(select_expr.clone())).filter(|name| {
+                    ctx.schema
+                        .as_ref()
+                        .map(|s| s.has_message_type(name))
+                        .unwrap_or(false)
+                })
             } else {
-                // Normal field access: get field value
-                body.call(env.get_field_func_id);
+                None
+            };
+
+            if let Some(type_name) = qualified_name {
+                // Emit a type denotation: cel_create_type(ptr, len)
+                let type_bytes = type_name.as_bytes();
+                let type_len = type_bytes.len() as i32;
+
+                let type_name_ptr_local = module.locals.add(ValType::I32);
+                body.i32_const(type_len)
+                    .call(env.malloc_func_id)
+                    .local_set(type_name_ptr_local);
+
+                let memory_id = module
+                    .memories
+                    .iter()
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("No memory found"))?
+                    .id();
+
+                for (offset, &byte) in type_bytes.iter().enumerate() {
+                    body.local_get(type_name_ptr_local);
+                    body.i32_const(byte as i32);
+                    body.store(
+                        memory_id,
+                        walrus::ir::StoreKind::I32_8 { atomic: false },
+                        walrus::ir::MemArg {
+                            align: 1,
+                            offset: offset as u32,
+                        },
+                    );
+                }
+
+                body.local_get(type_name_ptr_local)
+                    .i32_const(type_len)
+                    .call(env.create_type_func_id);
+            } else {
+                // Regular field access: compile operand, then call cel_get_field / cel_has_field
+                compile_expr(&select_expr.operand.expr, body, env, ctx, module)?;
+
+                let field_name = &select_expr.field;
+                let field_bytes = field_name.as_bytes();
+                let field_len = field_bytes.len() as i32;
+
+                let field_ptr_local = module.locals.add(ValType::I32);
+
+                body.i32_const(field_len)
+                    .call(env.malloc_func_id)
+                    .local_tee(field_ptr_local);
+
+                let memory_id = module
+                    .memories
+                    .iter()
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("No memory found"))?
+                    .id();
+
+                for (offset, &byte) in field_bytes.iter().enumerate() {
+                    body.local_get(field_ptr_local);
+                    body.i32_const(byte as i32);
+                    body.store(
+                        memory_id,
+                        walrus::ir::StoreKind::I32_8 { atomic: false },
+                        walrus::ir::MemArg {
+                            align: 1,
+                            offset: offset as u32,
+                        },
+                    );
+                }
+
+                body.i32_const(field_len);
+
+                if select_expr.test {
+                    body.call(env.has_field_func_id);
+                } else {
+                    body.call(env.get_field_func_id);
+                }
             }
         }
 
@@ -1929,9 +1977,10 @@ pub fn compile_expr(
                     let maybe_type_url: Option<String> = struct_expr.entries.iter().find_map(|e| {
                         if let EE::StructField(sf) = &e.expr
                             && sf.field == "type_url"
-                                && let Expr::Literal(CelVal::String(s)) = &sf.value.expr {
-                                    return Some(s.clone());
-                                }
+                            && let Expr::Literal(CelVal::String(s)) = &sf.value.expr
+                        {
+                            return Some(s.clone());
+                        }
                         None
                     });
 
