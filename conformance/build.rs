@@ -20,6 +20,7 @@ fn main() -> Result<()> {
                 "cel/expr/checked.proto",
                 "cel/expr/eval.proto",
                 "cel/expr/conformance/test/simple.proto",
+                "cel/expr/conformance/proto2/test_all_types.proto",
                 "cel/expr/conformance/proto3/test_all_types.proto",
             ],
             &[proto_dir],

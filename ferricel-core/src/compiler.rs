@@ -1920,6 +1920,74 @@ pub fn compile_expr(
                     body.local_get(array_ptr_local);
                     body.call(env.map_insert_func_id);
                 }
+
+                // If this is google.protobuf.Any, bake __any_schema__ from the type_url
+                // so the runtime can do schema-aware wire comparison of Any.value bytes.
+                if resolved_type_name == "google.protobuf.Any" {
+                    // Try to find a literal type_url in the struct entries at compile time
+                    use cel::common::ast::EntryExpr as EE;
+                    let maybe_type_url: Option<String> = struct_expr.entries.iter().find_map(|e| {
+                        if let EE::StructField(sf) = &e.expr {
+                            if sf.field == "type_url" {
+                                if let Expr::Literal(CelVal::String(s)) = &sf.value.expr {
+                                    return Some(s.clone());
+                                }
+                            }
+                        }
+                        None
+                    });
+
+                    if let Some(type_url) = maybe_type_url {
+                        // Strip the well-known type.googleapis.com/ prefix
+                        let msg_type =
+                            if let Some(stripped) = type_url.strip_prefix("type.googleapis.com/") {
+                                stripped.to_string()
+                            } else {
+                                type_url.clone()
+                            };
+
+                        let field_schema = schema.get_any_field_schema(&msg_type);
+                        if !field_schema.is_empty() {
+                            // Bake as a CelValue map: field_number_str → kind_str
+                            body.call(env.create_map_func_id);
+                            let schema_map_local = module.locals.add(ValType::I32);
+                            body.local_set(schema_map_local);
+
+                            for (field_num, kind_str) in &field_schema {
+                                let num_key_local = compile_string_to_local(
+                                    &field_num.to_string(),
+                                    body,
+                                    env,
+                                    module,
+                                )?;
+                                let kind_val_local =
+                                    compile_string_to_local(kind_str, body, env, module)?;
+                                body.local_get(schema_map_local);
+                                body.local_get(num_key_local);
+                                body.local_get(kind_val_local);
+                                body.call(env.map_insert_func_id);
+                            }
+
+                            // Also bake the resolved message type name as "__any_type__"
+                            let any_type_key_local =
+                                compile_string_to_local("__any_type__", body, env, module)?;
+                            let any_type_val_local =
+                                compile_string_to_local(&msg_type, body, env, module)?;
+                            body.local_get(schema_map_local);
+                            body.local_get(any_type_key_local);
+                            body.local_get(any_type_val_local);
+                            body.call(env.map_insert_func_id);
+
+                            // Insert "__any_schema__" into the Any struct map
+                            let schema_key_local =
+                                compile_string_to_local("__any_schema__", body, env, module)?;
+                            body.local_get(map_ptr_local);
+                            body.local_get(schema_key_local);
+                            body.local_get(schema_map_local);
+                            body.call(env.map_insert_func_id);
+                        }
+                    }
+                }
             } else if resolved_type_name.contains('.') {
                 // Warn if struct type looks like a proto message but no schema provided
                 error!(

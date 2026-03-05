@@ -6,11 +6,23 @@
 //! - Wrapper-to-primitive equality: `BoolValue{value: true} == true`
 //! - Empty wrapper zero values: `BoolValue{} == false`
 //! - Unset wrapper field access: `TestAllTypes{}.single_bool_wrapper == null`
+//! - Any unpacking for equality: `Any{...} == Any{...}` compares decoded fields
 
 use anyhow::{Context, Result};
 use prost::Message;
 use prost_types::{DescriptorProto, FileDescriptorSet};
 use std::collections::HashMap;
+
+/// The kind of a proto field, used to guide schema-aware wire comparison.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FieldKind {
+    /// Primitive field (varint, fixed32, fixed64) — compare raw wire bytes
+    Primitive,
+    /// Bytes field (wire type 2, but not embedded message) — compare raw bytes
+    Bytes,
+    /// Embedded message field — recurse with schema for the given fully-qualified type name
+    Message(String),
+}
 
 /// The 9 official Protocol Buffer wrapper types from google/protobuf/wrappers.proto
 const WRAPPER_TYPES: &[&str] = &[
@@ -48,6 +60,10 @@ struct FieldSchema {
     name: String,
     /// Fully-qualified type name for message/enum fields (e.g., "google.protobuf.BoolValue")
     type_name: Option<String>,
+    /// Proto field number (1-based, as declared in the .proto file)
+    number: u32,
+    /// Field kind for wire comparison
+    kind: FieldKind,
 }
 
 impl ProtoSchema {
@@ -109,12 +125,30 @@ impl ProtoSchema {
                     // Remove leading dot if present
                     tn.strip_prefix('.').unwrap_or(tn).to_string()
                 });
+                let number = field.number.unwrap_or(0) as u32;
+
+                // Determine field kind from the proto field type
+                // prost_types::field_descriptor_proto::Type values:
+                //   TYPE_BYTES = 12, TYPE_STRING = 9 → both wire type 2 but Bytes/Primitive
+                //   TYPE_MESSAGE = 11, TYPE_GROUP = 10 → wire type 2, embedded message
+                //   All others → primitive (varint or fixed)
+                use prost_types::field_descriptor_proto::Type as FType;
+                let kind = match field.r#type() {
+                    FType::Message | FType::Group => {
+                        let msg_type = type_name.clone().unwrap_or_default();
+                        FieldKind::Message(msg_type)
+                    }
+                    FType::Bytes => FieldKind::Bytes,
+                    _ => FieldKind::Primitive,
+                };
 
                 fields.insert(
                     field_name.clone(),
                     FieldSchema {
                         name: field_name,
                         type_name,
+                        number,
+                        kind,
                     },
                 );
             }
@@ -177,6 +211,33 @@ impl ProtoSchema {
     /// Check if a message type exists in the schema.
     pub fn has_message_type(&self, message_type: &str) -> bool {
         self.messages.contains_key(message_type)
+    }
+
+    /// Get field schema for Any unpacking: returns a map of field_number → encoded kind string.
+    ///
+    /// The encoded kind strings are:
+    /// - `"primitive"` — compare raw wire bytes (varint / fixed)
+    /// - `"bytes"` — compare raw length-delimited payload bytes
+    /// - `"message:<fqn>"` — embedded message, recurse with the named type's schema
+    ///
+    /// Returns an empty map if the message type is not in the schema.
+    pub fn get_any_field_schema(&self, message_type: &str) -> HashMap<u32, String> {
+        self.messages
+            .get(message_type)
+            .map(|msg| {
+                msg.fields
+                    .values()
+                    .map(|f| {
+                        let kind_str = match &f.kind {
+                            FieldKind::Primitive => "primitive".to_string(),
+                            FieldKind::Bytes => "bytes".to_string(),
+                            FieldKind::Message(fqn) => format!("message:{}", fqn),
+                        };
+                        (f.number, kind_str)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Get all message type names in the schema.

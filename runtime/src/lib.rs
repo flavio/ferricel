@@ -15,6 +15,7 @@ mod logical;
 mod map;
 mod membership;
 mod memory;
+pub(crate) mod proto_wire;
 mod serialization;
 mod string;
 mod temporal;
