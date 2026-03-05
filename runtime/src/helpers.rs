@@ -865,6 +865,9 @@ pub unsafe extern "C" fn cel_value_mod(
 /// - google.protobuf.Int32Value/Int64Value -> wraps int
 /// - google.protobuf.StringValue -> wraps string
 /// - google.protobuf.UInt32Value/UInt64Value -> wraps uint
+///
+/// CEL JSON value type (google/protobuf/struct.proto):
+/// - google.protobuf.Value -> unwraps to the native CEL type of its active oneof kind
 fn unwrap_if_wrapper(value: &CelValue) -> Option<CelValue> {
     if let CelValue::Object(map) = value {
         // Check if this is a wrapper type by looking at __type__ field
@@ -894,6 +897,30 @@ fn unwrap_if_wrapper(value: &CelValue) -> Option<CelValue> {
                     // Empty wrapper - return zero value per CEL spec
                     return Some(get_wrapper_zero_value(type_name));
                 }
+            }
+
+            // google.protobuf.Value is a JSON value type (struct.proto).
+            // Its oneof `kind` field determines the native CEL type:
+            //   number_value  -> double
+            //   string_value  -> string
+            //   bool_value    -> bool
+            //   null_value    -> null  (also used when no kind is set)
+            //   struct_value / list_value -> left as Object/Array (not unwrapped)
+            if type_name == "google.protobuf.Value" {
+                let number_key = CelMapKey::String("number_value".into());
+                let string_key = CelMapKey::String("string_value".into());
+                let bool_key = CelMapKey::String("bool_value".into());
+
+                return Some(if let Some(v) = map.get(&number_key) {
+                    v.clone()
+                } else if let Some(v) = map.get(&string_key) {
+                    v.clone()
+                } else if let Some(v) = map.get(&bool_key) {
+                    v.clone()
+                } else {
+                    // null_value is set, or no kind is set — both represent null
+                    CelValue::Null
+                });
             }
         }
     }
