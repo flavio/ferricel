@@ -289,8 +289,10 @@ pub unsafe extern "C" fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mu
 }
 
 /// duration.getMilliseconds() -> int
-/// Converts the entire duration to milliseconds (truncated).
-/// Example: duration('1.5s').getMilliseconds() returns 1500
+/// Returns the milliseconds component of the nanoseconds part of the duration.
+/// Per CEL spec this is NOT the total duration converted to milliseconds —
+/// it is the nanoseconds sub-second component expressed in whole milliseconds.
+/// Example: duration('123.321456789s').getMilliseconds() returns 321
 ///
 /// # Safety
 ///
@@ -301,12 +303,9 @@ pub unsafe extern "C" fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mu
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_duration_get_milliseconds(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let (secs, nanos) = extract_duration(dur_ptr);
-    // Convert to milliseconds: (seconds * 1000) + (nanos / 1_000_000)
-    let millis = secs
-        .checked_mul(1000)
-        .and_then(|s_ms| s_ms.checked_add(nanos as i64 / 1_000_000))
-        .expect("duration milliseconds overflow");
+    let (_secs, nanos) = extract_duration(dur_ptr);
+    // Return the millisecond component of the nanoseconds field only.
+    let millis = nanos as i64 / 1_000_000;
     cel_create_int(millis)
 }
 
@@ -787,7 +786,10 @@ pub unsafe extern "C" fn cel_timestamp_get_seconds_tz(
 
 /// getMilliseconds() method - works on both timestamps and durations
 /// - timestamp.getMilliseconds() -> Returns milliseconds component (0-999) in UTC
-/// - duration.getMilliseconds() -> Converts total duration to milliseconds
+/// - duration.getMilliseconds() -> Returns the millisecond component of the nanoseconds part
+///
+/// Also handles a Duration that arrived through the JSON bridge as a
+/// CelValue::Object with __type__ == "google.protobuf.Duration".
 ///
 /// # Safety
 ///
@@ -806,6 +808,21 @@ pub unsafe extern "C" fn cel_timestamp_get_milliseconds(value_ptr: *mut CelValue
             cel_create_int(millis as i64)
         }
         CelValue::Duration(_) => cel_duration_get_milliseconds(value_ptr),
+        CelValue::Object(map) => {
+            // Handle a google.protobuf.Duration that arrived through the JSON bridge
+            // as {"__type__": "google.protobuf.Duration", "seconds": <s>, "nanos": <n>}.
+            use crate::types::CelMapKey;
+            let type_key = CelMapKey::String("__type__".into());
+            if let Some(CelValue::String(type_name)) = map.get(&type_key)
+                && type_name == "google.protobuf.Duration"
+            {
+                let nanos_key = CelMapKey::String("nanos".into());
+                if let Some(CelValue::Int(nanos)) = map.get(&nanos_key) {
+                    return cel_create_int(*nanos / 1_000_000);
+                }
+            }
+            abort_with_error("getMilliseconds() must be called on a timestamp or duration")
+        }
         _ => abort_with_error("getMilliseconds() must be called on a timestamp or duration"),
     }
 }

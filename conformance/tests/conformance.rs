@@ -569,6 +569,26 @@ impl ConformanceTestRunner {
                     );
                     Ok(JsonValue::Object(obj))
                 }
+                Kind::ObjectValue(any) => {
+                    // Decode a prost_types::Any into a JSON object using the established
+                    // __type__-based convention used throughout the codebase for proto objects.
+                    use prost::Message as _;
+                    const DURATION_URL: &str = "type.googleapis.com/google.protobuf.Duration";
+                    if any.type_url == DURATION_URL {
+                        let dur = prost_types::Duration::decode(any.value.as_slice())
+                            .map_err(|e| format!("Failed to decode Duration: {}", e))?;
+                        let mut obj = serde_json::Map::new();
+                        obj.insert(
+                            "__type__".to_string(),
+                            JsonValue::String("google.protobuf.Duration".to_string()),
+                        );
+                        obj.insert("seconds".to_string(), JsonValue::Number(dur.seconds.into()));
+                        obj.insert("nanos".to_string(), JsonValue::Number(dur.nanos.into()));
+                        Ok(JsonValue::Object(obj))
+                    } else {
+                        Err(format!("Unsupported object type URL: {}", any.type_url))
+                    }
+                }
                 _ => Err("Unsupported value type".to_string()),
             }
         } else {
