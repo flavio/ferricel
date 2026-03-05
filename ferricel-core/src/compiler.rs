@@ -1927,13 +1927,11 @@ pub fn compile_expr(
                     // Try to find a literal type_url in the struct entries at compile time
                     use cel::common::ast::EntryExpr as EE;
                     let maybe_type_url: Option<String> = struct_expr.entries.iter().find_map(|e| {
-                        if let EE::StructField(sf) = &e.expr {
-                            if sf.field == "type_url" {
-                                if let Expr::Literal(CelVal::String(s)) = &sf.value.expr {
+                        if let EE::StructField(sf) = &e.expr
+                            && sf.field == "type_url"
+                                && let Expr::Literal(CelVal::String(s)) = &sf.value.expr {
                                     return Some(s.clone());
                                 }
-                            }
-                        }
                         None
                     });
 
