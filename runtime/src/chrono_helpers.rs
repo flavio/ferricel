@@ -92,6 +92,7 @@ pub fn parse_rfc3339(s: &str) -> Result<DateTime<FixedOffset>, String> {
 /// - `Err(String)` with error message
 pub fn parse_duration(s: &str) -> Result<Duration, String> {
     use nom::IResult;
+    use nom::Parser;
     use nom::branch::alt;
     use nom::bytes::complete::tag;
     use nom::character::complete::char;
@@ -116,7 +117,8 @@ pub fn parse_duration(s: &str) -> Result<Duration, String> {
             map(char('h'), |_| Unit::Hour),
             map(char('m'), |_| Unit::Minute),
             map(char('s'), |_| Unit::Second),
-        ))(i)
+        ))
+        .parse(i)
     }
 
     fn to_duration(num: f64, unit: Unit) -> Result<Duration, String> {
@@ -173,13 +175,17 @@ pub fn parse_duration(s: &str) -> Result<Duration, String> {
     }
 
     fn parse_duration_impl(i: &str) -> IResult<&str, Duration> {
-        let (i, neg) = opt(parse_negative)(i)?;
+        let (i, neg) = opt(parse_negative).parse(i)?;
         if i == "0" {
             return Ok((i, Duration::zero()));
         }
-        let (i, duration) = many1(parse_number_unit)(i)
-            .map(|(i, d)| (i, d.iter().fold(Duration::zero(), |acc, next| acc + *next)))?;
-        Ok((i, duration * if neg.is_some() { -1 } else { 1 }))
+        let (i, duration) =
+            many1(parse_number_unit)
+                .parse(i)
+                .map(|(i, d): (&str, Vec<Duration>)| {
+                    (i, d.iter().fold(Duration::zero(), |acc, next| acc + *next))
+                })?;
+        Ok((i, if neg.is_some() { -duration } else { duration }))
     }
 
     match parse_duration_impl(s) {
