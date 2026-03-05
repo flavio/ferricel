@@ -3,7 +3,7 @@
 //! These tests focus on the CLI interface and integration between components:
 //! - Building WASM files from CEL expressions
 //! - Running WASM files produced by the build command
-//! - Passing input/data via command line arguments and files
+//! - Passing bindings via command line arguments and files
 //!
 //! Note: Unit tests for CEL compilation logic are in src/compiler.rs
 
@@ -100,7 +100,7 @@ fn test_build_invalid_cel_expression() {
 #[test]
 fn test_build_from_file_complex_expression() {
     // Create a CEL file with a more complex expression
-    let cel_file = create_cel_file("input.x > 10 && input.y < 20");
+    let cel_file = create_cel_file("x > 10 && y < 20");
     let output_file = NamedTempFile::new().unwrap();
 
     ferricel()
@@ -222,15 +222,15 @@ fn test_run_nonexistent_wasm_file() {
 }
 
 // ============================================================================
-// RUN COMMAND TESTS - WITH INPUT/DATA FROM CLI
+// RUN COMMAND TESTS - WITH BINDINGS FROM CLI
 // ============================================================================
 
 #[test]
-fn test_run_with_input_json_inline() {
-    // Build WASM that uses input.age
+fn test_run_with_bindings_json_inline() {
+    // Build WASM that uses age variable
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
-        .args(["build", "-e", "input.age + 10", "-o"])
+        .args(["build", "-e", "age + 10", "-o"])
         .arg(wasm_file.path())
         .assert()
         .success();
@@ -239,155 +239,82 @@ fn test_run_with_input_json_inline() {
     ferricel()
         .args(["run"])
         .arg(wasm_file.path())
-        .args(["--input-json", r#"{"age": 25}"#])
+        .args(["--bindings-json", r#"{"age": 25}"#])
         .assert()
         .success()
         .stdout(predicate::str::contains("35"));
 }
 
 #[test]
-fn test_run_with_data_json_inline() {
-    // Build WASM that uses data.value
+fn test_run_with_bindings_json_multiple_vars() {
+    // Build WASM that uses multiple variables
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
-        .args(["build", "-e", "data.value * 2", "-o"])
+        .args(["build", "-e", "x + y", "-o"])
         .arg(wasm_file.path())
         .assert()
         .success();
 
-    // Run with inline JSON
+    // Run with both variables in bindings
     ferricel()
         .args(["run"])
         .arg(wasm_file.path())
-        .args(["--data-json", r#"{"value": 50}"#])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("100"));
-}
-
-#[test]
-fn test_run_with_both_input_and_data_inline() {
-    // Build WASM that uses both input and data
-    let wasm_file = NamedTempFile::new().unwrap();
-    ferricel()
-        .args(["build", "-e", "input.x + data.y", "-o"])
-        .arg(wasm_file.path())
-        .assert()
-        .success();
-
-    // Run with both inline
-    ferricel()
-        .args(["run"])
-        .arg(wasm_file.path())
-        .args(["--input-json", r#"{"x": 100}"#])
-        .args(["--data-json", r#"{"y": 200}"#])
+        .args(["--bindings-json", r#"{"x": 100, "y": 200}"#])
         .assert()
         .success()
         .stdout(predicate::str::contains("300"));
 }
 
 // ============================================================================
-// RUN COMMAND TESTS - WITH INPUT/DATA FROM FILES
+// RUN COMMAND TESTS - WITH BINDINGS FROM FILES
 // ============================================================================
 
 #[test]
-fn test_run_with_input_from_file() {
-    // Create input JSON file
-    let input_file = create_json_file(r#"{"age": 42}"#);
+fn test_run_with_bindings_from_file() {
+    // Create bindings JSON file
+    let bindings_file = create_json_file(r#"{"age": 42}"#);
 
     // Build WASM
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
-        .args(["build", "-e", "input.age", "-o"])
+        .args(["build", "-e", "age", "-o"])
         .arg(wasm_file.path())
         .assert()
         .success();
 
-    // Run with input file
+    // Run with bindings file
     ferricel()
         .args(["run"])
         .arg(wasm_file.path())
-        .arg("--input-file")
-        .arg(input_file.path())
+        .arg("--bindings-file")
+        .arg(bindings_file.path())
         .assert()
         .success()
         .stdout(predicate::str::contains("42"));
 }
 
 #[test]
-fn test_run_with_data_from_file() {
-    // Create data JSON file
-    let data_file = create_json_file(r#"{"multiplier": 5}"#);
+fn test_run_with_bindings_from_file_multiple_vars() {
+    // Create bindings JSON file with multiple variables
+    let bindings_file = create_json_file(r#"{"a": 100, "b": 50}"#);
 
     // Build WASM
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
-        .args(["build", "-e", "10 * data.multiplier", "-o"])
+        .args(["build", "-e", "a - b", "-o"])
         .arg(wasm_file.path())
         .assert()
         .success();
 
-    // Run with data file
+    // Run with bindings file
     ferricel()
         .args(["run"])
         .arg(wasm_file.path())
-        .arg("--data-file")
-        .arg(data_file.path())
+        .arg("--bindings-file")
+        .arg(bindings_file.path())
         .assert()
         .success()
         .stdout(predicate::str::contains("50"));
-}
-
-#[test]
-fn test_run_with_both_input_and_data_from_files() {
-    // Create JSON files
-    let input_file = create_json_file(r#"{"a": 100}"#);
-    let data_file = create_json_file(r#"{"b": 50}"#);
-
-    // Build WASM
-    let wasm_file = NamedTempFile::new().unwrap();
-    ferricel()
-        .args(["build", "-e", "input.a - data.b", "-o"])
-        .arg(wasm_file.path())
-        .assert()
-        .success();
-
-    // Run with both files
-    ferricel()
-        .args(["run"])
-        .arg(wasm_file.path())
-        .arg("--input-file")
-        .arg(input_file.path())
-        .arg("--data-file")
-        .arg(data_file.path())
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("50"));
-}
-
-#[test]
-fn test_run_mixed_inline_json_and_file() {
-    // Create data file
-    let data_file = create_json_file(r#"{"y": 25}"#);
-
-    // Build WASM
-    let wasm_file = NamedTempFile::new().unwrap();
-    ferricel()
-        .args(["build", "-e", "input.x + data.y", "-o"])
-        .arg(wasm_file.path())
-        .assert()
-        .success();
-
-    // Run with inline input and file data
-    ferricel()
-        .args(["run"])
-        .arg(wasm_file.path())
-        .args(["--input-json", r#"{"x": 75}"#])
-        .arg("--data-file")
-        .arg(data_file.path())
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("100"));
 }
 
 // ============================================================================
@@ -395,9 +322,9 @@ fn test_run_mixed_inline_json_and_file() {
 // ============================================================================
 
 #[test]
-fn test_run_input_json_and_file_are_mutually_exclusive() {
+fn test_run_bindings_json_and_file_are_mutually_exclusive() {
     let wasm_file = NamedTempFile::new().unwrap();
-    let input_file = create_json_file(r#"{"age": 30}"#);
+    let bindings_file = create_json_file(r#"{"age": 30}"#);
 
     ferricel()
         .args(["build", "-e", "42", "-o"])
@@ -408,38 +335,16 @@ fn test_run_input_json_and_file_are_mutually_exclusive() {
     ferricel()
         .args(["run"])
         .arg(wasm_file.path())
-        .args(["--input-json", r#"{"age": 25}"#])
-        .arg("--input-file")
-        .arg(input_file.path())
+        .args(["--bindings-json", r#"{"age": 25}"#])
+        .arg("--bindings-file")
+        .arg(bindings_file.path())
         .assert()
         .failure()
         .stderr(predicate::str::contains("cannot be used with"));
 }
 
 #[test]
-fn test_run_data_json_and_file_are_mutually_exclusive() {
-    let wasm_file = NamedTempFile::new().unwrap();
-    let data_file = create_json_file(r#"{"value": 10}"#);
-
-    ferricel()
-        .args(["build", "-e", "42", "-o"])
-        .arg(wasm_file.path())
-        .assert()
-        .success();
-
-    ferricel()
-        .args(["run"])
-        .arg(wasm_file.path())
-        .args(["--data-json", r#"{"value": 5}"#])
-        .arg("--data-file")
-        .arg(data_file.path())
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("cannot be used with"));
-}
-
-#[test]
-fn test_run_missing_input_file() {
+fn test_run_missing_bindings_file() {
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
         .args(["build", "-e", "42", "-o"])
@@ -450,27 +355,8 @@ fn test_run_missing_input_file() {
     ferricel()
         .args(["run"])
         .arg(wasm_file.path())
-        .arg("--input-file")
+        .arg("--bindings-file")
         .arg("/tmp/this_file_does_not_exist_xyz123.json")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("not found"));
-}
-
-#[test]
-fn test_run_missing_data_file() {
-    let wasm_file = NamedTempFile::new().unwrap();
-    ferricel()
-        .args(["build", "-e", "42", "-o"])
-        .arg(wasm_file.path())
-        .assert()
-        .success();
-
-    ferricel()
-        .args(["run"])
-        .arg(wasm_file.path())
-        .arg("--data-file")
-        .arg("/tmp/this_file_does_not_exist_xyz456.json")
         .assert()
         .failure()
         .stderr(predicate::str::contains("not found"));
@@ -483,7 +369,7 @@ fn test_run_invalid_json_in_file() {
 
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
-        .args(["build", "-e", "input.age", "-o"])
+        .args(["build", "-e", "age", "-o"])
         .arg(wasm_file.path())
         .assert()
         .success();
@@ -491,7 +377,7 @@ fn test_run_invalid_json_in_file() {
     ferricel()
         .args(["run"])
         .arg(wasm_file.path())
-        .arg("--input-file")
+        .arg("--bindings-file")
         .arg(bad_json_file.path())
         .assert()
         .failure();

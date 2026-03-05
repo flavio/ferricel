@@ -22,13 +22,9 @@ fn main() -> Result<(), anyhow::Error> {
         ),
         cli::Commands::Run {
             wasm,
-            input_json,
-            input_file,
-            data_json,
-            data_file,
+            bindings_json,
+            bindings_file,
             log_level,
-        } => cmd::run::run(
-            &wasm, input_json, input_file, data_json, data_file, log_level,
-        ),
+        } => cmd::run::run(&wasm, bindings_json, bindings_file, log_level),
     }
 }

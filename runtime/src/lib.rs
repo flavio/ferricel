@@ -48,7 +48,7 @@ pub use serialization::{cel_serialize_bool, cel_serialize_int, cel_serialize_val
 
 pub use deserialization::{cel_deserialize_json, cel_free_value};
 
-pub use globals::{cel_get_data, cel_get_input, cel_init_data, cel_init_input, cel_reset_globals};
+pub use globals::{cel_get_variable, cel_init_bindings, cel_reset_globals};
 
 pub use conversion::{
     cel_bytes, cel_double, cel_duration, cel_int, cel_string, cel_timestamp, cel_uint,

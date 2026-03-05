@@ -1,106 +1,92 @@
-//! Global variable storage for `input` and `data` during CEL expression evaluation.
-//! These globals are initialized once per `validate` call and live for the duration
-//! of the expression evaluation.
+//! Global variable storage for CEL expression evaluation.
+//!
+//! All runtime variables are stored in a single Map value which can contain
+//! any user-provided bindings (e.g., `object`, `oldObject`, `request` for K8s,
+//! or custom variables for general CEL expressions).
 
-use crate::types::CelValue;
+use crate::types::{CelMapKey, CelValue};
 use std::ptr;
 
-/// Global storage for the `input` variable
+/// Global storage for all variable bindings as a Map
 /// Initialized by validate() before expression evaluation
-static mut INPUT_VALUE: *mut CelValue = ptr::null_mut();
+static mut BINDINGS: *mut CelValue = ptr::null_mut();
 
-/// Global storage for the `data` variable
-/// Initialized by validate() before expression evaluation
-static mut DATA_VALUE: *mut CelValue = ptr::null_mut();
-
-/// Initialize the global `input` variable.
+/// Initialize the global bindings map.
 ///
 /// # Parameters
-/// - `ptr`: Pointer to a boxed CelValue (from cel_deserialize_json)
-///   - Can be null if input is not provided
+/// - `ptr`: Pointer to a boxed CelValue::Map (from cel_deserialize_json)
+///   - Should be a Map with variable names as string keys
+///   - Can be null to use an empty map
 ///
 /// # Safety
-/// - Must be called before any expression evaluation that uses `input`
+/// - Must be called before any expression evaluation
 /// - `ptr` must be a valid pointer from cel_deserialize_json or null
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_init_input(ptr: *mut CelValue) {
-    // SAFETY: Writing to static mut, single-threaded WASM environment
+pub unsafe extern "C" fn cel_init_bindings(ptr: *mut CelValue) {
     unsafe {
-        INPUT_VALUE = ptr;
+        BINDINGS = ptr;
     }
 }
 
-/// Initialize the global `data` variable.
+/// Get a variable value by name from the bindings map.
 ///
 /// # Parameters
-/// - `ptr`: Pointer to a boxed CelValue (from cel_deserialize_json)
-///   - Can be null if data is not provided
+/// - `name_ptr`: Pointer to UTF-8 string containing variable name
+/// - `name_len`: Length of variable name in bytes
+///
+/// # Returns
+/// - Pointer to the CelValue for that variable
+/// - Null pointer if variable not found or bindings not initialized
 ///
 /// # Safety
-/// - Must be called before any expression evaluation that uses `data`
-/// - `ptr` must be a valid pointer from cel_deserialize_json or null
+/// - Safe to call after cel_init_bindings in single-threaded WASM environment
+/// - Returned pointer is valid until cel_reset_globals is called
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_init_data(ptr: *mut CelValue) {
-    // SAFETY: Writing to static mut, single-threaded WASM environment
+pub unsafe extern "C" fn cel_get_variable(name_ptr: *const u8, name_len: i32) -> *mut CelValue {
     unsafe {
-        DATA_VALUE = ptr;
+        // Check if bindings are initialized
+        if BINDINGS.is_null() {
+            return ptr::null_mut();
+        }
+
+        // Get the bindings value
+        let bindings_ref = &*BINDINGS;
+
+        // Extract the map from the CelValue
+        let map = match bindings_ref {
+            CelValue::Object(m) => m,
+            _ => return ptr::null_mut(), // Bindings should be a map
+        };
+
+        // Read the variable name from WASM memory
+        let name_slice = std::slice::from_raw_parts(name_ptr, name_len as usize);
+        let name = match std::str::from_utf8(name_slice) {
+            Ok(s) => s,
+            Err(_) => return ptr::null_mut(),
+        };
+
+        // Look up the variable in the map using CelMapKey
+        let key = CelMapKey::String(name.to_string());
+
+        match map.get(&key) {
+            Some(value) => value as *const CelValue as *mut CelValue,
+            None => ptr::null_mut(),
+        }
     }
-}
-
-/// Get the global `input` variable.
-///
-/// # Returns
-/// - Pointer to the input CelValue
-/// - Null pointer if input was not initialized or is absent
-///
-/// # Panics
-/// - Panics if called before cel_init_input
-///
-/// # Safety
-/// - Safe to call after cel_init_input in single-threaded WASM environment
-/// - Returned pointer is valid until cel_reset_globals is called
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_get_input() -> *mut CelValue {
-    // SAFETY: Reading from static, single-threaded WASM environment
-    unsafe { INPUT_VALUE }
-}
-
-/// Get the global `data` variable.
-///
-/// # Returns
-/// - Pointer to the data CelValue
-/// - Null pointer if data was not initialized or is absent
-///
-/// # Panics
-/// - Panics if called before cel_init_data
-///
-/// # Safety
-/// - Safe to call after cel_init_data in single-threaded WASM environment
-/// - Returned pointer is valid until cel_reset_globals is called
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_get_data() -> *mut CelValue {
-    // SAFETY: Reading from static, single-threaded WASM environment
-    unsafe { DATA_VALUE }
 }
 
 /// Reset global variables to null.
-/// Useful for cleanup between evaluations (though not strictly necessary
-/// since WASM instances are short-lived).
 ///
 /// # Safety
 /// - Safe to call at any time
-/// - Does not free the pointed-to values (caller must call cel_free_value separately)
+/// - Does not free the pointed-to values (caller must handle cleanup)
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_reset_globals() {
-    // SAFETY: Writing to static mut, single-threaded WASM environment
     unsafe {
-        INPUT_VALUE = ptr::null_mut();
-        DATA_VALUE = ptr::null_mut();
+        BINDINGS = ptr::null_mut();
     }
 }
 
@@ -109,14 +95,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_init_and_get_input() {
-        let value = Box::new(CelValue::Int(42));
-        let ptr = Box::into_raw(value);
+    fn test_init_and_get_variable() {
+        let mut map = std::collections::HashMap::new();
+        map.insert(CelMapKey::String("x".to_string()), CelValue::Int(42));
+        let bindings = Box::new(CelValue::Object(map));
+        let ptr = Box::into_raw(bindings);
 
         unsafe {
-            cel_init_input(ptr);
-            let retrieved = cel_get_input();
-            assert_eq!(retrieved, ptr);
+            cel_init_bindings(ptr);
+
+            let name = b"x";
+            let var_ptr = cel_get_variable(name.as_ptr(), name.len() as i32);
+            assert!(!var_ptr.is_null());
+
+            let value = &*var_ptr;
+            assert!(matches!(value, CelValue::Int(42)));
 
             // Cleanup
             let _boxed = Box::from_raw(ptr);
@@ -124,14 +117,17 @@ mod tests {
     }
 
     #[test]
-    fn test_init_and_get_data() {
-        let value = Box::new(CelValue::Bool(true));
-        let ptr = Box::into_raw(value);
+    fn test_variable_not_found() {
+        let map = std::collections::HashMap::new();
+        let bindings = Box::new(CelValue::Object(map));
+        let ptr = Box::into_raw(bindings);
 
         unsafe {
-            cel_init_data(ptr);
-            let retrieved = cel_get_data();
-            assert_eq!(retrieved, ptr);
+            cel_init_bindings(ptr);
+
+            let name = b"nonexistent";
+            let var_ptr = cel_get_variable(name.as_ptr(), name.len() as i32);
+            assert!(var_ptr.is_null());
 
             // Cleanup
             let _boxed = Box::from_raw(ptr);
@@ -139,39 +135,28 @@ mod tests {
     }
 
     #[test]
-    fn test_null_input() {
+    fn test_null_bindings() {
         unsafe {
-            cel_init_input(ptr::null_mut());
-            let retrieved = cel_get_input();
-            assert!(retrieved.is_null());
-        }
-    }
+            cel_init_bindings(ptr::null_mut());
 
-    #[test]
-    fn test_null_data() {
-        unsafe {
-            cel_init_data(ptr::null_mut());
-            let retrieved = cel_get_data();
-            assert!(retrieved.is_null());
+            let name = b"x";
+            let var_ptr = cel_get_variable(name.as_ptr(), name.len() as i32);
+            assert!(var_ptr.is_null());
         }
     }
 
     #[test]
     fn test_reset_globals() {
-        let value = Box::new(CelValue::Int(99));
-        let ptr = Box::into_raw(value);
+        let map = std::collections::HashMap::new();
+        let bindings = Box::new(CelValue::Object(map));
+        let ptr = Box::into_raw(bindings);
 
         unsafe {
-            cel_init_input(ptr);
-            cel_init_data(ptr);
-
-            assert!(!cel_get_input().is_null());
-            assert!(!cel_get_data().is_null());
+            cel_init_bindings(ptr);
+            assert!(!BINDINGS.is_null());
 
             cel_reset_globals();
-
-            assert!(cel_get_input().is_null());
-            assert!(cel_get_data().is_null());
+            assert!(BINDINGS.is_null());
 
             // Cleanup
             let _boxed = Box::from_raw(ptr);

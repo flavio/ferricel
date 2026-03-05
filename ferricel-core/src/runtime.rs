@@ -6,15 +6,15 @@ struct HostState {
     logger: slog::Logger,
 }
 
-/// Execute a compiled WASM module with input and data variables
+/// Execute a compiled WASM module with variable bindings
 ///
-/// Takes the WASM module bytes and optional input/data JSON strings.
-/// Allocates memory in WASM for the JSON, calls validate with encoded pointers,
+/// Takes the WASM module bytes and optional bindings JSON string.
+/// The bindings JSON should be a map of variable names to their values.
+/// Allocates memory in WASM for the JSON, calls validate with the encoded pointer,
 /// and returns the JSON-serialized result as a String.
-pub fn execute_wasm_with_vars(
+pub fn execute_wasm(
     wasm_bytes: &[u8],
-    input_json: Option<&str>,
-    data_json: Option<&str>,
+    bindings_json: Option<&str>,
     log_level: LogLevel,
     logger: slog::Logger,
 ) -> Result<String, anyhow::Error> {
@@ -154,26 +154,20 @@ pub fn execute_wasm_with_vars(
         Ok(encoded)
     };
 
-    // Encode input and data parameters
-    let input_encoded = if let Some(json) = input_json {
+    // Encode bindings parameter (default to empty map if not provided)
+    let bindings_encoded = if let Some(json) = bindings_json {
         allocate_json(json)?
     } else {
-        0 // No input provided
+        allocate_json("{}")?
     };
 
-    let data_encoded = if let Some(json) = data_json {
-        allocate_json(json)?
-    } else {
-        0 // No data provided
-    };
-
-    // Get the 'validate' function
+    // Get the 'validate' function (now takes single bindings parameter)
     let validate = instance
-        .get_typed_func::<(i64, i64), i64>(&mut store, "validate")
+        .get_typed_func::<i64, i64>(&mut store, "validate")
         .map_err(|e| anyhow::anyhow!("Failed to get 'validate' function: {}", e))?;
 
-    // Call the validate function with encoded input and data
-    let encoded_result = validate.call(&mut store, (input_encoded, data_encoded))?;
+    // Call the validate function with encoded bindings
+    let encoded_result = validate.call(&mut store, bindings_encoded)?;
 
     // Decode the pointer and length from the i64 result
     let ptr = (encoded_result & 0xFFFFFFFF) as u32;

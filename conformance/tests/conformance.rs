@@ -438,21 +438,17 @@ impl ConformanceTestRunner {
             }
         };
 
-        // Step 2: Prepare input/data JSON if bindings are present
-        let (input_json, data_json) = if !test.bindings.is_empty() {
-            let bindings_json = self.convert_bindings_to_json(&test.bindings)?;
-            // For now, put all bindings in 'input'
-            // TODO: In the future, we might need to distinguish input vs data
-            (Some(bindings_json), None)
+        // Step 2: Prepare bindings JSON if bindings are present
+        let bindings_json = if !test.bindings.is_empty() {
+            Some(self.convert_bindings_to_json(&test.bindings)?)
         } else {
-            (None, None)
+            None
         };
 
         // Step 3: Execute the WASM module in-memory
-        let json_result = match runtime::execute_wasm_with_vars(
+        let json_result = match runtime::execute_wasm(
             &wasm_bytes,
-            input_json.as_deref(),
-            data_json,
+            bindings_json.as_deref(),
             LogLevel::Error, // Use Error level to reduce noise in test output
             self.logger.clone(),
         ) {

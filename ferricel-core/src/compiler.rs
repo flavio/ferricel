@@ -52,10 +52,8 @@ pub struct CompilerEnv {
     pub deserialize_json_func_id: FunctionId,
 
     // Global variable storage
-    pub init_input_func_id: FunctionId,
-    pub init_data_func_id: FunctionId,
-    pub get_input_func_id: FunctionId,
-    pub get_data_func_id: FunctionId,
+    pub init_bindings_func_id: FunctionId,
+    pub get_variable_func_id: FunctionId,
 
     // Field access
     pub get_field_func_id: FunctionId,
@@ -341,10 +339,8 @@ fn compile_cel_to_wasm_internal(
         deserialize_json_func_id: module.exports.get_func("cel_deserialize_json")?,
 
         // Global variable storage
-        init_input_func_id: module.exports.get_func("cel_init_input")?,
-        init_data_func_id: module.exports.get_func("cel_init_data")?,
-        get_input_func_id: module.exports.get_func("cel_get_input")?,
-        get_data_func_id: module.exports.get_func("cel_get_data")?,
+        init_bindings_func_id: module.exports.get_func("cel_init_bindings")?,
+        get_variable_func_id: module.exports.get_func("cel_get_variable")?,
 
         // Field access
         get_field_func_id: module.exports.get_func("cel_get_field")?,
@@ -499,10 +495,8 @@ fn compile_cel_to_wasm_internal(
     module.exports.remove("cel_is_strictly_true")?;
     module.exports.remove("cel_serialize_value")?;
     module.exports.remove("cel_deserialize_json")?;
-    module.exports.remove("cel_init_input")?;
-    module.exports.remove("cel_init_data")?;
-    module.exports.remove("cel_get_input")?;
-    module.exports.remove("cel_get_data")?;
+    module.exports.remove("cel_init_bindings")?;
+    module.exports.remove("cel_get_variable")?;
     module.exports.remove("cel_get_field")?;
     module.exports.remove("cel_has_field")?;
     module.exports.remove("cel_array_len")?;
@@ -530,29 +524,19 @@ fn compile_cel_to_wasm_internal(
         .parse(cel_code)
         .map_err(|e| anyhow::anyhow!("Parse error: {:?}", e))?;
 
-    // 5. Build the 'validate' function (i64, i64) -> i64
-    // First i64: encoded (ptr, len) for input JSON (0 if no input)
-    // Second i64: encoded (ptr, len) for data JSON (0 if no data)
-    let mut validate_func = FunctionBuilder::new(
-        &mut module.types,
-        &[ValType::I64, ValType::I64],
-        &[ValType::I64],
-    );
-    let input_encoded_arg = module.locals.add(ValType::I64);
-    let data_encoded_arg = module.locals.add(ValType::I64);
+    // 5. Build the 'validate' function (i64) -> i64
+    // Parameter: encoded (ptr, len) for bindings JSON (map of variable names to values)
+    let mut validate_func =
+        FunctionBuilder::new(&mut module.types, &[ValType::I64], &[ValType::I64]);
+    let bindings_encoded_arg = module.locals.add(ValType::I64);
 
     let mut body = validate_func.func_body();
 
-    // 6. Initialize global variables (input and data)
-    // Deserialize input (first parameter) and store in global
-    body.local_get(input_encoded_arg)
-        .call(env.deserialize_json_func_id) // Returns *mut CelValue
-        .call(env.init_input_func_id); // Store in INPUT_VALUE global
-
-    // Deserialize data (second parameter) and store in global
-    body.local_get(data_encoded_arg)
-        .call(env.deserialize_json_func_id) // Returns *mut CelValue
-        .call(env.init_data_func_id); // Store in DATA_VALUE global
+    // 6. Initialize global bindings map
+    // Deserialize bindings (single parameter) and store in global
+    body.local_get(bindings_encoded_arg)
+        .call(env.deserialize_json_func_id) // Returns *mut CelValue (should be a Map)
+        .call(env.init_bindings_func_id); // Store in BINDINGS global
 
     // 7. Walk the AST and compile to WASM instructions
     // This leaves a *mut CelValue on the stack
@@ -564,8 +548,7 @@ fn compile_cel_to_wasm_internal(
     body.call(env.serialize_value_func_id);
 
     // 9. Finish the function definition
-    let validate_id =
-        validate_func.finish(vec![input_encoded_arg, data_encoded_arg], &mut module.funcs);
+    let validate_id = validate_func.finish(vec![bindings_encoded_arg], &mut module.funcs);
 
     // 10. Export the 'validate' function for the Host
     module.exports.add("validate", validate_id);
@@ -1514,21 +1497,11 @@ pub fn compile_expr(
                 body.local_get(local_id);
             } else {
                 // Not a local variable, check global variables and type denotations
+                // Type denotations - these are constant Type values
+                // Note: "dyn" is NOT a type denotation - it's only valid as a function call
                 match name.as_str() {
-                    "input" => {
-                        // Get the input variable from global storage
-                        // Returns *mut CelValue
-                        body.call(env.get_input_func_id);
-                    }
-                    "data" => {
-                        // Get the data variable from global storage
-                        // Returns *mut CelValue
-                        body.call(env.get_data_func_id);
-                    }
-                    // Type denotations - these are constant Type values
-                    // Note: "dyn" is NOT a type denotation - it's only valid as a function call
                     "bool" | "int" | "uint" | "double" | "string" | "bytes" | "list" | "map"
-                    | "null_type" | "type" => {
+                    | "null_type" | "type" | "timestamp" | "duration" => {
                         // Create a Type value for this type denotation
                         let type_name = name.as_bytes();
                         let type_name_len = type_name.len() as i32;
@@ -1566,10 +1539,45 @@ pub fn compile_expr(
                             .call(env.create_type_func_id);
                     }
                     _ => {
-                        anyhow::bail!(
-                            "Unknown variable: {}. Only 'input' and 'data' are supported.",
-                            name
-                        );
+                        // All other identifiers are runtime variables
+                        // Look them up from the bindings map via cel_get_variable
+                        let var_name = name.as_bytes();
+                        let var_name_len = var_name.len() as i32;
+
+                        // Allocate memory for variable name
+                        let var_name_ptr_local = module.locals.add(ValType::I32);
+                        body.i32_const(var_name_len)
+                            .call(env.malloc_func_id)
+                            .local_set(var_name_ptr_local);
+
+                        // Write variable name bytes to memory
+                        let memory_id = module
+                            .memories
+                            .iter()
+                            .next()
+                            .ok_or_else(|| anyhow::anyhow!("No memory found"))?
+                            .id();
+
+                        for (offset, &byte) in var_name.iter().enumerate() {
+                            body.local_get(var_name_ptr_local);
+                            body.i32_const(byte as i32);
+                            body.store(
+                                memory_id,
+                                walrus::ir::StoreKind::I32_8 { atomic: false },
+                                walrus::ir::MemArg {
+                                    align: 1,
+                                    offset: offset as u32,
+                                },
+                            );
+                        }
+
+                        // Call cel_get_variable(name_ptr, name_len) -> *mut CelValue
+                        body.local_get(var_name_ptr_local)
+                            .i32_const(var_name_len)
+                            .call(env.get_variable_func_id);
+
+                        // The result is a pointer to the variable's value (or null if not found)
+                        // Null will cause runtime errors when operations try to use it
                     }
                 }
             }
