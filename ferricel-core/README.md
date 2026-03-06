@@ -24,7 +24,8 @@ This crate is the reusable library that powers the `ferricel` CLI tool and can b
 ### Basic Compilation and Execution
 
 ```rust
-use ferricel_core::{compile_cel_to_wasm, execute_wasm_with_vars};
+use ferricel_core::{compile_cel_to_wasm};
+use ferricel_core::runtime;
 use ferricel_types::LogLevel;
 use slog::Logger;
 
@@ -32,10 +33,9 @@ use slog::Logger;
 let wasm_bytes = compile_cel_to_wasm("1 + 1")?;
 
 // Execute the WASM module
-let result = execute_wasm_with_vars(
+let result = runtime::execute_wasm(
     &wasm_bytes,
-    None,  // input JSON
-    None,  // data JSON
+    None,  // bindings JSON (map of variable names to values)
     LogLevel::Error,
     logger
 )?;
@@ -69,7 +69,7 @@ use ferricel_core::runtime;
 
 // Use the granular API for more control
 let wasm = compiler::compile_cel_to_wasm("2 * 3")?;
-let result = runtime::execute_wasm_with_vars(&wasm, None, None, log_level, logger)?;
+let result = runtime::execute_wasm(&wasm, None, log_level, logger)?;
 ```
 
 ## Architecture

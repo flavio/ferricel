@@ -14,28 +14,6 @@ fn create_test_logger() -> Logger {
     Logger::root(drain, o!())
 }
 
-/// Local helper to emulate the old execute_wasm_with_vars behavior
-fn execute_wasm_with_vars(
-    wasm_bytes: &[u8],
-    input_json: Option<&str>,
-    data_json: Option<&str>,
-    log_level: LogLevel,
-    logger: Logger,
-) -> Result<String, anyhow::Error> {
-    let mut bindings = serde_json::Map::new();
-    if let Some(val_str) = input_json {
-        let val: serde_json::Value = serde_json::from_str(val_str)?;
-        bindings.insert("input".to_string(), val);
-    }
-    if let Some(val_str) = data_json {
-        let val: serde_json::Value = serde_json::from_str(val_str)?;
-        bindings.insert("data".to_string(), val);
-    }
-    let bindings_str = serde_json::to_string(&bindings)?;
-
-    runtime::execute_wasm(wasm_bytes, Some(&bindings_str), log_level, logger)
-}
-
 /// Test helper: compile CEL expression and execute it, returning the result
 fn compile_and_execute(cel_expr: &str) -> Result<i64, anyhow::Error> {
     let logger = create_test_logger();
@@ -45,7 +23,7 @@ fn compile_and_execute(cel_expr: &str) -> Result<i64, anyhow::Error> {
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)?;
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)?;
 
     // Parse JSON to extract the numeric value
     // The JSON will be either an integer (e.g., "42") or boolean (e.g., "true"/"false")
@@ -73,8 +51,19 @@ fn compile_and_execute_with_vars(
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
+
+    let mut bindings = serde_json::Map::new();
+    if let Some(val_str) = input_json {
+        let val: serde_json::Value = serde_json::from_str(val_str)?;
+        bindings.insert("input".to_string(), val);
+    }
+    if let Some(val_str) = data_json {
+        let val: serde_json::Value = serde_json::from_str(val_str)?;
+        bindings.insert("data".to_string(), val);
+    }
+    let bindings_str = serde_json::to_string(&bindings)?;
     let json_result =
-        execute_wasm_with_vars(&wasm_bytes, input_json, data_json, LogLevel::Info, logger)?;
+        runtime::execute_wasm(&wasm_bytes, Some(&bindings_str), LogLevel::Info, logger)?;
 
     // Parse JSON to extract the numeric value
     let value: serde_json::Value = serde_json::from_str(&json_result)?;
@@ -97,7 +86,7 @@ fn compile_and_execute_double(cel_expr: &str) -> Result<f64, anyhow::Error> {
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)?;
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)?;
 
     // Parse JSON to extract the double value
     let value: serde_json::Value = serde_json::from_str(&json_result)?;
@@ -744,7 +733,7 @@ fn test_json_output_integer() {
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm("42", compiler_options).expect("Failed to compile");
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(
         json_result, "42",
@@ -762,7 +751,7 @@ fn test_json_output_boolean_true() {
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm("5 > 3", compiler_options).expect("Failed to compile");
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(
         json_result, "true",
@@ -780,7 +769,7 @@ fn test_json_output_boolean_false() {
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm("5 < 3", compiler_options).expect("Failed to compile");
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(
         json_result, "false",
@@ -798,7 +787,7 @@ fn test_json_output_negative_integer() {
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm("-123", compiler_options).expect("Failed to compile");
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(
         json_result, "-123",
@@ -817,7 +806,7 @@ fn test_json_output_arithmetic_result() {
     };
     let wasm_bytes =
         compile_cel_to_wasm("10 + 20 * 2", compiler_options).expect("Failed to compile");
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(
         json_result, "50",
@@ -848,7 +837,7 @@ fn test_list_literals(#[case] expr: &str, #[case] expected: &str) {
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(json_result, expected);
 }
@@ -874,7 +863,7 @@ fn test_all_macro(#[case] expr: &str, #[case] expected: &str) {
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(json_result, expected);
 }
@@ -900,7 +889,7 @@ fn test_exists_macro(#[case] expr: &str, #[case] expected: &str) {
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(json_result, expected);
 }
@@ -926,7 +915,7 @@ fn test_exists_one_macro(#[case] expr: &str, #[case] expected: &str) {
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(json_result, expected);
 }
@@ -953,7 +942,7 @@ fn test_filter_macro(#[case] expr: &str, #[case] expected: &str) {
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(json_result, expected);
 }
@@ -983,7 +972,7 @@ fn test_map_macro(#[case] expr: &str, #[case] expected: &str) {
     };
     let wasm_bytes = compile_cel_to_wasm(expr, compiler_options).expect("Failed to compile");
     let logger = create_test_logger();
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)
         .expect("Failed to execute");
     assert_eq!(json_result, expected);
 }
@@ -1258,7 +1247,7 @@ fn compile_and_execute_string(cel_expr: &str) -> Result<String, anyhow::Error> {
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)?;
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)?;
 
     // Parse JSON to extract the string value
     let value: serde_json::Value = serde_json::from_str(&json_result)?;
@@ -1737,7 +1726,7 @@ fn compile_and_execute_json(cel_expr: &str) -> Result<serde_json::Value, anyhow:
         logger: logger.clone(),
     };
     let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = execute_wasm_with_vars(&wasm_bytes, None, None, LogLevel::Info, logger)?;
+    let json_result = runtime::execute_wasm(&wasm_bytes, None, LogLevel::Info, logger)?;
     Ok(serde_json::from_str(&json_result)?)
 }
 
