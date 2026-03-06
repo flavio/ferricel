@@ -1,5 +1,7 @@
 //! Shared types used across ferricel workspace
 
+pub mod functions;
+
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};

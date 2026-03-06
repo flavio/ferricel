@@ -1,8 +1,10 @@
 use crate::schema::ProtoSchema;
+use anyhow::Context;
 use cel::common::ast::Expr;
 use cel::common::ast::operators;
 use cel::common::value::CelVal;
 use cel::parser::Parser;
+use ferricel_types::functions::RuntimeFunction;
 use slog::error;
 use std::collections::HashMap;
 use walrus::{FunctionBuilder, FunctionId, InstrSeqBuilder, LocalId, ModuleConfig, ValType};
@@ -15,123 +17,16 @@ const RUNTIME_BYTES: &[u8] = include_bytes!(concat!(
 
 // A struct to hold the handles to your runtime functions
 pub struct CompilerEnv {
-    // Arithmetic operations
-    pub add_func_id: FunctionId,
-    pub sub_func_id: FunctionId,
-    pub mul_func_id: FunctionId,
-    pub div_func_id: FunctionId,
-    pub mod_func_id: FunctionId,
-    pub negate_func_id: FunctionId,
+    functions: HashMap<RuntimeFunction, FunctionId>,
+}
 
-    // Comparison operations
-    pub eq_func_id: FunctionId,
-    pub ne_func_id: FunctionId,
-    pub gt_func_id: FunctionId,
-    pub lt_func_id: FunctionId,
-    pub gte_func_id: FunctionId,
-    pub lte_func_id: FunctionId,
-
-    // Logical operations
-    pub and_func_id: FunctionId,
-    pub or_func_id: FunctionId,
-    pub not_func_id: FunctionId,
-    pub not_strictly_false_func_id: FunctionId,
-    pub conditional_func_id: FunctionId,
-    pub is_strictly_false_func_id: FunctionId,
-    pub is_strictly_true_func_id: FunctionId,
-    pub is_error_func_id: FunctionId,
-    pub is_bool_or_error_func_id: FunctionId,
-
-    // Error handling
-    pub create_error_func_id: FunctionId,
-
-    // JSON serialization
-    pub serialize_value_func_id: FunctionId,
-
-    // JSON deserialization
-    pub deserialize_json_func_id: FunctionId,
-
-    // Global variable storage
-    pub init_bindings_func_id: FunctionId,
-    pub get_variable_func_id: FunctionId,
-
-    // Field access
-    pub get_field_func_id: FunctionId,
-    pub has_field_func_id: FunctionId,
-
-    // Array operations
-    pub array_len_func_id: FunctionId,
-    pub array_get_func_id: FunctionId,
-    pub create_array_func_id: FunctionId,
-    pub array_push_func_id: FunctionId,
-
-    // Map operations
-    pub create_map_func_id: FunctionId,
-    pub map_insert_func_id: FunctionId,
-
-    // Memory allocation (for field names)
-    pub malloc_func_id: FunctionId,
-
-    // Value creation helpers
-    pub create_int_func_id: FunctionId,
-    pub create_uint_func_id: FunctionId,
-    pub create_bool_func_id: FunctionId,
-    pub create_double_func_id: FunctionId,
-    pub create_string_func_id: FunctionId,
-    pub create_bytes_func_id: FunctionId,
-    pub create_null_func_id: FunctionId,
-    pub create_type_func_id: FunctionId,
-
-    // String operations
-    pub size_func_id: FunctionId,
-    pub string_starts_with_func_id: FunctionId,
-    pub string_ends_with_func_id: FunctionId,
-    pub string_contains_func_id: FunctionId,
-    pub string_matches_func_id: FunctionId,
-
-    // Membership testing
-    pub in_func_id: FunctionId,
-
-    // Index operator
-    pub index_func_id: FunctionId,
-
-    // Value conversion helpers
-    pub value_to_bool_func_id: FunctionId,
-
-    // Temporal operations
-    pub timestamp_func_id: FunctionId,
-    pub duration_func_id: FunctionId,
-
-    // Timestamp accessor functions
-    pub timestamp_get_full_year_func_id: FunctionId,
-    pub timestamp_get_full_year_tz_func_id: FunctionId,
-    pub timestamp_get_month_func_id: FunctionId,
-    pub timestamp_get_month_tz_func_id: FunctionId,
-    pub timestamp_get_date_func_id: FunctionId,
-    pub timestamp_get_date_tz_func_id: FunctionId,
-    pub timestamp_get_day_of_month_func_id: FunctionId,
-    pub timestamp_get_day_of_month_tz_func_id: FunctionId,
-    pub timestamp_get_day_of_week_func_id: FunctionId,
-    pub timestamp_get_day_of_week_tz_func_id: FunctionId,
-    pub timestamp_get_day_of_year_func_id: FunctionId,
-    pub timestamp_get_day_of_year_tz_func_id: FunctionId,
-    pub timestamp_get_hours_func_id: FunctionId,
-    pub timestamp_get_hours_tz_func_id: FunctionId,
-    pub timestamp_get_minutes_func_id: FunctionId,
-    pub timestamp_get_minutes_tz_func_id: FunctionId,
-    pub timestamp_get_seconds_func_id: FunctionId,
-    pub timestamp_get_seconds_tz_func_id: FunctionId,
-    pub timestamp_get_milliseconds_func_id: FunctionId,
-    pub timestamp_get_milliseconds_tz_func_id: FunctionId,
-
-    // Value conversion helpers
-    pub string_func_id: FunctionId,
-    pub int_func_id: FunctionId,
-    pub uint_func_id: FunctionId,
-    pub double_func_id: FunctionId,
-    pub bytes_func_id: FunctionId,
-    pub bool_func_id: FunctionId,
-    pub type_func_id: FunctionId,
+impl CompilerEnv {
+    pub fn get(&self, func: RuntimeFunction) -> FunctionId {
+        *self
+            .functions
+            .get(&func)
+            .unwrap_or_else(|| panic!("Function {} missing in runtime module", func.name()))
+    }
 }
 
 /// Options for CEL compilation
@@ -297,227 +192,27 @@ fn compile_cel_to_wasm_internal(
     // 1. Load the runtime template from embedded bytes
     let mut module = ModuleConfig::new().parse(RUNTIME_BYTES)?;
 
-    // Get the cel_malloc function ID - we'll need it for field names
-    let malloc_func_id = module.exports.get_func("cel_malloc")?;
+    // 2. Set up the compiler environment and manage exports
+    let mut functions = HashMap::new();
 
-    // 2. Set up the compiler environment
-    let env = CompilerEnv {
-        // Arithmetic operations
-        add_func_id: module.exports.get_func("cel_value_add")?,
-        sub_func_id: module.exports.get_func("cel_value_sub")?,
-        mul_func_id: module.exports.get_func("cel_value_mul")?,
-        div_func_id: module.exports.get_func("cel_value_div")?,
-        mod_func_id: module.exports.get_func("cel_value_mod")?,
-        negate_func_id: module.exports.get_func("cel_value_negate")?,
+    for func in RuntimeFunction::iter() {
+        // Try to find the function in exports
+        let id = module.exports.get_func(func.name()).with_context(|| {
+            format!(
+                "Runtime function '{}' not found in module exports",
+                func.name()
+            )
+        })?;
 
-        // Comparison operations
-        eq_func_id: module.exports.get_func("cel_value_eq")?,
-        ne_func_id: module.exports.get_func("cel_value_ne")?,
-        gt_func_id: module.exports.get_func("cel_value_gt")?,
-        lt_func_id: module.exports.get_func("cel_value_lt")?,
-        gte_func_id: module.exports.get_func("cel_value_gte")?,
-        lte_func_id: module.exports.get_func("cel_value_lte")?,
+        functions.insert(func, id);
 
-        // Logical operations
-        and_func_id: module.exports.get_func("cel_bool_and")?,
-        or_func_id: module.exports.get_func("cel_bool_or")?,
-        not_func_id: module.exports.get_func("cel_bool_not")?,
-        not_strictly_false_func_id: module.exports.get_func("cel_not_strictly_false")?,
-        conditional_func_id: module.exports.get_func("cel_conditional")?,
-        is_strictly_false_func_id: module.exports.get_func("cel_is_strictly_false")?,
-        is_strictly_true_func_id: module.exports.get_func("cel_is_strictly_true")?,
-        is_error_func_id: module.exports.get_func("cel_is_error")?,
-        is_bool_or_error_func_id: module.exports.get_func("cel_is_bool_or_error")?,
+        // If it shouldn't be exported, remove it
+        if !func.is_exported() {
+            module.exports.remove(func.name())?;
+        }
+    }
 
-        // Error handling
-        create_error_func_id: module.exports.get_func("cel_create_error")?,
-
-        // JSON serialization
-        serialize_value_func_id: module.exports.get_func("cel_serialize_value")?,
-
-        // JSON deserialization
-        deserialize_json_func_id: module.exports.get_func("cel_deserialize_json")?,
-
-        // Global variable storage
-        init_bindings_func_id: module.exports.get_func("cel_init_bindings")?,
-        get_variable_func_id: module.exports.get_func("cel_get_variable")?,
-
-        // Field access
-        get_field_func_id: module.exports.get_func("cel_get_field")?,
-        has_field_func_id: module.exports.get_func("cel_has_field")?,
-
-        // Array operations
-        array_len_func_id: module.exports.get_func("cel_array_len")?,
-        array_get_func_id: module.exports.get_func("cel_array_get")?,
-        create_array_func_id: module.exports.get_func("cel_create_array")?,
-        array_push_func_id: module.exports.get_func("cel_array_push")?,
-
-        // Map operations
-        create_map_func_id: module.exports.get_func("cel_create_map")?,
-        map_insert_func_id: module.exports.get_func("cel_map_insert")?,
-
-        // Memory allocation
-        malloc_func_id,
-
-        // Value creation helpers
-        create_int_func_id: module.exports.get_func("cel_create_int")?,
-        create_uint_func_id: module.exports.get_func("cel_create_uint")?,
-        create_bool_func_id: module.exports.get_func("cel_create_bool")?,
-        create_double_func_id: module.exports.get_func("cel_create_double")?,
-        create_string_func_id: module.exports.get_func("cel_create_string")?,
-        create_bytes_func_id: module.exports.get_func("cel_create_bytes")?,
-        create_null_func_id: module.exports.get_func("cel_create_null")?,
-        create_type_func_id: module.exports.get_func("cel_create_type")?,
-
-        // String operations
-        size_func_id: module.exports.get_func("cel_value_size")?,
-        string_starts_with_func_id: module.exports.get_func("cel_string_starts_with")?,
-        string_ends_with_func_id: module.exports.get_func("cel_string_ends_with")?,
-        string_contains_func_id: module.exports.get_func("cel_string_contains")?,
-        string_matches_func_id: module.exports.get_func("cel_string_matches")?,
-
-        // Membership testing
-        in_func_id: module.exports.get_func("cel_value_in")?,
-
-        // Index operator
-        index_func_id: module.exports.get_func("cel_value_index")?,
-
-        // Value conversion helpers
-        value_to_bool_func_id: module.exports.get_func("cel_value_to_bool")?,
-
-        // Temporal operations
-        timestamp_func_id: module.exports.get_func("cel_timestamp")?,
-        duration_func_id: module.exports.get_func("cel_duration")?,
-
-        // Timestamp accessor functions
-        timestamp_get_full_year_func_id: module.exports.get_func("cel_timestamp_get_full_year")?,
-        timestamp_get_full_year_tz_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_full_year_tz")?,
-        timestamp_get_month_func_id: module.exports.get_func("cel_timestamp_get_month")?,
-        timestamp_get_month_tz_func_id: module.exports.get_func("cel_timestamp_get_month_tz")?,
-        timestamp_get_date_func_id: module.exports.get_func("cel_timestamp_get_date")?,
-        timestamp_get_date_tz_func_id: module.exports.get_func("cel_timestamp_get_date_tz")?,
-        timestamp_get_day_of_month_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_day_of_month")?,
-        timestamp_get_day_of_month_tz_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_day_of_month_tz")?,
-        timestamp_get_day_of_week_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_day_of_week")?,
-        timestamp_get_day_of_week_tz_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_day_of_week_tz")?,
-        timestamp_get_day_of_year_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_day_of_year")?,
-        timestamp_get_day_of_year_tz_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_day_of_year_tz")?,
-        timestamp_get_hours_func_id: module.exports.get_func("cel_timestamp_get_hours")?,
-        timestamp_get_hours_tz_func_id: module.exports.get_func("cel_timestamp_get_hours_tz")?,
-        timestamp_get_minutes_func_id: module.exports.get_func("cel_timestamp_get_minutes")?,
-        timestamp_get_minutes_tz_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_minutes_tz")?,
-        timestamp_get_seconds_func_id: module.exports.get_func("cel_timestamp_get_seconds")?,
-        timestamp_get_seconds_tz_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_seconds_tz")?,
-        timestamp_get_milliseconds_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_milliseconds")?,
-        timestamp_get_milliseconds_tz_func_id: module
-            .exports
-            .get_func("cel_timestamp_get_milliseconds_tz")?,
-
-        string_func_id: module.exports.get_func("cel_string")?,
-        int_func_id: module.exports.get_func("cel_int")?,
-        uint_func_id: module.exports.get_func("cel_uint")?,
-        double_func_id: module.exports.get_func("cel_double")?,
-        bytes_func_id: module.exports.get_func("cel_bytes")?,
-        bool_func_id: module.exports.get_func("cel_bool")?,
-        type_func_id: module.exports.get_func("cel_type")?,
-    };
-
-    // 3. Remove the helpers from exports so the Host can't call them directly
-    module.exports.remove("cel_value_add")?;
-    module.exports.remove("cel_value_sub")?;
-    module.exports.remove("cel_value_mul")?;
-    module.exports.remove("cel_value_div")?;
-    module.exports.remove("cel_value_mod")?;
-    module.exports.remove("cel_value_eq")?;
-    module.exports.remove("cel_value_ne")?;
-    module.exports.remove("cel_value_gt")?;
-    module.exports.remove("cel_value_lt")?;
-    module.exports.remove("cel_value_gte")?;
-    module.exports.remove("cel_value_lte")?;
-    // Keep type-specific functions hidden (used internally by polymorphic functions)
-    module.exports.remove("cel_int_sub")?;
-    module.exports.remove("cel_int_mul")?;
-    module.exports.remove("cel_int_div")?;
-    module.exports.remove("cel_int_mod")?;
-    module.exports.remove("cel_uint_add")?;
-    module.exports.remove("cel_uint_sub")?;
-    module.exports.remove("cel_uint_mul")?;
-    module.exports.remove("cel_uint_div")?;
-    module.exports.remove("cel_uint_mod")?;
-    module.exports.remove("cel_double_add")?;
-    module.exports.remove("cel_double_sub")?;
-    module.exports.remove("cel_double_mul")?;
-    module.exports.remove("cel_double_div")?;
-    module.exports.remove("cel_int_eq")?;
-    module.exports.remove("cel_int_ne")?;
-    module.exports.remove("cel_int_gt")?;
-    module.exports.remove("cel_int_lt")?;
-    module.exports.remove("cel_int_gte")?;
-    module.exports.remove("cel_int_lte")?;
-    module.exports.remove("cel_uint_eq")?;
-    module.exports.remove("cel_uint_ne")?;
-    module.exports.remove("cel_uint_gt")?;
-    module.exports.remove("cel_uint_lt")?;
-    module.exports.remove("cel_uint_gte")?;
-    module.exports.remove("cel_uint_lte")?;
-    module.exports.remove("cel_double_eq")?;
-    module.exports.remove("cel_double_ne")?;
-    module.exports.remove("cel_double_gt")?;
-    module.exports.remove("cel_double_lt")?;
-    module.exports.remove("cel_double_gte")?;
-    module.exports.remove("cel_double_lte")?;
-    module.exports.remove("cel_bool_and")?;
-    module.exports.remove("cel_bool_or")?;
-    module.exports.remove("cel_bool_not")?;
-    module.exports.remove("cel_not_strictly_false")?;
-    module.exports.remove("cel_conditional")?;
-    module.exports.remove("cel_is_strictly_false")?;
-    module.exports.remove("cel_is_strictly_true")?;
-    module.exports.remove("cel_serialize_value")?;
-    module.exports.remove("cel_deserialize_json")?;
-    module.exports.remove("cel_init_bindings")?;
-    module.exports.remove("cel_get_variable")?;
-    module.exports.remove("cel_get_field")?;
-    module.exports.remove("cel_has_field")?;
-    module.exports.remove("cel_array_len")?;
-    module.exports.remove("cel_array_get")?;
-    module.exports.remove("cel_create_array")?;
-    module.exports.remove("cel_array_push")?;
-    module.exports.remove("cel_create_map")?;
-    module.exports.remove("cel_map_insert")?;
-    module.exports.remove("cel_create_int")?;
-    module.exports.remove("cel_create_uint")?;
-    module.exports.remove("cel_create_bool")?;
-    module.exports.remove("cel_create_double")?;
-    module.exports.remove("cel_value_to_bool")?;
-    module.exports.remove("cel_value_to_i64")?;
-    module.exports.remove("cel_value_to_u64")?;
-    module.exports.remove("cel_int")?;
-    module.exports.remove("cel_uint")?;
-    module.exports.remove("cel_double")?;
-    module.exports.remove("cel_bool")?;
-    module.exports.remove("cel_value_in")?;
-    module.exports.remove("cel_value_index")?;
+    let env = CompilerEnv { functions };
 
     // 4. Parse the CEL expression
     let root_ast = Parser::default()
@@ -535,8 +230,8 @@ fn compile_cel_to_wasm_internal(
     // 6. Initialize global bindings map
     // Deserialize bindings (single parameter) and store in global
     body.local_get(bindings_encoded_arg)
-        .call(env.deserialize_json_func_id) // Returns *mut CelValue (should be a Map)
-        .call(env.init_bindings_func_id); // Store in BINDINGS global
+        .call(env.get(RuntimeFunction::DeserializeJson)) // Returns *mut CelValue (should be a Map)
+        .call(env.get(RuntimeFunction::InitBindings)); // Store in BINDINGS global
 
     // 7. Walk the AST and compile to WASM instructions
     // This leaves a *mut CelValue on the stack
@@ -545,7 +240,7 @@ fn compile_cel_to_wasm_internal(
 
     // 8. Serialize the result to JSON
     // The stack has a *mut CelValue, serialize it directly
-    body.call(env.serialize_value_func_id);
+    body.call(env.get(RuntimeFunction::SerializeValue));
 
     // 9. Finish the function definition
     let validate_id = validate_func.finish(vec![bindings_encoded_arg], &mut module.funcs);
@@ -578,7 +273,7 @@ fn compile_string_to_local(
     // Allocate memory for the string data
     let data_ptr_local = module.locals.add(ValType::I32);
     body.i32_const(len)
-        .call(env.malloc_func_id)
+        .call(env.get(RuntimeFunction::Malloc))
         .local_set(data_ptr_local);
 
     // Get memory reference
@@ -606,7 +301,7 @@ fn compile_string_to_local(
     // Call cel_create_string(data_ptr, len)
     body.local_get(data_ptr_local);
     body.i32_const(len);
-    body.call(env.create_string_func_id);
+    body.call(env.get(RuntimeFunction::CreateString));
 
     // Store the resulting CelValue pointer in a local and return it
     let result_local = module.locals.add(ValType::I32);
@@ -647,23 +342,23 @@ pub fn compile_expr(
                 CelVal::Int(value) => {
                     // Create a CelValue::Int pointer
                     body.i64_const(*value);
-                    body.call(env.create_int_func_id);
+                    body.call(env.get(RuntimeFunction::CreateInt));
                 }
                 CelVal::UInt(value) => {
                     // Create a CelValue::UInt pointer
                     // Note: WASM only has i64, so we pass u64 as i64
                     body.i64_const(*value as i64);
-                    body.call(env.create_uint_func_id);
+                    body.call(env.get(RuntimeFunction::CreateUint));
                 }
                 CelVal::Boolean(b) => {
                     // Create a CelValue::Bool pointer
                     body.i64_const(if *b { 1 } else { 0 });
-                    body.call(env.create_bool_func_id);
+                    body.call(env.get(RuntimeFunction::CreateBool));
                 }
                 CelVal::Double(d) => {
                     // Create a CelValue::Double pointer
                     body.f64_const(*d);
-                    body.call(env.create_double_func_id);
+                    body.call(env.get(RuntimeFunction::CreateDouble));
                 }
                 CelVal::String(s) => {
                     // String literals require memory allocation
@@ -675,7 +370,7 @@ pub fn compile_expr(
 
                     // Allocate memory for the string data
                     body.i32_const(string_len)
-                        .call(env.malloc_func_id) // Returns data_ptr
+                        .call(env.get(RuntimeFunction::Malloc)) // Returns data_ptr
                         .local_set(data_ptr_local); // Store in local and pop from stack
 
                     // Get memory reference
@@ -706,7 +401,7 @@ pub fn compile_expr(
                     // Call cel_create_string(data_ptr, len)
                     body.local_get(data_ptr_local); // Load data_ptr
                     body.i32_const(string_len); // Load length
-                    body.call(env.create_string_func_id); // Returns *mut CelValue
+                    body.call(env.get(RuntimeFunction::CreateString)); // Returns *mut CelValue
                 }
                 CelVal::Bytes(bytes) => {
                     // Bytes literals require memory allocation (same pattern as strings)
@@ -717,7 +412,7 @@ pub fn compile_expr(
 
                     // Allocate memory for the bytes data
                     body.i32_const(bytes_len)
-                        .call(env.malloc_func_id) // Returns data_ptr
+                        .call(env.get(RuntimeFunction::Malloc)) // Returns data_ptr
                         .local_set(data_ptr_local); // Store in local and pop from stack
 
                     // Get memory reference
@@ -748,11 +443,11 @@ pub fn compile_expr(
                     // Call cel_create_bytes(data_ptr, len)
                     body.local_get(data_ptr_local); // Load data_ptr
                     body.i32_const(bytes_len); // Load length
-                    body.call(env.create_bytes_func_id); // Returns *mut CelValue
+                    body.call(env.get(RuntimeFunction::CreateBytes)); // Returns *mut CelValue
                 }
                 CelVal::Null => {
                     // Create a CelValue::Null pointer
-                    body.call(env.create_null_func_id);
+                    body.call(env.get(RuntimeFunction::CreateNull));
                 }
                 // Other literals not supported yet
                 _ => anyhow::bail!("Unsupported literal: {:?}", literal),
@@ -771,7 +466,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.add_func_id);
+                    body.call(env.get(RuntimeFunction::ValueAdd));
                 }
                 operators::SUBSTRACT => {
                     if call_expr.args.len() != 2 {
@@ -779,7 +474,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.sub_func_id);
+                    body.call(env.get(RuntimeFunction::ValueSub));
                 }
                 operators::MULTIPLY => {
                     if call_expr.args.len() != 2 {
@@ -787,7 +482,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.mul_func_id);
+                    body.call(env.get(RuntimeFunction::ValueMul));
                 }
                 operators::DIVIDE => {
                     if call_expr.args.len() != 2 {
@@ -795,7 +490,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.div_func_id);
+                    body.call(env.get(RuntimeFunction::ValueDiv));
                 }
                 operators::MODULO => {
                     if call_expr.args.len() != 2 {
@@ -803,7 +498,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.mod_func_id);
+                    body.call(env.get(RuntimeFunction::ValueMod));
                 }
                 operators::NEGATE => {
                     // Unary negation operator: -x
@@ -811,7 +506,7 @@ pub fn compile_expr(
                         anyhow::bail!("Negation operator expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.negate_func_id);
+                    body.call(env.get(RuntimeFunction::ValueNegate));
                 }
 
                 // Comparison operators
@@ -821,7 +516,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.eq_func_id);
+                    body.call(env.get(RuntimeFunction::ValueEq));
                 }
                 operators::NOT_EQUALS => {
                     if call_expr.args.len() != 2 {
@@ -829,7 +524,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.ne_func_id);
+                    body.call(env.get(RuntimeFunction::ValueNe));
                 }
                 operators::GREATER => {
                     if call_expr.args.len() != 2 {
@@ -837,7 +532,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.gt_func_id);
+                    body.call(env.get(RuntimeFunction::ValueGt));
                 }
                 operators::LESS => {
                     if call_expr.args.len() != 2 {
@@ -845,7 +540,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.lt_func_id);
+                    body.call(env.get(RuntimeFunction::ValueLt));
                 }
                 operators::GREATER_EQUALS => {
                     if call_expr.args.len() != 2 {
@@ -853,7 +548,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.gte_func_id);
+                    body.call(env.get(RuntimeFunction::ValueGte));
                 }
                 operators::LESS_EQUALS => {
                     if call_expr.args.len() != 2 {
@@ -861,7 +556,7 @@ pub fn compile_expr(
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
-                    body.call(env.lte_func_id);
+                    body.call(env.get(RuntimeFunction::ValueLte));
                 }
 
                 // Membership operator
@@ -874,7 +569,7 @@ pub fn compile_expr(
                     // Right operand: container (list or map)
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     // Call runtime function
-                    body.call(env.in_func_id);
+                    body.call(env.get(RuntimeFunction::ValueIn));
                 }
 
                 // Logical operators with conditional short-circuit evaluation
@@ -902,7 +597,7 @@ pub fn compile_expr(
                     body.local_tee(left_local); // Duplicate and store left value
 
                     // Check if left is strictly false
-                    body.call(env.is_strictly_false_func_id); // Returns i32: 1 if false, 0 otherwise
+                    body.call(env.get(RuntimeFunction::IsStrictlyFalse)); // Returns i32: 1 if false, 0 otherwise
 
                     // Create dangling instruction sequences for then and else branches
                     // Both branches must produce *mut CelValue (i32) on the stack
@@ -927,7 +622,7 @@ pub fn compile_expr(
                     else_body.local_set(right_local); // Store right, consumes stack
                     else_body.local_get(left_local); // Push left
                     else_body.local_get(right_local); // Push right
-                    else_body.call(env.and_func_id); // Call and(left, right)
+                    else_body.call(env.get(RuntimeFunction::BoolAnd)); // Call and(left, right)
                 }
                 operators::LOGICAL_OR => {
                     // CEL OR semantics: true || <anything> => true (errors absorbed)
@@ -953,7 +648,7 @@ pub fn compile_expr(
                     body.local_tee(left_local); // Duplicate and store left value
 
                     // Check if left is strictly true
-                    body.call(env.is_strictly_true_func_id); // Returns i32: 1 if true, 0 otherwise
+                    body.call(env.get(RuntimeFunction::IsStrictlyTrue)); // Returns i32: 1 if true, 0 otherwise
 
                     // Create dangling instruction sequences for then and else branches
                     // Both branches must produce *mut CelValue (i32) on the stack
@@ -978,14 +673,14 @@ pub fn compile_expr(
                     else_body.local_set(right_local); // Store right, consumes stack
                     else_body.local_get(left_local); // Push left
                     else_body.local_get(right_local); // Push right
-                    else_body.call(env.or_func_id); // Call or(left, right)
+                    else_body.call(env.get(RuntimeFunction::BoolOr)); // Call or(left, right)
                 }
                 operators::LOGICAL_NOT => {
                     if call_expr.args.len() != 1 {
                         anyhow::bail!("Logical NOT operator expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.not_func_id);
+                    body.call(env.get(RuntimeFunction::BoolNot));
                 }
 
                 operators::NOT_STRICTLY_FALSE => {
@@ -995,7 +690,7 @@ pub fn compile_expr(
                         anyhow::bail!("@not_strictly_false expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.not_strictly_false_func_id);
+                    body.call(env.get(RuntimeFunction::NotStrictlyFalse));
                 }
 
                 operators::CONDITIONAL => {
@@ -1022,7 +717,7 @@ pub fn compile_expr(
                     body.local_tee(cond_local); // Duplicate and store
 
                     // Check if condition is error
-                    body.call(env.is_error_func_id); // Returns i32: 1 if error, 0 otherwise
+                    body.call(env.get(RuntimeFunction::IsError)); // Returns i32: 1 if error, 0 otherwise
 
                     // Create sequences for error check
                     let is_error_seq = body.dangling_instr_seq(Some(ValType::I32));
@@ -1041,7 +736,7 @@ pub fn compile_expr(
                     // If condition is not error, convert to bool and branch
                     let mut not_error_body = body.instr_seq(not_error_id);
                     not_error_body.local_get(cond_local);
-                    not_error_body.call(env.value_to_bool_func_id); // Returns i64: 1 for true, 0 for false
+                    not_error_body.call(env.get(RuntimeFunction::ValueToBool)); // Returns i64: 1 for true, 0 for false
                     not_error_body.unop(walrus::ir::UnaryOp::I32WrapI64);
 
                     // Create sequences for true/false branches
@@ -1078,8 +773,8 @@ pub fn compile_expr(
 
                     // Call polymorphic cel_value_size which returns i64
                     // We need to convert it to *mut CelValue::Int
-                    body.call(env.size_func_id); // Returns i64
-                    body.call(env.create_int_func_id); // Convert i64 to *mut CelValue
+                    body.call(env.get(RuntimeFunction::ValueSize)); // Returns i64
+                    body.call(env.get(RuntimeFunction::CreateInt)); // Convert i64 to *mut CelValue
                 }
 
                 "startsWith" => {
@@ -1105,7 +800,7 @@ pub fn compile_expr(
                         compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     }
                     // Call cel_string_starts_with which returns *mut CelValue::Bool
-                    body.call(env.string_starts_with_func_id);
+                    body.call(env.get(RuntimeFunction::StringStartsWith));
                 }
 
                 "endsWith" => {
@@ -1131,7 +826,7 @@ pub fn compile_expr(
                         compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     }
                     // Call cel_string_ends_with which returns *mut CelValue::Bool
-                    body.call(env.string_ends_with_func_id);
+                    body.call(env.get(RuntimeFunction::StringEndsWith));
                 }
 
                 "contains" => {
@@ -1157,7 +852,7 @@ pub fn compile_expr(
                         compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     }
                     // Call cel_string_contains which returns *mut CelValue::Bool
-                    body.call(env.string_contains_func_id);
+                    body.call(env.get(RuntimeFunction::StringContains));
                 }
 
                 "matches" => {
@@ -1183,7 +878,7 @@ pub fn compile_expr(
                         compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     }
                     // Call cel_string_matches which returns *mut CelValue::Bool
-                    body.call(env.string_matches_func_id);
+                    body.call(env.get(RuntimeFunction::StringMatches));
                 }
 
                 // Temporal conversion functions
@@ -1194,7 +889,7 @@ pub fn compile_expr(
                         anyhow::bail!("timestamp() expects 1 argument (RFC3339 string)");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.timestamp_func_id);
+                    body.call(env.get(RuntimeFunction::Timestamp));
                 }
 
                 "duration" => {
@@ -1204,7 +899,7 @@ pub fn compile_expr(
                         anyhow::bail!("duration() expects 1 argument (duration string)");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.duration_func_id);
+                    body.call(env.get(RuntimeFunction::Duration));
                 }
 
                 // Timestamp accessor methods
@@ -1216,11 +911,11 @@ pub fn compile_expr(
                         compile_expr(&target.expr, body, env, ctx, module)?;
                         if call_expr.args.is_empty() {
                             // No timezone parameter - use UTC
-                            body.call(env.timestamp_get_full_year_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetFullYear));
                         } else if call_expr.args.len() == 1 {
                             // With timezone parameter
                             compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                            body.call(env.timestamp_get_full_year_tz_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetFullYearTz));
                         } else {
                             anyhow::bail!(
                                 "getFullYear() expects 0 or 1 argument (optional timezone)"
@@ -1237,10 +932,10 @@ pub fn compile_expr(
                     if let Some(target) = &call_expr.target {
                         compile_expr(&target.expr, body, env, ctx, module)?;
                         if call_expr.args.is_empty() {
-                            body.call(env.timestamp_get_month_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetMonth));
                         } else if call_expr.args.len() == 1 {
                             compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                            body.call(env.timestamp_get_month_tz_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetMonthTz));
                         } else {
                             anyhow::bail!("getMonth() expects 0 or 1 argument (optional timezone)");
                         }
@@ -1255,10 +950,10 @@ pub fn compile_expr(
                     if let Some(target) = &call_expr.target {
                         compile_expr(&target.expr, body, env, ctx, module)?;
                         if call_expr.args.is_empty() {
-                            body.call(env.timestamp_get_date_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetDate));
                         } else if call_expr.args.len() == 1 {
                             compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                            body.call(env.timestamp_get_date_tz_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetDateTz));
                         } else {
                             anyhow::bail!("getDate() expects 0 or 1 argument (optional timezone)");
                         }
@@ -1273,10 +968,10 @@ pub fn compile_expr(
                     if let Some(target) = &call_expr.target {
                         compile_expr(&target.expr, body, env, ctx, module)?;
                         if call_expr.args.is_empty() {
-                            body.call(env.timestamp_get_day_of_month_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetDayOfMonth));
                         } else if call_expr.args.len() == 1 {
                             compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                            body.call(env.timestamp_get_day_of_month_tz_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetDayOfMonthTz));
                         } else {
                             anyhow::bail!(
                                 "getDayOfMonth() expects 0 or 1 argument (optional timezone)"
@@ -1293,10 +988,10 @@ pub fn compile_expr(
                     if let Some(target) = &call_expr.target {
                         compile_expr(&target.expr, body, env, ctx, module)?;
                         if call_expr.args.is_empty() {
-                            body.call(env.timestamp_get_day_of_week_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetDayOfWeek));
                         } else if call_expr.args.len() == 1 {
                             compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                            body.call(env.timestamp_get_day_of_week_tz_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetDayOfWeekTz));
                         } else {
                             anyhow::bail!(
                                 "getDayOfWeek() expects 0 or 1 argument (optional timezone)"
@@ -1313,10 +1008,10 @@ pub fn compile_expr(
                     if let Some(target) = &call_expr.target {
                         compile_expr(&target.expr, body, env, ctx, module)?;
                         if call_expr.args.is_empty() {
-                            body.call(env.timestamp_get_day_of_year_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetDayOfYear));
                         } else if call_expr.args.len() == 1 {
                             compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                            body.call(env.timestamp_get_day_of_year_tz_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetDayOfYearTz));
                         } else {
                             anyhow::bail!(
                                 "getDayOfYear() expects 0 or 1 argument (optional timezone)"
@@ -1333,10 +1028,10 @@ pub fn compile_expr(
                     if let Some(target) = &call_expr.target {
                         compile_expr(&target.expr, body, env, ctx, module)?;
                         if call_expr.args.is_empty() {
-                            body.call(env.timestamp_get_hours_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetHours));
                         } else if call_expr.args.len() == 1 {
                             compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                            body.call(env.timestamp_get_hours_tz_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetHoursTz));
                         } else {
                             anyhow::bail!("getHours() expects 0 or 1 argument (optional timezone)");
                         }
@@ -1351,10 +1046,10 @@ pub fn compile_expr(
                     if let Some(target) = &call_expr.target {
                         compile_expr(&target.expr, body, env, ctx, module)?;
                         if call_expr.args.is_empty() {
-                            body.call(env.timestamp_get_minutes_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetMinutes));
                         } else if call_expr.args.len() == 1 {
                             compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                            body.call(env.timestamp_get_minutes_tz_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetMinutesTz));
                         } else {
                             anyhow::bail!(
                                 "getMinutes() expects 0 or 1 argument (optional timezone)"
@@ -1371,10 +1066,10 @@ pub fn compile_expr(
                     if let Some(target) = &call_expr.target {
                         compile_expr(&target.expr, body, env, ctx, module)?;
                         if call_expr.args.is_empty() {
-                            body.call(env.timestamp_get_seconds_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetSeconds));
                         } else if call_expr.args.len() == 1 {
                             compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                            body.call(env.timestamp_get_seconds_tz_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetSecondsTz));
                         } else {
                             anyhow::bail!(
                                 "getSeconds() expects 0 or 1 argument (optional timezone)"
@@ -1391,10 +1086,10 @@ pub fn compile_expr(
                     if let Some(target) = &call_expr.target {
                         compile_expr(&target.expr, body, env, ctx, module)?;
                         if call_expr.args.is_empty() {
-                            body.call(env.timestamp_get_milliseconds_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetMilliseconds));
                         } else if call_expr.args.len() == 1 {
                             compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                            body.call(env.timestamp_get_milliseconds_tz_func_id);
+                            body.call(env.get(RuntimeFunction::TimestampGetMillisecondsTz));
                         } else {
                             anyhow::bail!(
                                 "getMilliseconds() expects 0 or 1 argument (optional timezone)"
@@ -1414,7 +1109,7 @@ pub fn compile_expr(
                         anyhow::bail!("string() expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.string_func_id);
+                    body.call(env.get(RuntimeFunction::String));
                 }
 
                 "int" => {
@@ -1424,7 +1119,7 @@ pub fn compile_expr(
                         anyhow::bail!("int() expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.int_func_id);
+                    body.call(env.get(RuntimeFunction::Int));
                 }
 
                 "uint" => {
@@ -1434,7 +1129,7 @@ pub fn compile_expr(
                         anyhow::bail!("uint() expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.uint_func_id);
+                    body.call(env.get(RuntimeFunction::Uint));
                 }
 
                 "double" => {
@@ -1444,7 +1139,7 @@ pub fn compile_expr(
                         anyhow::bail!("double() expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.double_func_id);
+                    body.call(env.get(RuntimeFunction::Double));
                 }
 
                 "bytes" => {
@@ -1454,7 +1149,7 @@ pub fn compile_expr(
                         anyhow::bail!("bytes() expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.bytes_func_id);
+                    body.call(env.get(RuntimeFunction::Bytes));
                 }
 
                 "bool" => {
@@ -1464,7 +1159,7 @@ pub fn compile_expr(
                         anyhow::bail!("bool() expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.bool_func_id);
+                    body.call(env.get(RuntimeFunction::Bool));
                 }
 
                 "type" => {
@@ -1474,7 +1169,7 @@ pub fn compile_expr(
                         anyhow::bail!("type() expects 1 argument");
                     }
                     compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
-                    body.call(env.type_func_id);
+                    body.call(env.get(RuntimeFunction::Type));
                 }
 
                 "dyn" => {
@@ -1499,7 +1194,7 @@ pub fn compile_expr(
                     // Compile index (int for array, string for map)
                     compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
                     // Call the polymorphic index function
-                    body.call(env.index_func_id);
+                    body.call(env.get(RuntimeFunction::ValueIndex));
                 }
 
                 _ => anyhow::bail!("Unsupported function call: {}", call_expr.func_name),
@@ -1526,7 +1221,7 @@ pub fn compile_expr(
                         // Allocate memory for the type name
                         let type_name_ptr_local = module.locals.add(ValType::I32);
                         body.i32_const(type_name_len)
-                            .call(env.malloc_func_id)
+                            .call(env.get(RuntimeFunction::Malloc))
                             .local_set(type_name_ptr_local);
 
                         // Write the type name bytes to allocated memory
@@ -1553,7 +1248,7 @@ pub fn compile_expr(
                         // Call cel_create_type(type_name_ptr, type_name_len)
                         body.local_get(type_name_ptr_local)
                             .i32_const(type_name_len)
-                            .call(env.create_type_func_id);
+                            .call(env.get(RuntimeFunction::CreateType));
                     }
                     _ => {
                         // All other identifiers are runtime variables
@@ -1564,7 +1259,7 @@ pub fn compile_expr(
                         // Allocate memory for variable name
                         let var_name_ptr_local = module.locals.add(ValType::I32);
                         body.i32_const(var_name_len)
-                            .call(env.malloc_func_id)
+                            .call(env.get(RuntimeFunction::Malloc))
                             .local_set(var_name_ptr_local);
 
                         // Write variable name bytes to memory
@@ -1591,7 +1286,7 @@ pub fn compile_expr(
                         // Call cel_get_variable(name_ptr, name_len) -> *mut CelValue
                         body.local_get(var_name_ptr_local)
                             .i32_const(var_name_len)
-                            .call(env.get_variable_func_id);
+                            .call(env.get(RuntimeFunction::GetVariable));
 
                         // The result is a pointer to the variable's value (or null if not found)
                         // Null will cause runtime errors when operations try to use it
@@ -1626,7 +1321,7 @@ pub fn compile_expr(
 
                 let type_name_ptr_local = module.locals.add(ValType::I32);
                 body.i32_const(type_len)
-                    .call(env.malloc_func_id)
+                    .call(env.get(RuntimeFunction::Malloc))
                     .local_set(type_name_ptr_local);
 
                 let memory_id = module
@@ -1651,7 +1346,7 @@ pub fn compile_expr(
 
                 body.local_get(type_name_ptr_local)
                     .i32_const(type_len)
-                    .call(env.create_type_func_id);
+                    .call(env.get(RuntimeFunction::CreateType));
             } else {
                 // Regular field access: compile operand, then call cel_get_field / cel_has_field
                 compile_expr(&select_expr.operand.expr, body, env, ctx, module)?;
@@ -1663,7 +1358,7 @@ pub fn compile_expr(
                 let field_ptr_local = module.locals.add(ValType::I32);
 
                 body.i32_const(field_len)
-                    .call(env.malloc_func_id)
+                    .call(env.get(RuntimeFunction::Malloc))
                     .local_tee(field_ptr_local);
 
                 let memory_id = module
@@ -1689,9 +1384,9 @@ pub fn compile_expr(
                 body.i32_const(field_len);
 
                 if select_expr.test {
-                    body.call(env.has_field_func_id);
+                    body.call(env.get(RuntimeFunction::HasField));
                 } else {
-                    body.call(env.get_field_func_id);
+                    body.call(env.get(RuntimeFunction::GetField));
                 }
             }
         }
@@ -1700,7 +1395,7 @@ pub fn compile_expr(
         // [1, 2, 3] creates a CelValue::Array
         Expr::List(list_expr) => {
             // Create an empty array
-            body.call(env.create_array_func_id);
+            body.call(env.get(RuntimeFunction::CreateArray));
 
             // Create a local to hold the array pointer while we push elements
             let array_ptr_local = module.locals.add(ValType::I32);
@@ -1718,7 +1413,7 @@ pub fn compile_expr(
                 // Push: cel_array_push(array_ptr, element_ptr)
                 body.local_get(array_ptr_local); // Load array pointer
                 body.local_get(element_ptr_local); // Load element pointer
-                body.call(env.array_push_func_id); // Call push (returns void)
+                body.call(env.get(RuntimeFunction::ArrayPush)); // Call push (returns void)
             }
 
             // Leave the array pointer on the stack
@@ -1731,7 +1426,7 @@ pub fn compile_expr(
             use cel::common::ast::EntryExpr;
 
             // Create an empty map
-            body.call(env.create_map_func_id);
+            body.call(env.get(RuntimeFunction::CreateMap));
 
             // Create a local to hold the map pointer while we insert entries
             let map_ptr_local = module.locals.add(ValType::I32);
@@ -1759,7 +1454,7 @@ pub fn compile_expr(
                         body.local_get(map_ptr_local); // Load map pointer
                         body.local_get(key_ptr_local); // Load key pointer
                         body.local_get(value_ptr_local); // Load value pointer
-                        body.call(env.map_insert_func_id); // Call insert (returns void)
+                        body.call(env.get(RuntimeFunction::MapInsert)); // Call insert (returns void)
                     }
                     _ => anyhow::bail!("Unsupported map entry type: {:?}", entry.expr),
                 }
@@ -1789,7 +1484,7 @@ pub fn compile_expr(
 
             // Step 2: Get the array length
             body.local_get(array_ptr_local);
-            body.call(env.array_len_func_id); // Returns i32 length
+            body.call(env.get(RuntimeFunction::ArrayLen)); // Returns i32 length
 
             // Create a local to hold the length
             let length_local = module.locals.add(ValType::I32);
@@ -1836,7 +1531,7 @@ pub fn compile_expr(
             // Get the current element: cel_array_get(array_ptr, index)
             loop_body.local_get(array_ptr_local);
             loop_body.local_get(index_local);
-            loop_body.call(env.array_get_func_id); // Returns *mut CelValue
+            loop_body.call(env.get(RuntimeFunction::ArrayGet)); // Returns *mut CelValue
 
             // Create a local for the current element
             let element_local = module.locals.add(ValType::I32);
@@ -1872,7 +1567,7 @@ pub fn compile_expr(
             )?;
 
             // Convert the loop condition (CelValue::Bool) to i64 (0 or 1)
-            loop_body.call(env.value_to_bool_func_id); // Returns i64: 1 if true, 0 if false
+            loop_body.call(env.get(RuntimeFunction::ValueToBool)); // Returns i64: 1 if true, 0 if false
 
             // If the condition is false (0), we should exit the loop
             // i32.eqz checks if value is 0, returns 1 if yes, 0 if no
@@ -1910,7 +1605,7 @@ pub fn compile_expr(
                     .unwrap_or_else(|| struct_expr.type_name.clone());
 
             // Create an empty map to represent the struct
-            body.call(env.create_map_func_id);
+            body.call(env.get(RuntimeFunction::CreateMap));
             let map_ptr_local = module.locals.add(ValType::I32);
             body.local_set(map_ptr_local);
 
@@ -1922,7 +1617,7 @@ pub fn compile_expr(
             body.local_get(map_ptr_local);
             body.local_get(type_key_local);
             body.local_get(type_value_local);
-            body.call(env.map_insert_func_id);
+            body.call(env.get(RuntimeFunction::MapInsert));
 
             // If we have a schema, check if this type has wrapper fields and add metadata
             if let Some(schema) = &ctx.schema {
@@ -1947,7 +1642,7 @@ pub fn compile_expr(
                 let wrapper_fields = schema.get_wrapper_fields(&resolved_type_name);
                 if !wrapper_fields.is_empty() {
                     // Create an array of wrapper field names
-                    body.call(env.create_array_func_id);
+                    body.call(env.get(RuntimeFunction::CreateArray));
                     let array_ptr_local = module.locals.add(ValType::I32);
                     body.local_set(array_ptr_local);
 
@@ -1957,7 +1652,7 @@ pub fn compile_expr(
                             compile_string_to_local(field_name, body, env, module)?;
                         body.local_get(array_ptr_local);
                         body.local_get(field_name_local);
-                        body.call(env.array_push_func_id);
+                        body.call(env.get(RuntimeFunction::ArrayPush));
                     }
 
                     // Insert "__wrapper_fields__" metadata into the struct map
@@ -1966,7 +1661,7 @@ pub fn compile_expr(
                     body.local_get(map_ptr_local);
                     body.local_get(wrapper_key_local);
                     body.local_get(array_ptr_local);
-                    body.call(env.map_insert_func_id);
+                    body.call(env.get(RuntimeFunction::MapInsert));
                 }
 
                 // If this is google.protobuf.Any, bake __any_schema__ from the type_url
@@ -1996,7 +1691,7 @@ pub fn compile_expr(
                         let field_schema = schema.get_any_field_schema(&msg_type);
                         if !field_schema.is_empty() {
                             // Bake as a CelValue map: field_number_str → kind_str
-                            body.call(env.create_map_func_id);
+                            body.call(env.get(RuntimeFunction::CreateMap));
                             let schema_map_local = module.locals.add(ValType::I32);
                             body.local_set(schema_map_local);
 
@@ -2012,7 +1707,7 @@ pub fn compile_expr(
                                 body.local_get(schema_map_local);
                                 body.local_get(num_key_local);
                                 body.local_get(kind_val_local);
-                                body.call(env.map_insert_func_id);
+                                body.call(env.get(RuntimeFunction::MapInsert));
                             }
 
                             // Also bake the resolved message type name as "__any_type__"
@@ -2023,7 +1718,7 @@ pub fn compile_expr(
                             body.local_get(schema_map_local);
                             body.local_get(any_type_key_local);
                             body.local_get(any_type_val_local);
-                            body.call(env.map_insert_func_id);
+                            body.call(env.get(RuntimeFunction::MapInsert));
 
                             // Insert "__any_schema__" into the Any struct map
                             let schema_key_local =
@@ -2031,7 +1726,7 @@ pub fn compile_expr(
                             body.local_get(map_ptr_local);
                             body.local_get(schema_key_local);
                             body.local_get(schema_map_local);
-                            body.call(env.map_insert_func_id);
+                            body.call(env.get(RuntimeFunction::MapInsert));
                         }
                     }
                 }
@@ -2065,7 +1760,7 @@ pub fn compile_expr(
                         body.local_get(map_ptr_local);
                         body.local_get(field_key_local);
                         body.local_get(field_value_local);
-                        body.call(env.map_insert_func_id);
+                        body.call(env.get(RuntimeFunction::MapInsert));
                     }
                     _ => anyhow::bail!("Unsupported struct entry type: {:?}", entry.expr),
                 }
