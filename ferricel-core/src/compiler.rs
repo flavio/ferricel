@@ -303,9 +303,16 @@ fn compile_string_to_local(
     body.i32_const(len);
     body.call(env.get(RuntimeFunction::CreateString));
 
-    // Store the resulting CelValue pointer in a local and return it
+    // Store the resulting CelValue pointer in a local
     let result_local = module.locals.add(ValType::I32);
     body.local_set(result_local);
+
+    // Free the temporary raw bytes buffer — cel_create_string already copied
+    // the data into an owned String, so the original allocation is no longer needed
+    body.local_get(data_ptr_local);
+    body.i32_const(len);
+    body.call(env.get(RuntimeFunction::Free));
+
     Ok(result_local)
 }
 
@@ -402,6 +409,16 @@ pub fn compile_expr(
                     body.local_get(data_ptr_local); // Load data_ptr
                     body.i32_const(string_len); // Load length
                     body.call(env.get(RuntimeFunction::CreateString)); // Returns *mut CelValue
+
+                    // Save the CelValue pointer so we can free the raw buffer then restore it.
+                    // cel_create_string copied the data into an owned String, so the original
+                    // allocation is no longer needed.
+                    let cel_val_local = module.locals.add(ValType::I32);
+                    body.local_set(cel_val_local);
+                    body.local_get(data_ptr_local);
+                    body.i32_const(string_len);
+                    body.call(env.get(RuntimeFunction::Free));
+                    body.local_get(cel_val_local);
                 }
                 CelVal::Bytes(bytes) => {
                     // Bytes literals require memory allocation (same pattern as strings)
@@ -444,6 +461,16 @@ pub fn compile_expr(
                     body.local_get(data_ptr_local); // Load data_ptr
                     body.i32_const(bytes_len); // Load length
                     body.call(env.get(RuntimeFunction::CreateBytes)); // Returns *mut CelValue
+
+                    // Save the CelValue pointer so we can free the raw buffer then restore it.
+                    // cel_create_bytes copied the data into an owned Vec<u8>, so the original
+                    // allocation is no longer needed.
+                    let cel_val_local = module.locals.add(ValType::I32);
+                    body.local_set(cel_val_local);
+                    body.local_get(data_ptr_local);
+                    body.i32_const(bytes_len);
+                    body.call(env.get(RuntimeFunction::Free));
+                    body.local_get(cel_val_local);
                 }
                 CelVal::Null => {
                     // Create a CelValue::Null pointer
