@@ -415,7 +415,7 @@ pub unsafe extern "C" fn cel_timestamp(ptr: *mut CelValue) -> *mut CelValue {
                             "seconds" => *seconds);
                     abort_with_error("no such overload")
                 });
-                // Convert Utc to FixedOffset (UTC has offset +00:00)
+                // Convert UTC to FixedOffset (UTC has offset +00:00)
                 let dt_fixed = dt.with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
                 Box::into_raw(Box::new(CelValue::Timestamp(dt_fixed)))
             }

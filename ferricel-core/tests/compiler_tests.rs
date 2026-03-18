@@ -332,7 +332,7 @@ fn test_mixed_arithmetic(#[case] expr: &str, #[case] expected: i64) {
 
 // ===== Double Literal Tests =====
 #[rstest]
-#[case("3.14", 3.14)]
+#[case("4.23", 4.23)]
 #[case("0.0", 0.0)]
 #[case("-2.5", -2.5)]
 #[case("123.456", 123.456)]
