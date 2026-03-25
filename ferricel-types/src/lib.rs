@@ -1,5 +1,6 @@
 //! Shared types used across ferricel workspace
 
+pub mod extensions;
 pub mod functions;
 
 use std::str::FromStr;

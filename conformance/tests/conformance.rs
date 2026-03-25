@@ -10,14 +10,13 @@ use std::{
     },
 };
 
-use ferricel_types::LogLevel;
 use rayon::prelude::*;
 use serde_json::Value as JsonValue;
 use slog::{Drain, Logger, o};
 
 // Import compiler and runtime functions from ferricel-core
 use ferricel_core::compiler::{CompilerOptions, compile_cel_to_wasm};
-use ferricel_core::runtime;
+use ferricel_core::runtime::CelEngine;
 
 // Include the generated protobuf types
 mod cel {
@@ -423,6 +422,7 @@ impl ConformanceTestRunner {
                 Some(test.container.clone())
             },
             logger: self.logger.clone(),
+            extensions: vec![],
         };
         let wasm_bytes = match compile_cel_to_wasm(&test.expr, compiler_options) {
             Ok(bytes) => bytes,
@@ -446,12 +446,9 @@ impl ConformanceTestRunner {
         };
 
         // Step 3: Execute the WASM module in-memory
-        let json_result = match runtime::execute_wasm(
-            &wasm_bytes,
-            bindings_json.as_deref(),
-            LogLevel::Error, // Use Error level to reduce noise in test output
-            self.logger.clone(),
-        ) {
+        let json_result = match CelEngine::new(self.logger.clone())
+            .execute(&wasm_bytes, bindings_json.as_deref())
+        {
             Ok(result) => result,
             Err(e) => {
                 // Check if this is an expected error

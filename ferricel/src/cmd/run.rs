@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ferricel_core::runtime;
+use ferricel_core::runtime::CelEngine;
 use slog::{Drain, Logger, o};
 
 use crate::cli::LogLevelArg;
@@ -35,15 +35,14 @@ pub fn run(
         None
     };
 
-    // Execute the WASM module with variable bindings
-    let log_level = log_level.into();
-
     // Create simple logger with PlainSyncDecorator (no Mutex needed with FullFormat)
     let decorator = slog_term::PlainSyncDecorator::new(std::io::stderr());
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let logger = Logger::root(drain, o!());
 
-    let result = runtime::execute_wasm(&wasm_bytes, bindings.as_deref(), log_level, logger)?;
+    let result = CelEngine::new(logger)
+        .with_log_level(log_level.into())
+        .execute(&wasm_bytes, bindings.as_deref())?;
 
     println!("Execution result: {}", result);
     Ok(())

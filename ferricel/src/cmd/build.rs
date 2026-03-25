@@ -66,6 +66,7 @@ pub fn run(
         proto_descriptor: merged_descriptor,
         container,
         logger,
+        extensions: vec![],
     };
 
     let wasm_bytes = compiler::compile_cel_to_wasm(&cel_code, compiler_options)?;

@@ -1,13 +1,19 @@
-use crate::schema::ProtoSchema;
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
+
 use anyhow::Context;
-use cel::common::ast::Expr;
-use cel::common::ast::operators;
-use cel::common::value::CelVal;
+use cel::common::{
+    ast::{Expr, IdedExpr, operators},
+    value::CelVal,
+};
 use cel::parser::Parser;
-use ferricel_types::functions::RuntimeFunction;
+use ferricel_types::{extensions::ExtensionDecl, functions::RuntimeFunction};
 use slog::error;
-use std::collections::HashMap;
 use walrus::{FunctionBuilder, FunctionId, InstrSeqBuilder, LocalId, ModuleConfig, ValType};
+
+use crate::schema::ProtoSchema;
 
 // Embed the runtime WASM at compile time
 const RUNTIME_BYTES: &[u8] = include_bytes!(concat!(
@@ -40,11 +46,13 @@ pub struct CompilerOptions {
     pub container: Option<String>,
     /// Logger for compilation warnings and errors
     pub logger: slog::Logger,
+    /// Extension function declarations for compile-time validation.
+    /// Defaults to an empty list (no extensions).
+    pub extensions: Vec<ExtensionDecl>,
 }
 
 /// Compilation context that holds state during expression compilation
 /// This includes local variable bindings for comprehensions and other scoped contexts
-#[derive(Clone)]
 pub struct CompilerContext {
     /// Maps variable names to their local IDs in the WASM function
     /// Used for iteration variables in comprehensions (e.g., "x" in [1,2,3].all(x, x > 0))
@@ -55,20 +63,24 @@ pub struct CompilerContext {
     pub container: Option<String>,
     /// Logger for compilation warnings and errors
     pub logger: slog::Logger,
+    /// Registry of host-provided extension functions (shared via Arc for cheap cloning)
+    pub extensions: Rc<ExtensionRegistry>,
 }
 
 impl CompilerContext {
-    /// Create a new empty context
+    /// Create a new context
     pub fn new(
         schema: Option<ProtoSchema>,
         container: Option<String>,
         logger: slog::Logger,
+        extensions: &[ExtensionDecl],
     ) -> Self {
         Self {
             local_vars: HashMap::new(),
             schema,
             container,
             logger,
+            extensions: Rc::new(ExtensionRegistry::new(extensions)),
         }
     }
 
@@ -82,7 +94,60 @@ impl CompilerContext {
             schema: self.schema.clone(),
             container: self.container.clone(),
             logger: self.logger.clone(),
+            extensions: self.extensions.clone(),
         }
+    }
+}
+
+/// Typed key for looking up a registered extension function.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ExtensionKey {
+    /// Namespace prefix (e.g. `Some("math")` for `math.abs()`), or `None` for flat names.
+    pub namespace: Option<String>,
+    /// Function name (e.g. `"abs"`).
+    pub function: String,
+}
+
+impl ExtensionKey {
+    pub fn new(namespace: Option<String>, function: String) -> Self {
+        Self {
+            namespace,
+            function,
+        }
+    }
+}
+
+/// Registry of host-provided extension functions, built from `Vec<ExtensionDecl>` at
+/// the start of compilation.  Enables fast lookup by `ExtensionKey` and
+/// quick detection of registered namespace prefixes.
+pub struct ExtensionRegistry {
+    /// Map from `ExtensionKey` to the declaration.
+    pub by_name: HashMap<ExtensionKey, ExtensionDecl>,
+    /// Set of all registered namespace strings (e.g. `"math"`).
+    pub namespaces: HashSet<String>,
+}
+
+impl ExtensionRegistry {
+    pub fn new(extensions: &[ExtensionDecl]) -> Self {
+        let mut by_name = HashMap::new();
+        let mut namespaces = HashSet::new();
+        for decl in extensions {
+            if let Some(ref ns) = decl.namespace {
+                namespaces.insert(ns.clone());
+            }
+            by_name.insert(
+                ExtensionKey::new(decl.namespace.clone(), decl.function.clone()),
+                decl.clone(),
+            );
+        }
+        Self {
+            by_name,
+            namespaces,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.by_name.is_empty()
     }
 }
 
@@ -165,6 +230,9 @@ fn resolve_type_name(
 /// let descriptor_bytes = std::fs::read("types.pb").unwrap();
 /// let options = CompilerOptions {
 ///     proto_descriptor: Some(descriptor_bytes),
+///     container: None,
+///     logger: slog::Logger::root(slog::Discard, slog::o!()),
+///     extensions: vec![],
 /// };
 /// let wasm_bytes = compile_cel_to_wasm("TestAllTypes{}.field", options).unwrap();
 /// ```
@@ -179,7 +247,13 @@ pub fn compile_cel_to_wasm(
         .map(|bytes| ProtoSchema::from_descriptor_set(bytes))
         .transpose()?;
 
-    compile_cel_to_wasm_internal(cel_code, schema, options.container, options.logger)
+    compile_cel_to_wasm_internal(
+        cel_code,
+        schema,
+        options.container,
+        options.logger,
+        &options.extensions,
+    )
 }
 
 /// Internal compilation function that does the actual work
@@ -188,6 +262,7 @@ fn compile_cel_to_wasm_internal(
     schema: Option<ProtoSchema>,
     container: Option<String>,
     logger: slog::Logger,
+    extensions: &[ExtensionDecl],
 ) -> Result<Vec<u8>, anyhow::Error> {
     // 1. Load the runtime template from embedded bytes
     let mut module = ModuleConfig::new().parse(RUNTIME_BYTES)?;
@@ -235,7 +310,7 @@ fn compile_cel_to_wasm_internal(
 
     // 7. Walk the AST and compile to WASM instructions
     // This leaves a *mut CelValue on the stack
-    let ctx = CompilerContext::new(schema, container, logger);
+    let ctx = CompilerContext::new(schema, container, logger, extensions);
     compile_expr(&root_ast.expr, &mut body, &env, &ctx, &mut module)?;
 
     // 8. Serialize the result to JSON
@@ -316,6 +391,44 @@ fn compile_string_to_local(
     Ok(result_local)
 }
 
+/// Emit instructions to write a compile-time string constant into WASM memory
+/// and leave `(ptr: i32, len: i32)` on the stack.
+///
+/// When `s` is empty, pushes `(0i32, 0i32)` without any allocation.
+fn emit_string_const(
+    s: &str,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    memory_id: walrus::MemoryId,
+    module: &mut walrus::Module,
+) {
+    let bytes = s.as_bytes();
+    let len = bytes.len() as i32;
+    if len == 0 {
+        body.i32_const(0);
+        body.i32_const(0);
+        return;
+    }
+    let ptr_local = module.locals.add(ValType::I32);
+    body.i32_const(len)
+        .call(env.get(RuntimeFunction::Malloc))
+        .local_set(ptr_local);
+    for (offset, &byte) in bytes.iter().enumerate() {
+        body.local_get(ptr_local);
+        body.i32_const(byte as i32);
+        body.store(
+            memory_id,
+            walrus::ir::StoreKind::I32_8 { atomic: false },
+            walrus::ir::MemArg {
+                align: 1,
+                offset: offset as u32,
+            },
+        );
+    }
+    body.local_get(ptr_local);
+    body.i32_const(len);
+}
+
 /// Attempt to collect a `Select` (or `Ident`) chain into a dotted qualified name.
 ///
 /// Returns `Some("a.b.c")` when the entire expression is of the form
@@ -331,6 +444,18 @@ fn try_collect_qualified_ident(expr: &Expr) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// Describes how an extension function is being called at a particular call-site.
+///
+/// Used during extension function resolution to determine the call shape:
+/// - `Global`     – a plain global call, e.g. `myFunc(x)`
+/// - `Namespaced` – a namespaced call, e.g. `math.abs(x)`
+/// - `Receiver`   – a receiver/method call, e.g. `x.myFunc()`
+enum CallShape<'a> {
+    Global,
+    Namespaced(&'a str),
+    Receiver(Option<&'a IdedExpr>),
 }
 
 // We pass the inner `Expr` enum to this recursive function
@@ -1224,7 +1349,141 @@ pub fn compile_expr(
                     body.call(env.get(RuntimeFunction::ValueIndex));
                 }
 
-                _ => anyhow::bail!("Unsupported function call: {}", call_expr.func_name),
+                _ => {
+                    // Check if this is a call to a registered extension function.
+                    //
+                    // Resolution rules (from the plan):
+                    //   target=None          -> global call   : look up (None, func_name)
+                    //   target=Some(Ident(n)) and n is a registered namespace
+                    //                        -> namespaced call: (Some(n), func_name)
+                    //   target=Some(Ident(n)) and n is NOT a namespace
+                    //                        -> receiver-style: compile n as ident, prepend
+                    //   target=Some(other)   -> receiver-style: compile expr, prepend
+
+                    if ctx.extensions.is_empty() {
+                        anyhow::bail!("Unsupported function call: {}", call_expr.func_name);
+                    }
+
+                    // Determine call shape.
+                    let shape = match &call_expr.target {
+                        None => CallShape::Global,
+                        Some(target) => {
+                            if let Expr::Ident(name) = &target.expr {
+                                if ctx.extensions.namespaces.contains(name.as_str()) {
+                                    CallShape::Namespaced(name.as_str())
+                                } else {
+                                    CallShape::Receiver(Some(target.as_ref()))
+                                }
+                            } else {
+                                CallShape::Receiver(Some(target.as_ref()))
+                            }
+                        }
+                    };
+
+                    let (namespace_str, receiver_expr) = match &shape {
+                        CallShape::Global => (None, None),
+                        CallShape::Namespaced(ns) => (Some(*ns), None),
+                        CallShape::Receiver(expr) => (None, *expr),
+                    };
+
+                    // Look up in the registry.
+                    let key = ExtensionKey::new(
+                        namespace_str.map(|s: &str| s.to_string()),
+                        call_expr.func_name.clone(),
+                    );
+                    let decl = ctx.extensions.by_name.get(&key).ok_or_else(|| {
+                        let full_name = match namespace_str {
+                            Some(ns) => format!("{}.{}", ns, call_expr.func_name),
+                            None => call_expr.func_name.clone(),
+                        };
+                        anyhow::anyhow!("Unknown function: {}", full_name)
+                    })?;
+
+                    // Validate call style.
+                    match &shape {
+                        CallShape::Receiver(_) => {
+                            if !decl.receiver_style {
+                                anyhow::bail!(
+                                    "Extension '{}' does not support receiver-style calls",
+                                    decl.function
+                                );
+                            }
+                        }
+                        CallShape::Global | CallShape::Namespaced(_) => {
+                            if !decl.global_style {
+                                anyhow::bail!(
+                                    "Extension '{}' does not support global-style calls",
+                                    decl.function
+                                );
+                            }
+                        }
+                    }
+
+                    // Count total args (receiver counts as arg 0).
+                    let total_args = call_expr.args.len()
+                        + if receiver_expr.is_some() {
+                            1usize
+                        } else {
+                            0usize
+                        };
+                    if total_args != decl.num_args {
+                        let full_name = match namespace_str {
+                            Some(ns) => format!("{}.{}", ns, call_expr.func_name),
+                            None => call_expr.func_name.clone(),
+                        };
+                        anyhow::bail!(
+                            "{} expects {} argument(s), got {}",
+                            full_name,
+                            decl.num_args,
+                            total_args
+                        );
+                    }
+
+                    if total_args > 4 {
+                        anyhow::bail!(
+                            "Extension functions with more than 4 arguments are not supported"
+                        );
+                    }
+
+                    // Get memory reference once.
+                    let memory_id = module
+                        .memories
+                        .iter()
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("No memory found"))?
+                        .id();
+
+                    // Emit (ns_ptr, ns_len).
+                    match namespace_str {
+                        Some(ns) => emit_string_const(ns, body, env, memory_id, module),
+                        None => {
+                            body.i32_const(0);
+                            body.i32_const(0);
+                        }
+                    }
+
+                    // Emit (method_ptr, method_len).
+                    emit_string_const(&call_expr.func_name, body, env, memory_id, module);
+
+                    // Emit receiver (if any) then remaining args.
+                    if let Some(recv) = receiver_expr {
+                        compile_expr(&recv.expr, body, env, ctx, module)?;
+                    }
+                    for arg in &call_expr.args {
+                        compile_expr(&arg.expr, body, env, ctx, module)?;
+                    }
+
+                    // Select the right fixed-arity wrapper and call it.
+                    let ext_fn = match total_args {
+                        0 => RuntimeFunction::ExtCall0,
+                        1 => RuntimeFunction::ExtCall1,
+                        2 => RuntimeFunction::ExtCall2,
+                        3 => RuntimeFunction::ExtCall3,
+                        4 => RuntimeFunction::ExtCall4,
+                        _ => unreachable!(),
+                    };
+                    body.call(env.get(ext_fn));
+                }
             }
         }
 

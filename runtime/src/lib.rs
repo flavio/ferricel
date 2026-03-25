@@ -7,6 +7,7 @@ mod comparison;
 mod conversion;
 mod deserialization;
 pub mod error;
+mod extensions;
 mod field_access;
 mod globals;
 mod helpers;
@@ -95,3 +96,8 @@ pub use temporal::{
 
 // Re-export logging functions
 pub use logging::cel_set_log_level;
+
+// Re-export extension call wrappers
+pub use extensions::{
+    cel_ext_call_0, cel_ext_call_1, cel_ext_call_2, cel_ext_call_3, cel_ext_call_4,
+};

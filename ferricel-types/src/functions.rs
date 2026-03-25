@@ -147,6 +147,13 @@ pub enum RuntimeFunction {
     Duration,
     Timestamp,
 
+    // Extension calls (fixed-arity wrappers for host-provided functions)
+    ExtCall0,
+    ExtCall1,
+    ExtCall2,
+    ExtCall3,
+    ExtCall4,
+
     // Timestamp accessors
     TimestampGetFullYear,
     TimestampGetFullYearTz,
@@ -297,6 +304,12 @@ impl RuntimeFunction {
             Self::Type => "cel_type",
             Self::Duration => "cel_duration",
             Self::Timestamp => "cel_timestamp",
+
+            Self::ExtCall0 => "cel_ext_call_0",
+            Self::ExtCall1 => "cel_ext_call_1",
+            Self::ExtCall2 => "cel_ext_call_2",
+            Self::ExtCall3 => "cel_ext_call_3",
+            Self::ExtCall4 => "cel_ext_call_4",
 
             Self::TimestampGetFullYear => "cel_timestamp_get_full_year",
             Self::TimestampGetFullYearTz => "cel_timestamp_get_full_year_tz",
