@@ -1,0 +1,397 @@
+use cel::common::ast::{ComprehensionExpr, EntryExpr, Expr, ListExpr, MapExpr, StructExpr};
+use ferricel_types::functions::RuntimeFunction;
+use slog::error;
+use walrus::{InstrSeqBuilder, ValType};
+
+use super::{
+    access::resolve_type_name,
+    context::{CompilerContext, CompilerEnv},
+    expr::compile_expr,
+    helpers::compile_string_to_local,
+};
+
+/// Compile an `Expr::List` node: `[elem1, elem2, ...]`
+pub fn compile_list(
+    list_expr: &ListExpr,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    // Create an empty array
+    body.call(env.get(RuntimeFunction::CreateArray));
+
+    // Create a local to hold the array pointer while we push elements
+    let array_ptr_local = module.locals.add(ValType::I32);
+    body.local_set(array_ptr_local); // Pop array pointer into local
+
+    // For each element in the list
+    for element in &list_expr.elements {
+        // Compile the element expression (leaves *mut CelValue on stack)
+        compile_expr(&element.expr, body, env, ctx, module)?;
+
+        // Create a local to hold the element pointer
+        let element_ptr_local = module.locals.add(ValType::I32);
+        body.local_set(element_ptr_local); // Pop element pointer into local
+
+        // Push: cel_array_push(array_ptr, element_ptr)
+        body.local_get(array_ptr_local); // Load array pointer
+        body.local_get(element_ptr_local); // Load element pointer
+        body.call(env.get(RuntimeFunction::ArrayPush)); // Call push (returns void)
+    }
+
+    // Leave the array pointer on the stack
+    body.local_get(array_ptr_local);
+    Ok(())
+}
+
+/// Compile an `Expr::Map` node: `{"key": value, ...}`
+pub fn compile_map(
+    map_expr: &MapExpr,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    // Create an empty map
+    body.call(env.get(RuntimeFunction::CreateMap));
+
+    // Create a local to hold the map pointer while we insert entries
+    let map_ptr_local = module.locals.add(ValType::I32);
+    body.local_set(map_ptr_local); // Pop map pointer into local
+
+    // For each entry in the map
+    for entry in &map_expr.entries {
+        match &entry.expr {
+            EntryExpr::MapEntry(map_entry) => {
+                // Compile the key expression (leaves *mut CelValue on stack)
+                compile_expr(&map_entry.key.expr, body, env, ctx, module)?;
+
+                // Create a local to hold the key pointer
+                let key_ptr_local = module.locals.add(ValType::I32);
+                body.local_set(key_ptr_local); // Pop key pointer into local
+
+                // Compile the value expression (leaves *mut CelValue on stack)
+                compile_expr(&map_entry.value.expr, body, env, ctx, module)?;
+
+                // Create a local to hold the value pointer
+                let value_ptr_local = module.locals.add(ValType::I32);
+                body.local_set(value_ptr_local); // Pop value pointer into local
+
+                // Insert: cel_map_insert(map_ptr, key_ptr, value_ptr)
+                body.local_get(map_ptr_local); // Load map pointer
+                body.local_get(key_ptr_local); // Load key pointer
+                body.local_get(value_ptr_local); // Load value pointer
+                body.call(env.get(RuntimeFunction::MapInsert)); // Call insert (returns void)
+            }
+            _ => anyhow::bail!("Unsupported map entry type: {:?}", entry.expr),
+        }
+    }
+
+    // Leave the map pointer on the stack
+    body.local_get(map_ptr_local);
+    Ok(())
+}
+
+/// Compile an `Expr::Struct` node: `TypeName{field: value, ...}`
+///
+/// Structs are compiled as maps with string keys + a special `__type__` field.
+pub fn compile_struct(
+    struct_expr: &StructExpr,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    // Resolve the type name using container-based resolution
+    let resolved_type_name = resolve_type_name(&struct_expr.type_name, &ctx.container, &ctx.schema)
+        .unwrap_or_else(|| struct_expr.type_name.clone());
+
+    // Create an empty map to represent the struct
+    body.call(env.get(RuntimeFunction::CreateMap));
+    let map_ptr_local = module.locals.add(ValType::I32);
+    body.local_set(map_ptr_local);
+
+    // Insert "__type__" field to preserve type information
+    // Use the resolved (fully-qualified) type name
+    let type_key_local = compile_string_to_local("__type__", body, env, module)?;
+    let type_value_local = compile_string_to_local(&resolved_type_name, body, env, module)?;
+
+    body.local_get(map_ptr_local);
+    body.local_get(type_key_local);
+    body.local_get(type_value_local);
+    body.call(env.get(RuntimeFunction::MapInsert));
+
+    // If we have a schema, check if this type has wrapper fields and add metadata
+    if let Some(schema) = &ctx.schema {
+        // Check if the type exists in the schema (using resolved name)
+        if resolved_type_name.contains('.') && !schema.has_message_type(&resolved_type_name) {
+            // Warn if struct type looks like a proto message but is not in the schema
+            error!(
+                ctx.logger,
+                "Struct '{}' looks like a protobuf message, but is not defined in the provided schema",
+                struct_expr.type_name;
+                "struct_type" => &struct_expr.type_name,
+                "resolved_type" => &resolved_type_name
+            );
+            error!(ctx.logger, "Wrapper type semantics will not be available");
+            error!(
+                ctx.logger,
+                "Ensure the correct proto descriptor files are provided with --proto-descriptor"
+            );
+        }
+
+        let wrapper_fields = schema.get_wrapper_fields(&resolved_type_name);
+        if !wrapper_fields.is_empty() {
+            // Create an array of wrapper field names
+            body.call(env.get(RuntimeFunction::CreateArray));
+            let array_ptr_local = module.locals.add(ValType::I32);
+            body.local_set(array_ptr_local);
+
+            // Add each wrapper field name to the array
+            for field_name in &wrapper_fields {
+                let field_name_local = compile_string_to_local(field_name, body, env, module)?;
+                body.local_get(array_ptr_local);
+                body.local_get(field_name_local);
+                body.call(env.get(RuntimeFunction::ArrayPush));
+            }
+
+            // Insert "__wrapper_fields__" metadata into the struct map
+            let wrapper_key_local =
+                compile_string_to_local("__wrapper_fields__", body, env, module)?;
+            body.local_get(map_ptr_local);
+            body.local_get(wrapper_key_local);
+            body.local_get(array_ptr_local);
+            body.call(env.get(RuntimeFunction::MapInsert));
+        }
+
+        // If this is google.protobuf.Any, bake __any_schema__ from the type_url
+        // so the runtime can do schema-aware wire comparison of Any.value bytes.
+        if resolved_type_name == "google.protobuf.Any" {
+            // Try to find a literal type_url in the struct entries at compile time
+            use cel::common::ast::EntryExpr as EE;
+            let maybe_type_url: Option<String> = struct_expr.entries.iter().find_map(|e| {
+                if let EE::StructField(sf) = &e.expr
+                    && sf.field == "type_url"
+                    && let Expr::Literal(cel::common::value::CelVal::String(s)) = &sf.value.expr
+                {
+                    return Some(s.clone());
+                }
+                None
+            });
+
+            if let Some(type_url) = maybe_type_url {
+                // Strip the well-known type.googleapis.com/ prefix
+                let msg_type = if let Some(stripped) = type_url.strip_prefix("type.googleapis.com/")
+                {
+                    stripped.to_string()
+                } else {
+                    type_url.clone()
+                };
+
+                let field_schema = schema.get_any_field_schema(&msg_type);
+                if !field_schema.is_empty() {
+                    // Bake as a CelValue map: field_number_str → kind_str
+                    body.call(env.get(RuntimeFunction::CreateMap));
+                    let schema_map_local = module.locals.add(ValType::I32);
+                    body.local_set(schema_map_local);
+
+                    for (field_num, kind_str) in &field_schema {
+                        let num_key_local =
+                            compile_string_to_local(&field_num.to_string(), body, env, module)?;
+                        let kind_val_local = compile_string_to_local(kind_str, body, env, module)?;
+                        body.local_get(schema_map_local);
+                        body.local_get(num_key_local);
+                        body.local_get(kind_val_local);
+                        body.call(env.get(RuntimeFunction::MapInsert));
+                    }
+
+                    // Also bake the resolved message type name as "__any_type__"
+                    let any_type_key_local =
+                        compile_string_to_local("__any_type__", body, env, module)?;
+                    let any_type_val_local = compile_string_to_local(&msg_type, body, env, module)?;
+                    body.local_get(schema_map_local);
+                    body.local_get(any_type_key_local);
+                    body.local_get(any_type_val_local);
+                    body.call(env.get(RuntimeFunction::MapInsert));
+
+                    // Insert "__any_schema__" into the Any struct map
+                    let schema_key_local =
+                        compile_string_to_local("__any_schema__", body, env, module)?;
+                    body.local_get(map_ptr_local);
+                    body.local_get(schema_key_local);
+                    body.local_get(schema_map_local);
+                    body.call(env.get(RuntimeFunction::MapInsert));
+                }
+            }
+        }
+    } else if resolved_type_name.contains('.') {
+        // Warn if struct type looks like a proto message but no schema provided
+        error!(
+            ctx.logger,
+            "Struct '{}' looks like a protobuf message, but no schema provided",
+            struct_expr.type_name;
+            "struct_type" => &struct_expr.type_name,
+            "resolved_type" => &resolved_type_name
+        );
+        error!(ctx.logger, "Wrapper type semantics will not be available");
+        error!(ctx.logger, "Use --proto-descriptor to provide schema");
+    }
+
+    // Insert each struct field
+    for entry in &struct_expr.entries {
+        match &entry.expr {
+            EntryExpr::StructField(struct_field) => {
+                // Compile field name as string key
+                let field_key_local =
+                    compile_string_to_local(&struct_field.field, body, env, module)?;
+
+                // Compile field value expression
+                compile_expr(&struct_field.value.expr, body, env, ctx, module)?;
+                let field_value_local = module.locals.add(ValType::I32);
+                body.local_set(field_value_local);
+
+                // Insert field into map
+                body.local_get(map_ptr_local);
+                body.local_get(field_key_local);
+                body.local_get(field_value_local);
+                body.call(env.get(RuntimeFunction::MapInsert));
+            }
+            _ => anyhow::bail!("Unsupported struct entry type: {:?}", entry.expr),
+        }
+    }
+
+    // Leave the map pointer on the stack
+    body.local_get(map_ptr_local);
+    Ok(())
+}
+
+/// Compile an `Expr::Comprehension` node: macros like `all()`, `exists()`, `filter()`, etc.
+///
+/// The CEL parser automatically expands these macros into comprehension expressions.
+pub fn compile_comprehension(
+    comp_expr: &ComprehensionExpr,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    // Step 1: Compile the iter_range (the array to iterate over)
+    compile_expr(&comp_expr.iter_range.expr, body, env, ctx, module)?;
+
+    // Create a local to hold the array pointer
+    let array_ptr_local = module.locals.add(ValType::I32);
+    body.local_set(array_ptr_local);
+
+    // Step 2: Get the array length
+    body.local_get(array_ptr_local);
+    body.call(env.get(RuntimeFunction::ArrayLen)); // Returns i32 length
+
+    // Create a local to hold the length
+    let length_local = module.locals.add(ValType::I32);
+    body.local_set(length_local);
+
+    // Step 3: Initialize the accumulator variable
+    // Compile accu_init (e.g., CelValue::Bool(true) for all())
+    compile_expr(&comp_expr.accu_init.expr, body, env, ctx, module)?;
+
+    // Create a local to hold the accumulator pointer
+    let accu_local = module.locals.add(ValType::I32);
+    body.local_set(accu_local);
+
+    // Step 4: Initialize loop counter (index = 0)
+    let index_local = module.locals.add(ValType::I32);
+    body.i32_const(0);
+    body.local_set(index_local);
+
+    // Step 5: Create the loop using WASM block/loop instructions
+    // Structure: block $exit { loop $continue { ... } }
+    let exit_block = body.dangling_instr_seq(None);
+    let exit_block_id = exit_block.id();
+    let continue_loop = body.dangling_instr_seq(None);
+    let continue_loop_id = continue_loop.id();
+
+    body.instr(walrus::ir::Block { seq: exit_block_id });
+
+    // Start of exit block
+    body.instr_seq(exit_block_id).instr(walrus::ir::Loop {
+        seq: continue_loop_id,
+    });
+
+    // Start of continue loop
+    let mut loop_body = body.instr_seq(continue_loop_id);
+
+    // Check if index >= length (exit condition)
+    loop_body.local_get(index_local);
+    loop_body.local_get(length_local);
+    loop_body.binop(walrus::ir::BinaryOp::I32GeU); // index >= length?
+    loop_body.instr(walrus::ir::BrIf {
+        block: exit_block_id,
+    }); // Exit if true
+
+    // Get the current element: cel_array_get(array_ptr, index)
+    loop_body.local_get(array_ptr_local);
+    loop_body.local_get(index_local);
+    loop_body.call(env.get(RuntimeFunction::ArrayGet)); // Returns *mut CelValue
+
+    // Create a local for the current element
+    let element_local = module.locals.add(ValType::I32);
+    loop_body.local_set(element_local);
+
+    // Create a new context with the iteration variable bound to the element
+    let inner_ctx = ctx.with_local(comp_expr.iter_var.clone(), element_local);
+
+    // Also bind the accumulator variable to the context
+    let inner_ctx = inner_ctx.with_local(comp_expr.accu_var.clone(), accu_local);
+
+    // Compile the loop_step (e.g., @result && predicate)
+    // This updates the accumulator
+    compile_expr(
+        &comp_expr.loop_step.expr,
+        &mut loop_body,
+        env,
+        &inner_ctx,
+        module,
+    )?;
+
+    // Store the new accumulator value
+    loop_body.local_set(accu_local);
+
+    // Check the loop_cond to see if we should short-circuit
+    // For all(), this is: @not_strictly_false(@result)
+    compile_expr(
+        &comp_expr.loop_cond.expr,
+        &mut loop_body,
+        env,
+        &inner_ctx,
+        module,
+    )?;
+
+    // Convert the loop condition (CelValue::Bool) to i64 (0 or 1)
+    loop_body.call(env.get(RuntimeFunction::ValueToBool)); // Returns i64: 1 if true, 0 if false
+
+    // If the condition is false (0), we should exit the loop
+    // i32.eqz checks if value is 0, returns 1 if yes, 0 if no
+    loop_body.unop(walrus::ir::UnaryOp::I64Eqz); // 1 if cond was false, 0 if true
+    loop_body.instr(walrus::ir::BrIf {
+        block: exit_block_id,
+    }); // Exit if condition was false
+
+    // Increment the index
+    loop_body.local_get(index_local);
+    loop_body.i32_const(1);
+    loop_body.binop(walrus::ir::BinaryOp::I32Add);
+    loop_body.local_set(index_local);
+
+    // Continue the loop
+    loop_body.instr(walrus::ir::Br {
+        block: continue_loop_id,
+    }); // Jump back to start of loop
+
+    // After the loop, compile the result expression
+    // For all(), this is just @result (the accumulator)
+    let result_ctx = ctx.with_local(comp_expr.accu_var.clone(), accu_local);
+    compile_expr(&comp_expr.result.expr, body, env, &result_ctx, module)?;
+
+    Ok(())
+}

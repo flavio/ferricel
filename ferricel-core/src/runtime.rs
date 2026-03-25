@@ -1,5 +1,5 @@
-use ferricel_types::extensions::{ExtensionCallPayload, ExtensionDecl};
 use ferricel_types::LogLevel;
+use ferricel_types::extensions::{ExtensionCallPayload, ExtensionDecl};
 use wasmtime::*;
 
 use crate::compiler::ExtensionKey;
@@ -120,9 +120,9 @@ impl CelEngine {
         &mut self,
         decl: ExtensionDecl,
         implementation: impl Fn(Vec<serde_json::Value>) -> Result<serde_json::Value, String>
-            + Send
-            + Sync
-            + 'static,
+        + Send
+        + Sync
+        + 'static,
     ) -> &mut Self {
         let key = ExtensionKey::new(decl.namespace.clone(), decl.function.clone());
         self.extensions_impl
