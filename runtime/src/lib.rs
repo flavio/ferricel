@@ -108,3 +108,6 @@ pub use kubernetes::lists::{
     cel_k8s_list_index_of, cel_k8s_list_is_sorted, cel_k8s_list_last_index_of, cel_k8s_list_max,
     cel_k8s_list_min, cel_k8s_list_sum,
 };
+
+// Re-export Kubernetes regex extension functions
+pub use kubernetes::regex::{cel_k8s_regex_find, cel_k8s_regex_find_all_n};

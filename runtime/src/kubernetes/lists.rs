@@ -413,20 +413,9 @@ pub unsafe extern "C" fn cel_k8s_list_last_index_of(
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_helpers::{make_array, make_val, read_val};
     use super::*;
     use rstest::rstest;
-
-    unsafe fn make_array(elements: Vec<CelValue>) -> *mut CelValue {
-        Box::into_raw(Box::new(CelValue::Array(elements)))
-    }
-
-    unsafe fn make_val(v: CelValue) -> *mut CelValue {
-        Box::into_raw(Box::new(v))
-    }
-
-    unsafe fn read_val(ptr: *mut CelValue) -> CelValue {
-        (*ptr).clone()
-    }
 
     // ── isSorted ────────────────────────────────────────────────────────────
 

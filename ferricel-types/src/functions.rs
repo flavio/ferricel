@@ -162,6 +162,10 @@ pub enum RuntimeFunction {
     K8sListIndexOf,
     K8sListLastIndexOf,
 
+    // Kubernetes Regex Extensions
+    K8sRegexFind,
+    K8sRegexFindAllN,
+
     // Timestamp accessors
     TimestampGetFullYear,
     TimestampGetFullYearTz,
@@ -325,6 +329,9 @@ impl RuntimeFunction {
             Self::K8sListMax => "cel_k8s_list_max",
             Self::K8sListIndexOf => "cel_k8s_list_index_of",
             Self::K8sListLastIndexOf => "cel_k8s_list_last_index_of",
+
+            Self::K8sRegexFind => "cel_k8s_regex_find",
+            Self::K8sRegexFindAllN => "cel_k8s_regex_find_all_n",
 
             Self::TimestampGetFullYear => "cel_timestamp_get_full_year",
             Self::TimestampGetFullYearTz => "cel_timestamp_get_full_year_tz",

@@ -139,6 +139,42 @@ pub fn compile_call_unary(
     Ok(())
 }
 
+/// Compile a method/function call that takes a receiver plus two arguments.
+///
+/// - Method style:   `receiver.fn(arg1, arg2)`  — `target` is `Some`, `args` has 2 elements
+/// - Function style: `fn(receiver, arg1, arg2)` — `target` is `None`, `args` has 3 elements
+///
+/// Compiles all three expressions in order, then emits `call runtime_fn`.
+pub fn compile_call_ternary(
+    call_expr: &CallExpr,
+    func_name: &str,
+    runtime_fn: RuntimeFunction,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    if let Some(target) = &call_expr.target {
+        // Method style: receiver.fn(arg1, arg2)
+        if call_expr.args.len() != 2 {
+            anyhow::bail!("{}() method expects 2 arguments", func_name);
+        }
+        compile_expr(&target.expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+    } else {
+        // Function style: fn(receiver, arg1, arg2)
+        if call_expr.args.len() != 3 {
+            anyhow::bail!("{}() function expects 3 arguments", func_name);
+        }
+        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[2].expr, body, env, ctx, module)?;
+    }
+    body.call(env.get(runtime_fn));
+    Ok(())
+}
+
 /// Compile a method/function call that takes a receiver plus one argument.
 ///
 /// - Method style:   `receiver.fn(arg)`  — `target` is `Some`, `args` has 1 element

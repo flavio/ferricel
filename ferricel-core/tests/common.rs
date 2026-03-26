@@ -23,10 +23,10 @@
 //   extension_tests.rs     — Extension function registration and invocation
 //   kubernetes_tests.rs    — Kubernetes list extension tests
 
-use ferricel_core::compiler::{compile_cel_to_wasm, CompilerOptions};
+use ferricel_core::compiler::{CompilerOptions, compile_cel_to_wasm};
 use ferricel_core::runtime::CelEngine;
 use ferricel_types::LogLevel;
-use slog::{o, Drain, Logger};
+use slog::{Drain, Logger, o};
 
 // Re-export so test files can reference these types directly after `use common::*;`.
 pub(crate) use ferricel_types::extensions::ExtensionDecl;

@@ -35,6 +35,9 @@ pub fn compile_named_function(
                 func_name, call_expr, body, env, ctx, module,
             )
         }
+        "find" | "findAll" => kubernetes::regex::compile_k8s_regex_function(
+            func_name, call_expr, body, env, ctx, module,
+        ),
         _ => extensions::compile_extension_call(call_expr, body, env, ctx, module),
     }
 }
