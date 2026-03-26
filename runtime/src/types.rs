@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
+use url::Url;
 
 /// Map key types allowed by CEL specification.
 /// Per CEL spec, only boolean, int, uint, and string values can be map keys.
@@ -147,6 +148,18 @@ pub enum CelValue {
     /// Serializes as an error message string
     #[serde(skip_deserializing)]
     Error(String),
+
+    /// URL - represents a parsed URL value created by the `url()` CEL function.
+    /// Stores the parsed `url::Url` and the original input string.
+    /// The original string is needed because the `url` crate normalises paths
+    /// (e.g. `https://example.com` → path `"/"`) and we need to distinguish an
+    /// explicitly-absent path from an explicit `"/"` path.
+    /// Supports the Kubernetes CEL URL library:
+    /// `getScheme()`, `getHost()`, `getHostname()`, `getPort()`,
+    /// `getEscapedPath()`, `getQuery()`.
+    /// Serializes as the URL string. Cannot be deserialized from JSON.
+    #[serde(skip_deserializing)]
+    Url(Url, String),
 }
 
 // Custom serialization for CelValue to provide untagged JSON output
@@ -218,6 +231,7 @@ impl Serialize for CelValue {
                 state.serialize_field("error", msg)?;
                 state.end()
             }
+            CelValue::Url(u, _original) => serializer.serialize_str(u.as_str()),
         }
     }
 }

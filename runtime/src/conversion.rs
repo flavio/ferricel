@@ -680,6 +680,7 @@ pub unsafe extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {
             CelValue::Duration(_) => "google.protobuf.Duration",
             CelValue::Type(_) => "type",
             CelValue::Error(_) => "error",
+            CelValue::Url(_, _) => "url",
         };
 
         debug!(log, "Getting type of value"; "type_name" => type_name);

@@ -111,3 +111,9 @@ pub use kubernetes::lists::{
 
 // Re-export Kubernetes regex extension functions
 pub use kubernetes::regex::{cel_k8s_regex_find, cel_k8s_regex_find_all_n};
+
+// Re-export Kubernetes URL extension functions
+pub use kubernetes::url::{
+    cel_k8s_is_url, cel_k8s_url_get_escaped_path, cel_k8s_url_get_host, cel_k8s_url_get_hostname,
+    cel_k8s_url_get_port, cel_k8s_url_get_query, cel_k8s_url_get_scheme, cel_k8s_url_parse,
+};

@@ -38,6 +38,10 @@ pub fn compile_named_function(
         "find" | "findAll" => kubernetes::regex::compile_k8s_regex_function(
             func_name, call_expr, body, env, ctx, module,
         ),
+        "url" | "isURL" | "getScheme" | "getHost" | "getHostname" | "getPort"
+        | "getEscapedPath" | "getQuery" => {
+            kubernetes::url::compile_k8s_url_function(func_name, call_expr, body, env, ctx, module)
+        }
         _ => extensions::compile_extension_call(call_expr, body, env, ctx, module),
     }
 }

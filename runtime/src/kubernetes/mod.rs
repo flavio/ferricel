@@ -6,6 +6,7 @@
 
 pub mod lists;
 pub mod regex;
+pub mod url;
 
 #[cfg(test)]
 pub(super) mod test_helpers {

@@ -166,6 +166,16 @@ pub enum RuntimeFunction {
     K8sRegexFind,
     K8sRegexFindAllN,
 
+    // Kubernetes URL Extensions
+    K8sUrlParse,
+    K8sIsUrl,
+    K8sUrlGetScheme,
+    K8sUrlGetHost,
+    K8sUrlGetHostname,
+    K8sUrlGetPort,
+    K8sUrlGetEscapedPath,
+    K8sUrlGetQuery,
+
     // Timestamp accessors
     TimestampGetFullYear,
     TimestampGetFullYearTz,
@@ -332,6 +342,15 @@ impl RuntimeFunction {
 
             Self::K8sRegexFind => "cel_k8s_regex_find",
             Self::K8sRegexFindAllN => "cel_k8s_regex_find_all_n",
+
+            Self::K8sUrlParse => "cel_k8s_url_parse",
+            Self::K8sIsUrl => "cel_k8s_is_url",
+            Self::K8sUrlGetScheme => "cel_k8s_url_get_scheme",
+            Self::K8sUrlGetHost => "cel_k8s_url_get_host",
+            Self::K8sUrlGetHostname => "cel_k8s_url_get_hostname",
+            Self::K8sUrlGetPort => "cel_k8s_url_get_port",
+            Self::K8sUrlGetEscapedPath => "cel_k8s_url_get_escaped_path",
+            Self::K8sUrlGetQuery => "cel_k8s_url_get_query",
 
             Self::TimestampGetFullYear => "cel_timestamp_get_full_year",
             Self::TimestampGetFullYearTz => "cel_timestamp_get_full_year_tz",
