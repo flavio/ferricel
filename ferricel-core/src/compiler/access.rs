@@ -137,7 +137,7 @@ pub fn compile_ident(
                     walrus::ir::StoreKind::I32_8 { atomic: false },
                     walrus::ir::MemArg {
                         align: 1,
-                        offset: offset as u32,
+                        offset: offset as u64,
                     },
                 );
             }
@@ -209,7 +209,7 @@ pub fn compile_select(
                 walrus::ir::StoreKind::I32_8 { atomic: false },
                 walrus::ir::MemArg {
                     align: 1,
-                    offset: offset as u32,
+                    offset: offset as u64,
                 },
             );
         }

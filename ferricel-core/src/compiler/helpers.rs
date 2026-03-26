@@ -46,7 +46,7 @@ pub fn compile_string_to_local(
             walrus::ir::StoreKind::I32_8 { atomic: false },
             walrus::ir::MemArg {
                 align: 1,
-                offset: offset as u32,
+                offset: offset as u64,
             },
         );
     }
@@ -99,7 +99,7 @@ pub fn emit_string_const(
             walrus::ir::StoreKind::I32_8 { atomic: false },
             walrus::ir::MemArg {
                 align: 1,
-                offset: offset as u32,
+                offset: offset as u64,
             },
         );
     }
