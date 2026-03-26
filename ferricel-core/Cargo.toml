@@ -5,14 +5,14 @@ version = "0.1.0"
 
 [dependencies]
 anyhow         = { workspace = true }
-cel            = { workspace = true }
+cel            = "0.12"
 ferricel-types = { path = "../ferricel-types" }
 prost          = { workspace = true }
 prost-types    = { workspace = true }
 serde_json     = { workspace = true }
 slog           = { workspace = true }
-walrus         = { workspace = true }
-wasmtime       = { workspace = true }
+walrus         = "0.25"
+wasmtime       = "42.0"
 
 [dev-dependencies]
 rstest    = { workspace = true }
