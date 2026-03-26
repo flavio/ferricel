@@ -3,7 +3,7 @@
 mod common;
 use common::*;
 
-use ferricel_core::compiler::{compile_cel_to_wasm, CompilerOptions};
+use ferricel_core::compiler::{CompilerOptions, compile_cel_to_wasm};
 use ferricel_core::runtime::CelEngine;
 use ferricel_types::LogLevel;
 

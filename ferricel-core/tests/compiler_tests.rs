@@ -8,7 +8,7 @@
 mod common;
 use common::*;
 
-use ferricel_core::compiler::{compile_cel_to_wasm, CompilerOptions};
+use ferricel_core::compiler::{CompilerOptions, compile_cel_to_wasm};
 
 #[test]
 fn test_compile_cel_to_wasm_returns_valid_bytes() {
