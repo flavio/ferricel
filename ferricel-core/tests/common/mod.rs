@@ -4,34 +4,29 @@
 // `use common::*;` (or individual imports) to any test file gives it access to
 // all helpers here.
 //
-// # Splitting compiler_tests.rs
+// # Test file map
 //
-// The logical test sections are:
+// Each logical group of tests lives in its own file:
 //
-//   1. Arithmetic & Comparison Tests          (~L110)
-//   2. Double Arithmetic & Comparison Tests   (~L344)
-//   3. Type Safety Tests                      (~L482)
-//   4. JSON Output Tests                      (~L737)
-//   5. List / Array Macro Tests               (~L843)
-//   6. Variable & Field Access Tests          (~L1018)
-//   7. has() Macro Tests                      (~L1175)
-//   8. String Tests                           (~L1302)
-//   9. `in` Operator Tests                    (~L1443)
-//  10. Uint, Cross-type & Bool Tests          (~L1552)
-//  11. Struct Literal & Equality Tests        (~L1777)
-//  12. Container Resolution Tests             (~L1877)
-//  13. Extension Function Tests               (~L1922)
-//  14. Kubernetes List Extension Tests        (~L2168)
-//
-// To split a section into its own file, e.g. `tests/string_tests.rs`:
-//   1. Create the file with `mod common; use common::*;` at the top.
-//   2. Move the relevant `#[test]` / `#[rstest]` functions into it.
-//   3. Keep only the necessary `use` items (rstest, ferricel_types, etc.).
+//   compiler_tests.rs      — WASM magic number, invalid expression (2 tests)
+//   arithmetic_tests.rs    — Integer literals, arithmetic operators, comparisons, logical ops
+//   double_tests.rs        — Double literals, arithmetic, division-by-zero, comparisons, type safety
+//   json_output_tests.rs   — JSON serialization of integers, booleans, arithmetic results
+//   list_tests.rs          — List literals, concatenation, all/exists/exists_one/filter/map macros
+//   variable_tests.rs      — input/data variable access, field access (simple, nested, deep)
+//   has_tests.rs           — has() macro: basic, nested, data variable, null, in expressions
+//   string_tests.rs        — String literals, concatenation, size/startsWith/endsWith/contains/matches
+//   in_operator_tests.rs   — `in` operator for lists and maps, complex logical combos
+//   numeric_tests.rs       — Uint, cross-type equality/ordering, string/bool/map/list comparisons
+//   struct_tests.rs        — Struct literal creation and struct equality
+//   container_tests.rs     — Container name resolution (no schema, with container but no schema)
+//   extension_tests.rs     — Extension function registration and invocation
+//   kubernetes_tests.rs    — Kubernetes list extension tests
 
-use ferricel_core::compiler::{CompilerOptions, compile_cel_to_wasm};
+use ferricel_core::compiler::{compile_cel_to_wasm, CompilerOptions};
 use ferricel_core::runtime::CelEngine;
 use ferricel_types::LogLevel;
-use slog::{Drain, Logger, o};
+use slog::{o, Drain, Logger};
 
 // Re-export so test files can reference these types directly after `use common::*;`.
 pub(crate) use ferricel_types::extensions::ExtensionDecl;
