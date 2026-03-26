@@ -1,7 +1,9 @@
+use cel::common::ast::CallExpr;
 use ferricel_types::functions::RuntimeFunction;
 use walrus::{InstrSeqBuilder, LocalId, ValType};
 
-use super::context::CompilerEnv;
+use super::context::{CompilerContext, CompilerEnv};
+use super::expr::compile_expr;
 
 /// Returns the single memory id from the module, or an error if none exists.
 pub fn get_memory_id(module: &walrus::Module) -> Result<walrus::MemoryId, anyhow::Error> {
@@ -103,4 +105,70 @@ pub fn emit_string_const(
     }
     body.local_get(ptr_local);
     body.i32_const(len);
+}
+
+/// Compile a method/function call that takes one receiver (no extra arguments).
+///
+/// - Method style:   `receiver.fn()`  — `target` is `Some`, `args` is empty
+/// - Function style: `fn(receiver)`   — `target` is `None`, `args` has 1 element
+///
+/// Compiles the receiver expression, then emits `call runtime_fn`.
+pub fn compile_call_unary(
+    call_expr: &CallExpr,
+    func_name: &str,
+    runtime_fn: RuntimeFunction,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    if let Some(target) = &call_expr.target {
+        // Method style: receiver.fn()
+        if !call_expr.args.is_empty() {
+            anyhow::bail!("{}() method expects 0 arguments", func_name);
+        }
+        compile_expr(&target.expr, body, env, ctx, module)?;
+    } else {
+        // Function style: fn(receiver)
+        if call_expr.args.len() != 1 {
+            anyhow::bail!("{}() function expects 1 argument", func_name);
+        }
+        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+    }
+    body.call(env.get(runtime_fn));
+    Ok(())
+}
+
+/// Compile a method/function call that takes a receiver plus one argument.
+///
+/// - Method style:   `receiver.fn(arg)`  — `target` is `Some`, `args` has 1 element
+/// - Function style: `fn(receiver, arg)` — `target` is `None`, `args` has 2 elements
+///
+/// Compiles both expressions in order, then emits `call runtime_fn`.
+pub fn compile_call_binary(
+    call_expr: &CallExpr,
+    func_name: &str,
+    runtime_fn: RuntimeFunction,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    if let Some(target) = &call_expr.target {
+        // Method style: receiver.fn(arg)
+        if call_expr.args.len() != 1 {
+            anyhow::bail!("{}() method expects 1 argument", func_name);
+        }
+        compile_expr(&target.expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+    } else {
+        // Function style: fn(receiver, arg)
+        if call_expr.args.len() != 2 {
+            anyhow::bail!("{}() function expects 2 arguments", func_name);
+        }
+        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+    }
+    body.call(env.get(runtime_fn));
+    Ok(())
 }

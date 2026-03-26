@@ -1202,6 +1202,50 @@ pub unsafe extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue
 /// Polymorphic less-than operator for CelValue objects.
 /// Implements CEL spec cross-type numeric ordering.
 ///
+/// Internal helper: compare two CelValue references for less-than ordering.
+///
+/// Returns `Ok(true)` if `a < b`, `Ok(false)` if `a >= b`, or `Err(msg)` if the
+/// types are incomparable.  Does not touch raw pointers or allocation.
+pub(crate) fn cel_value_less_than(
+    a_val: &CelValue,
+    b_val: &CelValue,
+) -> Result<bool, &'static str> {
+    let result = match (a_val, b_val) {
+        // Same-type comparisons
+        (CelValue::Int(a), CelValue::Int(b)) => a < b,
+        (CelValue::UInt(a), CelValue::UInt(b)) => a < b,
+        (CelValue::Double(a), CelValue::Double(b)) => a < b,
+        (CelValue::Bytes(a), CelValue::Bytes(b)) => a < b,
+        (CelValue::String(a), CelValue::String(b)) => a < b,
+        (CelValue::Bool(a), CelValue::Bool(b)) => a < b, // false < true in CEL
+        (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a < b,
+        (CelValue::Duration(a), CelValue::Duration(b)) => a < b,
+
+        // Cross-type numeric ordering
+        (CelValue::Int(a), CelValue::UInt(b)) => {
+            if *a < 0 {
+                true
+            } else {
+                (*a as u64) < *b
+            }
+        }
+        (CelValue::UInt(a), CelValue::Int(b)) => {
+            if *b < 0 {
+                false
+            } else {
+                *a < (*b as u64)
+            }
+        }
+        (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) < *b,
+        (CelValue::Double(a), CelValue::Int(b)) => *a < (*b as f64),
+        (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) < *b,
+        (CelValue::Double(a), CelValue::UInt(b)) => *a < (*b as f64),
+
+        _ => return Err("no such overload"),
+    };
+    Ok(result)
+}
+
 /// # Safety
 ///
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
@@ -1230,46 +1274,16 @@ pub unsafe extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue
         let a_val = &*a_ptr;
         let b_val = &*b_ptr;
 
-        let result = match (a_val, b_val) {
-            // Same-type comparisons
-            (CelValue::Int(a), CelValue::Int(b)) => a < b,
-            (CelValue::UInt(a), CelValue::UInt(b)) => a < b,
-            (CelValue::Double(a), CelValue::Double(b)) => a < b,
-            (CelValue::Bytes(a), CelValue::Bytes(b)) => a < b,
-            (CelValue::String(a), CelValue::String(b)) => a < b,
-            (CelValue::Bool(a), CelValue::Bool(b)) => a < b, // false < true in CEL
-            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a < b,
-            (CelValue::Duration(a), CelValue::Duration(b)) => a < b,
-
-            // Cross-type numeric ordering
-            (CelValue::Int(a), CelValue::UInt(b)) => {
-                if *a < 0 {
-                    true
-                } else {
-                    (*a as u64) < *b
-                }
-            }
-            (CelValue::UInt(a), CelValue::Int(b)) => {
-                if *b < 0 {
-                    false
-                } else {
-                    *a < (*b as u64)
-                }
-            }
-            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) < *b,
-            (CelValue::Double(a), CelValue::Int(b)) => *a < (*b as f64),
-            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) < *b,
-            (CelValue::Double(a), CelValue::UInt(b)) => *a < (*b as f64),
-
-            _ => {
+        match cel_value_less_than(a_val, b_val) {
+            Ok(result) => cel_create_bool(if result { 1 } else { 0 }),
+            Err(_) => {
                 error!(log, "Cannot compare incompatible types for less-than";
                     "operation" => "cel_value_lt",
                     "left_type" => format!("{:?}", a_val),
                     "right_type" => format!("{:?}", b_val));
-                abort_with_error("no such overload");
+                abort_with_error("no such overload")
             }
-        };
-        cel_create_bool(if result { 1 } else { 0 })
+        }
     }
 }
 

@@ -11,6 +11,7 @@ mod extensions;
 mod field_access;
 mod globals;
 mod helpers;
+mod kubernetes;
 pub mod logging;
 mod logical;
 mod map;
@@ -100,4 +101,10 @@ pub use logging::cel_set_log_level;
 // Re-export extension call wrappers
 pub use extensions::{
     cel_ext_call_0, cel_ext_call_1, cel_ext_call_2, cel_ext_call_3, cel_ext_call_4,
+};
+
+// Re-export Kubernetes list extension functions
+pub use kubernetes::lists::{
+    cel_k8s_list_index_of, cel_k8s_list_is_sorted, cel_k8s_list_last_index_of, cel_k8s_list_max,
+    cel_k8s_list_min, cel_k8s_list_sum,
 };

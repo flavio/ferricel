@@ -1,5 +1,6 @@
 pub mod conversions;
 pub mod extensions;
+pub mod kubernetes;
 pub mod strings;
 pub mod temporal;
 
@@ -28,6 +29,11 @@ pub fn compile_named_function(
         }
         "string" | "int" | "uint" | "double" | "bytes" | "bool" | "type" | "dyn" => {
             conversions::compile_conversion_function(func_name, call_expr, body, env, ctx, module)
+        }
+        "isSorted" | "sum" | "min" | "max" | "indexOf" | "lastIndexOf" => {
+            kubernetes::lists::compile_k8s_list_function(
+                func_name, call_expr, body, env, ctx, module,
+            )
         }
         _ => extensions::compile_extension_call(call_expr, body, env, ctx, module),
     }

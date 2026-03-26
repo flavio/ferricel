@@ -154,6 +154,14 @@ pub enum RuntimeFunction {
     ExtCall3,
     ExtCall4,
 
+    // Kubernetes List Extensions
+    K8sListIsSorted,
+    K8sListSum,
+    K8sListMin,
+    K8sListMax,
+    K8sListIndexOf,
+    K8sListLastIndexOf,
+
     // Timestamp accessors
     TimestampGetFullYear,
     TimestampGetFullYearTz,
@@ -310,6 +318,13 @@ impl RuntimeFunction {
             Self::ExtCall2 => "cel_ext_call_2",
             Self::ExtCall3 => "cel_ext_call_3",
             Self::ExtCall4 => "cel_ext_call_4",
+
+            Self::K8sListIsSorted => "cel_k8s_list_is_sorted",
+            Self::K8sListSum => "cel_k8s_list_sum",
+            Self::K8sListMin => "cel_k8s_list_min",
+            Self::K8sListMax => "cel_k8s_list_max",
+            Self::K8sListIndexOf => "cel_k8s_list_index_of",
+            Self::K8sListLastIndexOf => "cel_k8s_list_last_index_of",
 
             Self::TimestampGetFullYear => "cel_timestamp_get_full_year",
             Self::TimestampGetFullYearTz => "cel_timestamp_get_full_year_tz",

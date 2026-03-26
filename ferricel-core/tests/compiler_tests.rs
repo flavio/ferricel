@@ -1,111 +1,21 @@
-// Integration tests for the ferricel-core compiler
-// These tests compile CEL expressions to WASM and execute them to verify correctness
+// Integration tests for the ferricel-core compiler.
+// These tests compile CEL expressions to WASM and execute them to verify correctness.
+//
+// Shared test helpers live in `common/mod.rs`. To add a new test file, create
+// `tests/foo_tests.rs`, add `mod common; use common::*;` at the top, and move
+// the relevant test functions there.
+
+mod common;
+use common::*;
 
 use ferricel_core::compiler::{CompilerOptions, compile_cel_to_wasm};
 use ferricel_core::runtime::CelEngine;
 use ferricel_types::LogLevel;
 use rstest::rstest;
-use slog::{Drain, Logger, o};
 
-/// Test helper: create a logger for tests
-fn create_test_logger() -> Logger {
-    let decorator = slog_term::PlainSyncDecorator::new(std::io::stderr());
-    let drain = slog_term::FullFormat::new(decorator).build().fuse();
-    Logger::root(drain, o!())
-}
-
-/// Test helper: compile CEL expression and execute it, returning the result
-fn compile_and_execute(cel_expr: &str) -> Result<i64, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: logger.clone(),
-        extensions: vec![],
-    };
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = CelEngine::new(logger)
-        .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, None)?;
-
-    // Parse JSON to extract the numeric value
-    // The JSON will be either an integer (e.g., "42") or boolean (e.g., "true"/"false")
-    let value: serde_json::Value = serde_json::from_str(&json_result)?;
-
-    match value {
-        serde_json::Value::Number(n) => n
-            .as_i64()
-            .ok_or_else(|| anyhow::anyhow!("Expected i64, got: {}", n)),
-        serde_json::Value::Bool(b) => Ok(if b { 1 } else { 0 }),
-        _ => anyhow::bail!("Unexpected JSON value type: {}", value),
-    }
-}
-
-/// Test helper: compile CEL expression with variables and execute it
-fn compile_and_execute_with_vars(
-    cel_expr: &str,
-    input_json: Option<&str>,
-    data_json: Option<&str>,
-) -> Result<i64, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: logger.clone(),
-        extensions: vec![],
-    };
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-
-    let mut bindings = serde_json::Map::new();
-    if let Some(val_str) = input_json {
-        let val: serde_json::Value = serde_json::from_str(val_str)?;
-        bindings.insert("input".to_string(), val);
-    }
-    if let Some(val_str) = data_json {
-        let val: serde_json::Value = serde_json::from_str(val_str)?;
-        bindings.insert("data".to_string(), val);
-    }
-    let bindings_str = serde_json::to_string(&bindings)?;
-    let json_result = CelEngine::new(logger)
-        .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, Some(&bindings_str))?;
-
-    // Parse JSON to extract the numeric value
-    let value: serde_json::Value = serde_json::from_str(&json_result)?;
-
-    match value {
-        serde_json::Value::Number(n) => n
-            .as_i64()
-            .ok_or_else(|| anyhow::anyhow!("Expected i64, got: {}", n)),
-        serde_json::Value::Bool(b) => Ok(if b { 1 } else { 0 }),
-        _ => anyhow::bail!("Unexpected JSON value type: {}", value),
-    }
-}
-
-/// Test helper: compile and execute CEL expression, expecting a double result
-fn compile_and_execute_double(cel_expr: &str) -> Result<f64, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: logger.clone(),
-        extensions: vec![],
-    };
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = CelEngine::new(logger)
-        .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, None)?;
-
-    // Parse JSON to extract the double value
-    let value: serde_json::Value = serde_json::from_str(&json_result)?;
-
-    match value {
-        serde_json::Value::Number(n) => n
-            .as_f64()
-            .ok_or_else(|| anyhow::anyhow!("Expected f64, got: {}", n)),
-        _ => anyhow::bail!("Unexpected JSON value type: {}", value),
-    }
-}
+// ============================================================
+// Arithmetic & Comparison Tests
+// ============================================================
 
 #[rstest]
 #[case("42", 42)]
@@ -215,22 +125,6 @@ fn test_invalid_cel_expression() {
     assert!(
         result.is_err(),
         "Invalid CEL expression should return error"
-    );
-}
-
-#[test]
-fn test_unsupported_operation() {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger,
-        extensions: vec![],
-    };
-    let result = compile_cel_to_wasm("my_var", compiler_options);
-    assert!(
-        result.is_err(),
-        "Variable access should not be supported yet"
     );
 }
 
@@ -641,6 +535,10 @@ fn test_combined_logic_and_comparison(#[case] expr: &str, #[case] expected: i64)
     );
 }
 
+// ============================================================
+// Integer Overflow Tests
+// ============================================================
+
 #[test]
 fn test_integer_overflow_addition() {
     let expr = "9223372036854775807 + 1"; // i64::MAX + 1
@@ -733,6 +631,10 @@ fn test_positive_overflow_subtraction() {
         result
     );
 }
+
+// ============================================================
+// JSON Output Tests
+// ============================================================
 
 #[test]
 fn test_json_output_integer() {
@@ -1276,28 +1178,9 @@ fn test_has_macro_multiple_fields(
     );
 }
 
-/// Test helper: compile CEL expression and execute it, returning string result
-fn compile_and_execute_string(cel_expr: &str) -> Result<String, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: logger.clone(),
-        extensions: vec![],
-    };
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = CelEngine::new(logger)
-        .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, None)?;
-
-    // Parse JSON to extract the string value
-    let value: serde_json::Value = serde_json::from_str(&json_result)?;
-
-    match value {
-        serde_json::Value::String(s) => Ok(s),
-        _ => anyhow::bail!("Expected string, got: {}", value),
-    }
-}
+// ============================================================
+// String Tests
+// ============================================================
 
 #[rstest]
 #[case::basic(r#""hello""#, "hello")]
@@ -1440,7 +1323,9 @@ fn test_string_matches(#[case] expr: &str, #[case] expected: i64) {
     );
 }
 
-// ===== 'in' Operator Tests =====
+// ============================================================
+// `in` Operator Tests
+// ============================================================
 
 #[rstest]
 #[case::int_in_list(r#"2 in [1, 2, 3]"#, 1)]
@@ -1548,6 +1433,10 @@ fn test_in_operator_with_input_and_logical_ops() {
     .expect("Execution failed");
     assert_eq!(result, 1, "2 is in list, so OR should be true");
 }
+
+// ============================================================
+// Uint, Cross-Type Numeric & Bool Comparison Tests
+// ============================================================
 
 // Uint literal tests
 #[rstest]
@@ -1758,23 +1647,10 @@ fn test_list_cross_type_equality(#[case] expr: &str, #[case] expected: i64) {
     );
 }
 
-// Helper to get raw JSON result for struct tests
-fn compile_and_execute_json(cel_expr: &str) -> Result<serde_json::Value, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: logger.clone(),
-        extensions: vec![],
-    };
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = CelEngine::new(logger)
-        .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, None)?;
-    Ok(serde_json::from_str(&json_result)?)
-}
+// ============================================================
+// Struct Literal & Equality Tests
+// ============================================================
 
-// Struct literal tests
 #[test]
 fn test_struct_empty() {
     // Empty struct should compile and create a map with just __type__ field
@@ -1878,22 +1754,6 @@ fn test_struct_equality(#[case] expr: &str, #[case] expected: i64) {
 // Container Resolution Tests
 // ============================================================
 
-/// Test helper: compile CEL with container and optional proto descriptor
-fn compile_with_container(
-    cel_expr: &str,
-    container: Option<&str>,
-    proto_descriptor: Option<Vec<u8>>,
-) -> Result<Vec<u8>, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor,
-        container: container.map(|s| s.to_string()),
-        logger,
-        extensions: vec![],
-    };
-    compile_cel_to_wasm(cel_expr, compiler_options)
-}
-
 #[test]
 fn test_container_no_schema_no_container() {
     // Without schema or container, unqualified names should still work (treated as arbitrary structs)
@@ -1922,48 +1782,6 @@ fn test_container_with_container_but_no_schema() {
 // ============================================================
 // Extension Function Tests
 // ============================================================
-
-use ferricel_core::CelEngine;
-use ferricel_types::extensions::ExtensionDecl;
-
-/// Build a `CelEngine` pre-loaded with a single extension that returns the sum
-/// of all integer args, for use in round-trip tests.
-///
-/// Returns both the engine (for `execute`) and the `ExtensionDecl` (for
-/// passing to `compile_cel_to_wasm` via `CompilerOptions`).
-fn make_engine_with_sum(
-    namespace: Option<&str>,
-    function: &str,
-    num_args: usize,
-    receiver_style: bool,
-    global_style: bool,
-) -> (CelEngine, ExtensionDecl) {
-    let logger = create_test_logger();
-    let decl = ExtensionDecl {
-        namespace: namespace.map(|s| s.to_string()),
-        function: function.to_string(),
-        receiver_style,
-        global_style,
-        num_args,
-    };
-    let mut engine = CelEngine::new(logger);
-    engine.register_extension(decl.clone(), |args| {
-        // Sum all integer args and return as JSON integer.
-        let sum: i64 = args.iter().filter_map(|v| v.as_i64()).sum();
-        Ok(serde_json::Value::Number(sum.into()))
-    });
-    (engine, decl)
-}
-
-/// Helper: build `CompilerOptions` with a single extension declaration.
-fn options_with_ext(decl: ExtensionDecl) -> CompilerOptions {
-    CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: create_test_logger(),
-        extensions: vec![decl],
-    }
-}
 
 #[test]
 fn test_extension_global_call() {
