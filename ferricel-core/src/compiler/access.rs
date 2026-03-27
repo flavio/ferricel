@@ -4,7 +4,7 @@ use walrus::{InstrSeqBuilder, ValType};
 
 use super::{
     context::{CompilerContext, CompilerEnv},
-    helpers::{compile_string_to_local, get_memory_id},
+    helpers::{emit_string_const, get_memory_id},
 };
 
 /// Resolves a type name using container-based hierarchical resolution.
@@ -110,9 +110,10 @@ pub fn compile_ident(
         "bool" | "int" | "uint" | "double" | "string" | "bytes" | "list" | "map" | "null_type"
         | "type" | "timestamp" | "duration" => {
             // Create a Type value for this type denotation
-            let type_name_local = compile_string_to_local(name, body, env, module)?;
-            body.local_get(type_name_local)
-                .call(env.get(RuntimeFunction::CreateType));
+            // cel_create_type expects (ptr: *const u8, len: i32) — raw bytes, not a CelValue*
+            let memory_id = get_memory_id(module)?;
+            emit_string_const(name, body, env, memory_id, module);
+            body.call(env.get(RuntimeFunction::CreateType));
         }
         _ => {
             // All other identifiers are runtime variables
@@ -182,9 +183,10 @@ pub fn compile_select(
 
     if let Some(type_name) = qualified_name {
         // Emit a type denotation: cel_create_type(ptr, len)
-        let type_name_local = compile_string_to_local(&type_name, body, env, module)?;
-        body.local_get(type_name_local)
-            .call(env.get(RuntimeFunction::CreateType));
+        // cel_create_type expects (ptr: *const u8, len: i32) — raw bytes, not a CelValue*
+        let memory_id = get_memory_id(module)?;
+        emit_string_const(&type_name, body, env, memory_id, module);
+        body.call(env.get(RuntimeFunction::CreateType));
     } else {
         // Regular field access: compile operand, then call cel_get_field / cel_has_field
         super::expr::compile_expr(&select_expr.operand.expr, body, env, ctx, module)?;

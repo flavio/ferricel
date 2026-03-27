@@ -170,12 +170,13 @@ pub fn compile_struct(
         if resolved_type_name == "google.protobuf.Any" {
             // Try to find a literal type_url in the struct entries at compile time
             use cel::common::ast::EntryExpr as EE;
+            use cel::common::ast::LiteralValue;
             let maybe_type_url: Option<String> = struct_expr.entries.iter().find_map(|e| {
                 if let EE::StructField(sf) = &e.expr
                     && sf.field == "type_url"
-                    && let Expr::Literal(cel::common::value::CelVal::String(s)) = &sf.value.expr
+                    && let Expr::Literal(LiteralValue::String(s)) = &sf.value.expr
                 {
-                    return Some(s.clone());
+                    return Some(s.inner().to_owned());
                 }
                 None
             });

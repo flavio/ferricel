@@ -5,7 +5,7 @@ version = "0.1.0"
 
 [dependencies]
 anyhow         = { workspace = true }
-cel            = "0.12"
+cel            = "0.13"
 ferricel-types = { path = "../ferricel-types" }
 prost          = { workspace = true }
 prost-types    = { workspace = true }

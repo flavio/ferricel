@@ -54,11 +54,11 @@ pub use deserialization::{cel_deserialize_json, cel_free_value};
 pub use globals::{cel_get_variable, cel_init_bindings, cel_reset_globals};
 
 pub use conversion::{
-    cel_bytes, cel_double, cel_duration, cel_int, cel_string, cel_timestamp, cel_uint,
-    cel_value_to_bool, cel_value_to_i64, cel_value_to_u64,
+    cel_bool, cel_bytes, cel_double, cel_duration, cel_int, cel_string, cel_timestamp, cel_type,
+    cel_uint, cel_value_to_bool, cel_value_to_i64, cel_value_to_u64,
 };
 
-pub use field_access::cel_get_field;
+pub use field_access::{cel_get_field, cel_has_field};
 
 pub use array::{cel_array_get, cel_array_len, cel_array_push, cel_create_array};
 
@@ -66,9 +66,10 @@ pub use map::{cel_create_map, cel_map_insert};
 
 pub use helpers::{
     cel_create_bool, cel_create_double, cel_create_duration, cel_create_error, cel_create_int,
-    cel_create_null, cel_create_timestamp, cel_create_uint, cel_value_add, cel_value_div,
-    cel_value_eq, cel_value_gt, cel_value_gte, cel_value_index, cel_value_lt, cel_value_lte,
-    cel_value_mod, cel_value_mul, cel_value_ne, cel_value_negate, cel_value_size, cel_value_sub,
+    cel_create_null, cel_create_timestamp, cel_create_type, cel_create_uint, cel_value_add,
+    cel_value_div, cel_value_eq, cel_value_gt, cel_value_gte, cel_value_index, cel_value_lt,
+    cel_value_lte, cel_value_mod, cel_value_mul, cel_value_ne, cel_value_negate, cel_value_size,
+    cel_value_sub,
 };
 
 pub use string::{

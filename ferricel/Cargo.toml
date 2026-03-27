@@ -14,6 +14,6 @@ slog           = { workspace = true }
 slog-term      = { workspace = true }
 
 [dev-dependencies]
-assert_cmd = "2.1"
+assert_cmd = "2.2"
 predicates = "3.1"
-tempfile   = "3.25"
+tempfile   = "3.27"

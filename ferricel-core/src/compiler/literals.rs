@@ -1,4 +1,4 @@
-use cel::common::value::CelVal;
+use cel::common::ast::LiteralValue;
 use ferricel_types::functions::RuntimeFunction;
 use walrus::{InstrSeqBuilder, LocalId, ValType};
 
@@ -7,51 +7,49 @@ use super::{context::CompilerEnv, helpers::get_memory_id};
 /// Compile a literal CEL value into WASM instructions.
 /// Leaves a *mut CelValue (i32) on the stack.
 pub fn compile_literal(
-    literal: &CelVal,
+    literal: &LiteralValue,
     body: &mut InstrSeqBuilder,
     env: &CompilerEnv,
     module: &mut walrus::Module,
 ) -> Result<(), anyhow::Error> {
     match literal {
-        CelVal::Int(value) => {
+        LiteralValue::Int(value) => {
             // Create a CelValue::Int pointer
-            body.i64_const(*value);
+            body.i64_const(**value);
             body.call(env.get(RuntimeFunction::CreateInt));
         }
-        CelVal::UInt(value) => {
+        LiteralValue::UInt(value) => {
             // Create a CelValue::UInt pointer
             // Note: WASM only has i64, so we pass u64 as i64
-            body.i64_const(*value as i64);
+            body.i64_const(**value as i64);
             body.call(env.get(RuntimeFunction::CreateUint));
         }
-        CelVal::Boolean(b) => {
+        LiteralValue::Boolean(b) => {
             // Create a CelValue::Bool pointer
-            body.i64_const(if *b { 1 } else { 0 });
+            body.i64_const(if **b { 1 } else { 0 });
             body.call(env.get(RuntimeFunction::CreateBool));
         }
-        CelVal::Double(d) => {
+        LiteralValue::Double(d) => {
             // Create a CelValue::Double pointer
-            body.f64_const(*d);
+            body.f64_const(**d);
             body.call(env.get(RuntimeFunction::CreateDouble));
         }
-        CelVal::String(s) => {
+        LiteralValue::String(s) => {
             // String literals can reuse compile_string_to_local but we need to leave
             // the result on the stack (not in a local). We use compile_string_to_local
             // and then push the local value back.
-            let cel_val_local = compile_string_literal(s, body, env, module)?;
+            let cel_val_local = compile_string_literal(s.inner(), body, env, module)?;
             body.local_get(cel_val_local);
         }
-        CelVal::Bytes(bytes) => {
+        LiteralValue::Bytes(bytes) => {
             // Bytes literals require memory allocation (same pattern as strings)
-            let cel_val_local = compile_bytes_literal(bytes, body, env, module)?;
+            let cel_val_local = compile_bytes_literal(bytes.inner(), body, env, module)?;
             body.local_get(cel_val_local);
         }
-        CelVal::Null => {
+        LiteralValue::Null => {
             // Create a CelValue::Null pointer
             body.call(env.get(RuntimeFunction::CreateNull));
         }
-        // Other literals not supported yet
-        _ => anyhow::bail!("Unsupported literal: {:?}", literal),
     }
     Ok(())
 }
