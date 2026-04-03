@@ -2,6 +2,7 @@
 
 pub mod extensions;
 pub mod functions;
+pub mod proto;
 
 use std::str::FromStr;
 

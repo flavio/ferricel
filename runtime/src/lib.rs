@@ -49,7 +49,7 @@ pub use logical::{
 
 pub use serialization::{cel_serialize_bool, cel_serialize_int, cel_serialize_value};
 
-pub use deserialization::{cel_deserialize_json, cel_free_value};
+pub use deserialization::{cel_deserialize_json, cel_deserialize_proto, cel_free_value};
 
 pub use globals::{cel_get_variable, cel_init_bindings, cel_reset_globals};
 

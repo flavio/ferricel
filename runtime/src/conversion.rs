@@ -525,6 +525,10 @@ pub unsafe extern "C" fn cel_bytes(ptr: *mut CelValue) -> *mut CelValue {
 /// Signatures per CEL spec:
 /// - bool(bool) -> bool (identity)
 /// - bool(string) -> bool (parses "true"/"false" with various cases: "1", "t", "T", "TRUE", "True", "0", "f", "F", "FALSE", "False")
+///
+/// # Safety
+///
+/// `ptr` must be a valid pointer to a `CelValue` allocated by this runtime, or null.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bool(ptr: *mut CelValue) -> *mut CelValue {
@@ -654,6 +658,10 @@ pub unsafe extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
 /// CEL type() function - returns the type of a value as a Type value.
 /// Signatures per CEL spec:
 /// - type(value) -> Type (returns runtime type)
+///
+/// # Safety
+///
+/// `ptr` must be a valid pointer to a `CelValue` allocated by this runtime, or null.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {

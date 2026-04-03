@@ -10,9 +10,10 @@ pub mod operators;
 use std::collections::HashMap;
 
 use anyhow::Context;
+use cel::common::ast::Expr;
 use cel::parser::Parser;
 use ferricel_types::functions::RuntimeFunction;
-use walrus::{FunctionBuilder, ModuleConfig, ValType};
+use walrus::{FunctionBuilder, FunctionId, ModuleConfig, ValType};
 
 use crate::schema::ProtoSchema;
 use context::{CompilerContext, CompilerEnv};
@@ -29,9 +30,12 @@ const RUNTIME_BYTES: &[u8] = include_bytes!(concat!(
 /// Compile a CEL expression into a WebAssembly module with options
 ///
 /// Takes a CEL expression string and compilation options, returns the compiled WASM module as bytes.
-/// The resulting module exports a `validate` function with signature (i32, i32) -> i64.
-/// The returned i64 encodes a pointer (low 32 bits) and length (high 32 bits) to
-/// JSON-serialized result in WASM memory.
+/// The resulting module exports two functions:
+///
+/// - `validate(i64) -> i64`: takes JSON-encoded bindings, returns JSON-encoded result
+/// - `validate_proto(i64) -> i64`: takes protobuf-encoded `ferricel.Bindings`, returns JSON-encoded result
+///
+/// The i64 encoding packs ptr (low 32 bits) and len (high 32 bits) into a single value.
 ///
 /// # Arguments
 ///
@@ -92,43 +96,74 @@ pub fn compile_cel_to_wasm(
         .parse(cel_code)
         .map_err(|e| anyhow::anyhow!("Parse error: {:?}", e))?;
 
-    // 5. Build the 'validate' function (i64) -> i64
-    // Parameter: encoded (ptr, len) for bindings JSON (map of variable names to values)
-    let mut validate_func =
-        FunctionBuilder::new(&mut module.types, &[ValType::I64], &[ValType::I64]);
-    let bindings_encoded_arg = module.locals.add(ValType::I64);
-
-    let mut body = validate_func.func_body();
-
-    // 6. Initialize global bindings map
-    // Deserialize bindings (single parameter) and store in global
-    body.local_get(bindings_encoded_arg)
-        .call(env.get(RuntimeFunction::DeserializeJson)) // Returns *mut CelValue (should be a Map)
-        .call(env.get(RuntimeFunction::InitBindings)); // Store in BINDINGS global
-
-    // 7. Walk the AST and compile to WASM instructions
-    // This leaves a *mut CelValue on the stack
     let ctx = CompilerContext::new(
         schema,
         options.container,
         options.logger,
         &options.extensions,
     );
-    expr::compile_expr(&root_ast.expr, &mut body, &env, &ctx, &mut module)?;
 
-    // 8. Serialize the result to JSON
-    // The stack has a *mut CelValue, serialize it directly
-    body.call(env.get(RuntimeFunction::SerializeValue));
-
-    // 9. Finish the function definition
-    let validate_id = validate_func.finish(vec![bindings_encoded_arg], &mut module.funcs);
-
-    // 10. Export the 'validate' function for the Host
+    // 5. Build the 'validate' function (i64) -> i64 — JSON bindings path
+    let validate_id = build_validate_function(&mut module, &env, &ctx, &root_ast.expr)?;
     module.exports.add("validate", validate_id);
 
-    // 11. Run garbage collection to remove unreferenced items (dead code elimination)
+    // 6. Build the 'validate_proto' function (i64) -> i64 — protobuf bindings path
+    let validate_proto_id = build_validate_proto_function(&mut module, &env, &ctx, &root_ast.expr)?;
+    module.exports.add("validate_proto", validate_proto_id);
+
+    // 7. Run garbage collection to remove unreferenced items (dead code elimination)
     walrus::passes::gc::run(&mut module);
 
-    // 12. Emit the module as bytes
+    // 8. Emit the module as bytes
     Ok(module.emit_wasm())
+}
+
+/// Build the `validate` WASM function `(i64) -> i64` using JSON-encoded bindings.
+///
+/// Deserializes bindings with [`RuntimeFunction::DeserializeJson`], evaluates the expression,
+/// and serializes the result back to JSON.
+fn build_validate_function(
+    module: &mut walrus::Module,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    expr: &Expr,
+) -> Result<FunctionId, anyhow::Error> {
+    let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I64], &[ValType::I64]);
+    let bindings_encoded_arg = module.locals.add(ValType::I64);
+    let mut body = func.func_body();
+
+    body.local_get(bindings_encoded_arg)
+        .call(env.get(RuntimeFunction::DeserializeJson))
+        .call(env.get(RuntimeFunction::InitBindings));
+
+    expr::compile_expr(expr, &mut body, env, ctx, module)?;
+
+    body.call(env.get(RuntimeFunction::SerializeValue));
+
+    Ok(func.finish(vec![bindings_encoded_arg], &mut module.funcs))
+}
+
+/// Build the `validate_proto` WASM function `(i64) -> i64` using protobuf-encoded bindings.
+///
+/// Deserializes bindings with [`RuntimeFunction::DeserializeProto`], evaluates the expression,
+/// and serializes the result back to JSON.
+fn build_validate_proto_function(
+    module: &mut walrus::Module,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    expr: &Expr,
+) -> Result<FunctionId, anyhow::Error> {
+    let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I64], &[ValType::I64]);
+    let bindings_encoded_arg = module.locals.add(ValType::I64);
+    let mut body = func.func_body();
+
+    body.local_get(bindings_encoded_arg)
+        .call(env.get(RuntimeFunction::DeserializeProto))
+        .call(env.get(RuntimeFunction::InitBindings));
+
+    expr::compile_expr(expr, &mut body, env, ctx, module)?;
+
+    body.call(env.get(RuntimeFunction::SerializeValue));
+
+    Ok(func.finish(vec![bindings_encoded_arg], &mut module.funcs))
 }

@@ -88,6 +88,7 @@ pub enum RuntimeFunction {
 
     // Deserialization
     DeserializeJson,
+    DeserializeProto,
 
     // Globals
     InitBindings,
@@ -279,6 +280,7 @@ impl RuntimeFunction {
             Self::SerializeValue => "cel_serialize_value",
 
             Self::DeserializeJson => "cel_deserialize_json",
+            Self::DeserializeProto => "cel_deserialize_proto",
 
             Self::InitBindings => "cel_init_bindings",
             Self::GetVariable => "cel_get_variable",

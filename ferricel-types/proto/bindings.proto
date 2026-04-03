@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package ferricel;
+
+import "cel/expr/value.proto";
+
+// Typed variable bindings for CEL evaluation.
+//
+// Uses cel.expr.Value to preserve full type fidelity (bytes, uint, timestamp,
+// etc.) that would be lost in a JSON round-trip.
+message Bindings {
+  // Variable name → typed CEL value.
+  map<string, cel.expr.Value> variables = 1;
+}
