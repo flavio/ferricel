@@ -1820,6 +1820,7 @@ dependencies = [
  "nom 8.0.0",
  "once_cell",
  "prost",
+ "prost-types",
  "regex-lite",
  "rstest",
  "serde",

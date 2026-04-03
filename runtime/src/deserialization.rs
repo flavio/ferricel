@@ -179,9 +179,73 @@ fn proto_value_to_cel(v: ferricel_types::proto::cel::expr::Value) -> CelValue {
             }
             CelValue::Object(cel_map)
         }
-        // EnumValue and ObjectValue (google.protobuf.Any) have no direct CelValue
-        // equivalent — fall back to null to avoid a hard abort.
-        Some(Kind::EnumValue(_)) | Some(Kind::ObjectValue(_)) => CelValue::Null,
+        // EnumValue has no direct CelValue equivalent.
+        Some(Kind::EnumValue(_)) => abort_with_error("unsupported binding type: EnumValue"),
+        // ObjectValue is a google.protobuf.Any. Decode well-known types into
+        // the same CelValue::Object shape that the JSON bridge produces so that
+        // runtime functions (e.g. cel_timestamp_get_milliseconds) can handle
+        // them uniformly.
+        Some(Kind::ObjectValue(any)) => decode_any_to_cel_value(&any),
+    }
+}
+
+/// Decode a `google.protobuf.Any` value into a `CelValue`.
+///
+/// Well-known types that have runtime support are decoded into a `CelValue::Object`
+/// map using the same `__type__` / field conventions used by the JSON bridge, so
+/// that runtime functions such as `cel_timestamp_get_milliseconds` can handle both
+/// paths uniformly.
+///
+/// Unknown type URLs fall back to `CelValue::Null`.
+fn decode_any_to_cel_value(any: &prost_types::Any) -> CelValue {
+    use prost::Message;
+
+    const DURATION_URL: &str = "type.googleapis.com/google.protobuf.Duration";
+    const TIMESTAMP_URL: &str = "type.googleapis.com/google.protobuf.Timestamp";
+
+    match any.type_url.as_str() {
+        DURATION_URL => {
+            if let Ok(dur) = prost_types::Duration::decode(any.value.as_slice()) {
+                let mut map = HashMap::new();
+                map.insert(
+                    CelMapKey::String("__type__".into()),
+                    CelValue::String("google.protobuf.Duration".into()),
+                );
+                map.insert(
+                    CelMapKey::String("seconds".into()),
+                    CelValue::Int(dur.seconds),
+                );
+                map.insert(
+                    CelMapKey::String("nanos".into()),
+                    CelValue::Int(dur.nanos as i64),
+                );
+                CelValue::Object(map)
+            } else {
+                abort_with_error("failed to decode google.protobuf.Duration binding")
+            }
+        }
+        TIMESTAMP_URL => {
+            if let Ok(ts) = prost_types::Timestamp::decode(any.value.as_slice()) {
+                let mut map = HashMap::new();
+                map.insert(
+                    CelMapKey::String("__type__".into()),
+                    CelValue::String("google.protobuf.Timestamp".into()),
+                );
+                map.insert(
+                    CelMapKey::String("seconds".into()),
+                    CelValue::Int(ts.seconds),
+                );
+                map.insert(
+                    CelMapKey::String("nanos".into()),
+                    CelValue::Int(ts.nanos as i64),
+                );
+                CelValue::Object(map)
+            } else {
+                abort_with_error("failed to decode google.protobuf.Timestamp binding")
+            }
+        }
+        // Unknown type URL — abort with a descriptive error.
+        _ => abort_with_error(&format!("unsupported binding type URL: {}", any.type_url)),
     }
 }
 
