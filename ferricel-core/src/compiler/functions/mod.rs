@@ -1,4 +1,5 @@
 pub mod conversions;
+pub mod ext;
 pub mod extensions;
 pub mod kubernetes;
 pub mod strings;
@@ -19,8 +20,22 @@ pub fn compile_named_function(
     module: &mut walrus::Module,
 ) -> Result<(), anyhow::Error> {
     match func_name {
+        // Core string functions
         "size" | "startsWith" | "endsWith" | "contains" | "matches" => {
             strings::compile_string_function(func_name, call_expr, body, env, ctx, module)
+        }
+        // Extended string library
+        "lowerAscii" | "upperAscii" | "trim" | "reverse" | "charAt" | "replace" | "split"
+        | "substring" | "format" | "quote" => {
+            ext::strings::compile_ext_string_function(func_name, call_expr, body, env, ctx, module)
+        }
+        // Extended list library
+        "join" => {
+            ext::lists::compile_ext_list_function(func_name, call_expr, body, env, ctx, module)
+        }
+        // indexOf / lastIndexOf: overloaded by arity (polymorphic or string+offset)
+        "indexOf" | "lastIndexOf" => {
+            ext::poly::compile_index_of_dispatch(func_name, call_expr, body, env, ctx, module)
         }
         "timestamp" | "duration" | "getFullYear" | "getMonth" | "getDate" | "getDayOfMonth"
         | "getDayOfWeek" | "getDayOfYear" | "getHours" | "getMinutes" | "getSeconds"
@@ -30,11 +45,9 @@ pub fn compile_named_function(
         "string" | "int" | "uint" | "double" | "bytes" | "bool" | "type" | "dyn" => {
             conversions::compile_conversion_function(func_name, call_expr, body, env, ctx, module)
         }
-        "isSorted" | "sum" | "min" | "max" | "indexOf" | "lastIndexOf" => {
-            kubernetes::lists::compile_k8s_list_function(
-                func_name, call_expr, body, env, ctx, module,
-            )
-        }
+        "isSorted" | "sum" | "min" | "max" => kubernetes::lists::compile_k8s_list_function(
+            func_name, call_expr, body, env, ctx, module,
+        ),
         "find" | "findAll" => kubernetes::regex::compile_k8s_regex_function(
             func_name, call_expr, body, env, ctx, module,
         ),

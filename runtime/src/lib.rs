@@ -7,6 +7,7 @@ mod comparison;
 mod conversion;
 mod deserialization;
 pub mod error;
+mod ext;
 mod extensions;
 mod field_access;
 mod globals;
@@ -76,6 +77,21 @@ pub use string::{
     cel_create_string, cel_string_contains, cel_string_ends_with, cel_string_matches,
     cel_string_size, cel_string_starts_with,
 };
+
+// Re-export CEL extended string library functions
+pub use ext::strings::{
+    cel_string_char_at, cel_string_format, cel_string_index_of, cel_string_index_of_offset,
+    cel_string_last_index_of, cel_string_last_index_of_offset, cel_string_lower_ascii,
+    cel_string_replace, cel_string_replace_n, cel_string_reverse, cel_string_split,
+    cel_string_split_n, cel_string_substring, cel_string_substring_range, cel_string_trim,
+    cel_string_upper_ascii, cel_strings_quote,
+};
+
+// Re-export CEL extended list library functions
+pub use ext::lists::{cel_list_join, cel_list_join_sep};
+
+// Re-export polymorphic indexOf / lastIndexOf
+pub use ext::poly::{cel_index_of_poly, cel_last_index_of_poly};
 
 pub use bytes::{
     cel_bytes_concat, cel_bytes_eq, cel_bytes_gt, cel_bytes_gte, cel_bytes_lt, cel_bytes_lte,

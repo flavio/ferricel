@@ -1,3 +1,8 @@
+//! Compiler for core CEL string functions.
+//!
+//! Handles: `size`, `startsWith`, `endsWith`, `contains`, `matches`.
+//! Extended string library functions live in `ext/strings.rs`.
+
 use cel::common::ast::CallExpr;
 use ferricel_types::functions::RuntimeFunction;
 use walrus::InstrSeqBuilder;
@@ -8,7 +13,7 @@ use crate::compiler::{
     helpers::compile_call_binary,
 };
 
-/// Compile a string function call.
+/// Compile a core string function call.
 pub fn compile_string_function(
     func_name: &str,
     call_expr: &CallExpr,

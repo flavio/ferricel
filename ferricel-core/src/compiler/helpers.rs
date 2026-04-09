@@ -175,6 +175,40 @@ pub fn compile_call_ternary(
     Ok(())
 }
 
+/// Compile a method/function call with receiver plus three arguments (quaternary).
+///
+/// - Method style: `receiver.fn(a, b, c)` — target is Some, args has 3 elements
+/// - Function style: `fn(receiver, a, b, c)` — target is None, args has 4 elements
+pub fn compile_call_quaternary(
+    call_expr: &CallExpr,
+    func_name: &str,
+    runtime_fn: RuntimeFunction,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    if let Some(target) = &call_expr.target {
+        if call_expr.args.len() != 3 {
+            anyhow::bail!("{}() method expects 3 arguments", func_name);
+        }
+        compile_expr(&target.expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[2].expr, body, env, ctx, module)?;
+    } else {
+        if call_expr.args.len() != 4 {
+            anyhow::bail!("{}() function expects 4 arguments", func_name);
+        }
+        compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[2].expr, body, env, ctx, module)?;
+        compile_expr(&call_expr.args[3].expr, body, env, ctx, module)?;
+    }
+    body.call(env.get(runtime_fn));
+    Ok(())
+}
+
 /// Compile a method/function call that takes a receiver plus one argument.
 ///
 /// - Method style:   `receiver.fn(arg)`  — `target` is `Some`, `args` has 1 element

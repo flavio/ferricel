@@ -222,7 +222,6 @@ pub unsafe extern "C" fn cel_string_matches(
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
