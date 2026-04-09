@@ -59,3 +59,45 @@ CONFORMANCE_SECTION="string_ops" CONFORMANCE_TEST="size" make conformance-string
 ```
 
 This filtering works with any conformance test suite (basic, string, lists, logic, etc.).
+
+## Publishing to crates.io
+
+The workspace contains two publishable crates: `ferricel-core` and `ferricel`. Because `ferricel` depends on `ferricel-core`, they must be published in order.
+
+`ferricel-core` embeds the `runtime` WASM at compile time. When building inside the workspace, the build script finds the WASM automatically in `target/`. When building from the published crate (outside the workspace), the WASM must be bundled inside the crate package. The `publish-prep` Makefile target handles this.
+
+**Steps:**
+
+**1. Build the runtime and run all tests:**
+
+```bash
+make tests
+```
+
+**2. Prepare `ferricel-core` for publishing:**
+
+```bash
+make publish-prep
+```
+
+This copies `target/wasm32-unknown-unknown/release/runtime.wasm` into `ferricel-core/runtime.wasm` so it is included in the crate package. The file is gitignored and only needed at publish time.
+
+**3. Publish `ferricel-core`:**
+
+```bash
+cargo publish -p ferricel-core
+```
+
+**4. Publish `ferricel`:**
+
+Once `ferricel-core` is available on crates.io (may take a minute to index), update the `ferricel-core` dependency in `ferricel/Cargo.toml` from a path dependency to a version dependency, then publish:
+
+```bash
+cargo publish -p ferricel
+```
+
+**5. Clean up:**
+
+```bash
+rm ferricel-core/runtime.wasm
+```

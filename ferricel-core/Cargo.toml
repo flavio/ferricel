@@ -2,6 +2,15 @@
 edition = "2024"
 name    = "ferricel-core"
 version = "0.1.0"
+build   = "build.rs"
+include = [
+    "src/**/*",
+    "build.rs",
+    "Cargo.toml",
+    # Pre-built runtime WASM, placed here by `make publish-prep` before publishing.
+    # Not tracked in git (covered by the workspace .gitignore `*.wasm` rule).
+    "runtime.wasm",
+]
 
 [dependencies]
 anyhow         = { workspace = true }

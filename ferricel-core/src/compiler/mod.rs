@@ -21,11 +21,11 @@ use context::{CompilerContext, CompilerEnv};
 // Re-export the public API types
 pub use context::{CompilerOptions, ExtensionKey};
 
-// Embed the runtime WASM at compile time
-const RUNTIME_BYTES: &[u8] = include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../target/wasm32-unknown-unknown/release/runtime.wasm"
-));
+// Embed the runtime WASM at compile time.
+// The build script (build.rs) copies the WASM into OUT_DIR, resolving it from
+// either the workspace target directory (development) or a bundled file
+// placed by `make publish-prep` (when publishing to crates.io).
+const RUNTIME_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/runtime.wasm"));
 
 /// Compile a CEL expression into a WebAssembly module with options
 ///

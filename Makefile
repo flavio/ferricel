@@ -1,4 +1,4 @@
-.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-list conformance-% conformance-sections-% docs
+.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-list conformance-% conformance-sections-% docs publish-prep
 
 # Default target
 all: ferricel
@@ -190,9 +190,19 @@ conformance-list:
 	@echo "  4. CONFORMANCE_SECTION=variables make conformance-basic            # Run that section"
 
 # Build Rust documentation for all workspace components
-docs:
+# Depends on the runtime so the build script in ferricel-core can find the WASM.
+docs: $(RUNTIME_TARGET)
 	@echo "Building documentation for all workspace components..."
 	cargo doc --workspace --no-deps
+
+# Prepare ferricel-core for publishing to crates.io.
+# Copies the pre-built runtime WASM into ferricel-core/ so it is picked up by
+# the build script when building from the published (non-workspace) crate.
+# Run this immediately before `cargo publish -p ferricel-core`.
+publish-prep: $(RUNTIME_TARGET)
+	@echo "Copying runtime.wasm into ferricel-core/ for publishing..."
+	cp $(RUNTIME_TARGET) ferricel-core/runtime.wasm
+	@echo "Done. You can now run: cargo publish -p ferricel-core"
 
 # Check code formatting (does not modify files)
 .PHONY: fmt
@@ -230,6 +240,7 @@ help:
 	@echo "  conformance-sections-<name> - List sections in a conformance test suite"
 	@echo "  conformance-list - List available conformance test suites"
 	@echo "  docs             - Build Rust documentation for all workspace components"
+	@echo "  publish-prep     - Copy runtime.wasm into ferricel-core/ before cargo publish"
 	@echo "  fmt              - Check code formatting (does not modify files)"
 	@echo "  lint             - Run clippy lints with warnings as errors"
 	@echo "  lint-fix         - Auto-fix clippy warnings where possible"
