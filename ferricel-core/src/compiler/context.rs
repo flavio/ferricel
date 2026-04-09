@@ -42,7 +42,7 @@ pub struct CompilerOptions {
 /// This includes local variable bindings for comprehensions and other scoped contexts
 pub struct CompilerContext {
     /// Maps variable names to their local IDs in the WASM function
-    /// Used for iteration variables in comprehensions (e.g., "x" in [1,2,3].all(x, x > 0))
+    /// Used for iteration variables in comprehensions (e.g., "x" in \[1,2,3\].all(x, x > 0))
     pub local_vars: HashMap<String, LocalId>,
     /// Optional Protocol Buffer schema for wrapper type semantics
     pub schema: Option<ProtoSchema>,

@@ -10,7 +10,7 @@
 //!   - `<URL>.getEscapedPath()` → `cel_k8s_url_get_escaped_path` (unary, method-style)
 //!   - `<URL>.getQuery()`     → `cel_k8s_url_get_query`      (unary, method-style)
 //!
-//! Reference: https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-url-library
+//! Reference: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-url-library>
 
 use cel::common::ast::CallExpr;
 use ferricel_types::functions::RuntimeFunction;

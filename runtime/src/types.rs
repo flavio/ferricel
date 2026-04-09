@@ -120,7 +120,7 @@ pub enum CelValue {
 
     /// Timestamp - google.protobuf.Timestamp
     /// Represents an absolute point in time with timezone
-    /// Uses chrono::DateTime<FixedOffset> for RFC3339 compatibility
+    /// Uses `chrono::DateTime<FixedOffset>` for RFC3339 compatibility
     /// Valid range: 0001-01-01T00:00:00Z to 9999-12-31T23:59:59.999999999Z
     /// Serializes to RFC3339 string format
     /// Note: Cannot be deserialized from JSON. Created via timestamp() CEL function.
@@ -190,7 +190,7 @@ impl Serialize for CelValue {
             }
             CelValue::String(s) => serializer.serialize_str(s),
             CelValue::Bytes(bytes) => {
-                use base64::{Engine as _, engine::general_purpose};
+                use base64::{engine::general_purpose, Engine as _};
                 let encoded = general_purpose::STANDARD.encode(bytes);
                 serializer.serialize_str(&encoded)
             }

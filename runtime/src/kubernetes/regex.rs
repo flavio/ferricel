@@ -5,7 +5,7 @@
 //!   - `findAll` — returns all substrings matching a regex, up to an optional limit
 //!     (`findAll(pattern, -1)` returns all matches)
 //!
-//! Reference: https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-regex-library
+//! Reference: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-regex-library>
 
 use crate::error::create_error_value;
 use crate::types::CelValue;

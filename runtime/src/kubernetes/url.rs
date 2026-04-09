@@ -1,7 +1,7 @@
 //! Kubernetes CEL URL library extensions.
 //!
 //! Implements the Kubernetes URL functions described in:
-//!   https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-url-library
+//!   <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-url-library>
 //!
 //! Functions:
 //!   - `url(string)`         → URL (or error if invalid/relative)
@@ -11,7 +11,7 @@
 //!   - `<URL>.getHostname()` → string  (host only, IPv6 without brackets)
 //!   - `<URL>.getPort()`     → string
 //!   - `<URL>.getEscapedPath()` → string (percent-encoded)
-//!   - `<URL>.getQuery()`    → map<string, list<string>>
+//!   - `<URL>.getQuery()`    → map\<string, list\<string\>>
 
 use crate::error::create_error_value;
 use crate::types::{CelMapKey, CelValue};

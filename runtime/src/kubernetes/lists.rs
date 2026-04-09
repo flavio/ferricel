@@ -8,7 +8,7 @@
 //!   - `indexOf`      — first index of an element, or -1
 //!   - `lastIndexOf`  — last index of an element, or -1
 //!
-//! Reference: https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-list-library
+//! Reference: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-list-library>
 
 use crate::error::create_error_value;
 use crate::helpers::{cel_create_bool, cel_create_int, cel_equals, cel_value_less_than};
