@@ -74,6 +74,8 @@ conformance-%: $(RUNTIME_TARGET)
 			cargo test --package conformance --test conformance conformance_string_tests -- --nocapture ;; \
 		string-ext) \
 			cargo test --package conformance --test conformance conformance_string_ext_tests -- --nocapture ;; \
+		network-ext) \
+			cargo test --package conformance --test conformance conformance_network_ext_tests -- --nocapture ;; \
 		timestamps) \
 			cargo test --package conformance --test conformance conformance_timestamps_tests -- --nocapture ;; \
 		all) \
@@ -93,6 +95,7 @@ conformance-%: $(RUNTIME_TARGET)
 			echo "  conformance-logic       - Logical operators (&&, ||, !, ? :)"; \
 			echo "  conformance-string      - String operations (size, contains, matches, etc.)"; \
 			echo "  conformance-string-ext  - Extended string operations (charAt, indexOf, split, etc.)"; \
+			echo "  conformance-network-ext - Kubernetes network extension (IP address library)"; \
 			echo "  conformance-timestamps  - Timestamp and duration operations"; \
 			echo "  conformance-all         - Run all conformance tests"; \
 			echo "  conformance-list        - Show this list"; \
@@ -128,6 +131,8 @@ conformance-sections-%: $(RUNTIME_TARGET)
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_string_tests -- --nocapture ;; \
 		string-ext) \
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_string_ext_tests -- --nocapture ;; \
+		network-ext) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_network_ext_tests -- --nocapture ;; \
 		timestamps) \
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_timestamps_tests -- --nocapture ;; \
 		*) \
@@ -143,6 +148,7 @@ conformance-sections-%: $(RUNTIME_TARGET)
 			echo "  conformance-sections-logic       - List sections in logic suite"; \
 			echo "  conformance-sections-string      - List sections in string suite"; \
 			echo "  conformance-sections-string-ext  - List sections in string-ext suite"; \
+			echo "  conformance-sections-network-ext - List sections in network-ext suite"; \
 			echo "  conformance-sections-timestamps  - List sections in timestamps suite"; \
 			echo ""; \
 			echo "To list tests in a specific section, use:"; \
@@ -167,6 +173,7 @@ conformance-list:
 	@echo "  conformance-logic       - Logical operators (&&, ||, !, ? :)"
 	@echo "  conformance-string      - String operations (size, contains, matches, etc.)"
 	@echo "  conformance-string-ext  - Extended string operations (charAt, indexOf, split, etc.)"
+	@echo "  conformance-network-ext - Kubernetes network extension (IP address library)"
 	@echo "  conformance-timestamps  - Timestamp and duration operations"
 	@echo "  conformance-all         - Run all conformance tests"
 	@echo ""

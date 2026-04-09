@@ -4,6 +4,8 @@
 //! Kubernetes adds on top of the standard CEL specification.
 //! See: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-cel-libraries>
 
+pub mod cidr;
+pub mod ip;
 pub mod lists;
 pub mod regex;
 pub mod url;

@@ -44,6 +44,8 @@ fn cel_type_name(val: &CelValue) -> &'static str {
         CelValue::Type(_) => "type",
         CelValue::Error(_) => "error",
         CelValue::Url(_, _) => "url",
+        CelValue::IpAddr(_) => "net.IP",
+        CelValue::Cidr(_, _) => "net.CIDR",
     }
 }
 

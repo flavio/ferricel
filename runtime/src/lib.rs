@@ -134,3 +134,10 @@ pub use kubernetes::url::{
     cel_k8s_is_url, cel_k8s_url_get_escaped_path, cel_k8s_url_get_host, cel_k8s_url_get_hostname,
     cel_k8s_url_get_port, cel_k8s_url_get_query, cel_k8s_url_get_scheme, cel_k8s_url_parse,
 };
+
+// Re-export Kubernetes IP address extension functions
+pub use kubernetes::ip::{
+    cel_k8s_ip_family, cel_k8s_ip_is_canonical, cel_k8s_ip_is_global_unicast,
+    cel_k8s_ip_is_link_local_multicast, cel_k8s_ip_is_link_local_unicast, cel_k8s_ip_is_loopback,
+    cel_k8s_ip_is_unspecified, cel_k8s_ip_parse, cel_k8s_is_ip,
+};

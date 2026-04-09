@@ -997,6 +997,27 @@ pub(crate) fn cel_equals(a_val: &CelValue, b_val: &CelValue) -> bool {
             true
         }
 
+        // IP address equality: same-family uses direct comparison; cross-family
+        // handles IPv4-mapped IPv6 (e.g. `::ffff:c0a8:1` == `192.168.0.1`).
+        (CelValue::IpAddr(a), CelValue::IpAddr(b)) => {
+            use std::net::IpAddr;
+            match (a, b) {
+                // Same family — direct equality (handles normalisation, e.g. IPv6 case).
+                (IpAddr::V4(a4), IpAddr::V4(b4)) => a4 == b4,
+                (IpAddr::V6(a6), IpAddr::V6(b6)) => a6 == b6,
+                // Cross-family: V6 == V4 only if the V6 address is an IPv4-mapped IPv6.
+                (IpAddr::V6(a6), IpAddr::V4(b4)) => a6.to_ipv4().as_ref() == Some(b4),
+                (IpAddr::V4(a4), IpAddr::V6(b6)) => b6.to_ipv4().as_ref() == Some(a4),
+            }
+        }
+
+        // CIDR equality: two CIDRs are equal if they have the same address and prefix length.
+        // Note: host bits are NOT masked for equality — cidr('127.0.0.1/24') == cidr('127.0.0.1/24')
+        // but cidr('127.0.0.1/24') != cidr('127.0.0.0/24').
+        (CelValue::Cidr(a_addr, a_prefix), CelValue::Cidr(b_addr, b_prefix)) => {
+            a_prefix == b_prefix && a_addr == b_addr
+        }
+
         // Cross-type numeric equality (CEL spec: x == y if !(x < y || x > y))
         (CelValue::Int(a), CelValue::UInt(b)) => {
             if *a < 0 {

@@ -55,6 +55,30 @@ pub fn compile_named_function(
         | "getEscapedPath" | "getQuery" => {
             kubernetes::url::compile_k8s_url_function(func_name, call_expr, body, env, ctx, module)
         }
+        // CIDR-specific methods (unambiguous names)
+        "cidr" | "isCIDR" | "masked" | "prefixLength" | "containsIP" | "containsCIDR" => {
+            kubernetes::cidr::compile_k8s_cidr_function(
+                func_name, call_expr, body, env, ctx, module,
+            )
+        }
+        // `ip()` method on a CIDR receiver: `cidr_value.ip()` → route to CIDR module.
+        // `ip(string)` constructor (no target): route to IP module.
+        "ip" if call_expr.target.is_some() && call_expr.args.is_empty() => {
+            kubernetes::cidr::compile_k8s_cidr_function(
+                func_name, call_expr, body, env, ctx, module,
+            )
+        }
+        "ip"
+        | "isIP"
+        | "isCanonical"
+        | "family"
+        | "isUnspecified"
+        | "isLoopback"
+        | "isLinkLocalMulticast"
+        | "isLinkLocalUnicast"
+        | "isGlobalUnicast" => {
+            kubernetes::ip::compile_k8s_ip_function(func_name, call_expr, body, env, ctx, module)
+        }
         _ => extensions::compile_extension_call(call_expr, body, env, ctx, module),
     }
 }

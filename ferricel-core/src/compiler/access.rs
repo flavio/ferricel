@@ -168,14 +168,22 @@ pub fn compile_select(
     ctx: &CompilerContext,
     module: &mut walrus::Module,
 ) -> Result<(), anyhow::Error> {
+    // Well-known Kubernetes CEL extension type literals.
+    // These are expressed in CEL as `net.IP` / `net.CIDR` (a Select on the `net` ident),
+    // but are not proto message types — they must be handled before the schema lookup.
+    const K8S_TYPE_LITERALS: &[&str] = &["net.IP", "net.CIDR"];
+
     // Before treating this as a runtime field access, check whether the entire
-    // Select chain forms a qualified type name that exists in the proto schema.
+    // Select chain forms a qualified type name that exists in the proto schema
+    // or is a well-known Kubernetes CEL extension type literal.
     let qualified_name = if !select_expr.test {
         try_collect_qualified_ident(&Expr::Select(select_expr.clone())).filter(|name| {
-            ctx.schema
-                .as_ref()
-                .map(|s| s.has_message_type(name))
-                .unwrap_or(false)
+            K8S_TYPE_LITERALS.contains(&name.as_str())
+                || ctx
+                    .schema
+                    .as_ref()
+                    .map(|s| s.has_message_type(name))
+                    .unwrap_or(false)
         })
     } else {
         None

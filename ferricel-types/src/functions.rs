@@ -200,6 +200,28 @@ pub enum RuntimeFunction {
     K8sUrlGetEscapedPath,
     K8sUrlGetQuery,
 
+    // Kubernetes IP Address Extensions
+    K8sIpParse,
+    K8sIsIp,
+    K8sIpIsCanonical,
+    K8sIpFamily,
+    K8sIpIsUnspecified,
+    K8sIpIsLoopback,
+    K8sIpIsLinkLocalMulticast,
+    K8sIpIsLinkLocalUnicast,
+    K8sIpIsGlobalUnicast,
+
+    // Kubernetes CIDR Extensions
+    K8sCidrParse,
+    K8sIsCidr,
+    K8sCidrIp,
+    K8sCidrMasked,
+    K8sCidrPrefixLength,
+    K8sCidrContainsIpObj,
+    K8sCidrContainsIpStr,
+    K8sCidrContainsCidrObj,
+    K8sCidrContainsCidrStr,
+
     // Timestamp accessors
     TimestampGetFullYear,
     TimestampGetFullYearTz,
@@ -397,6 +419,26 @@ impl RuntimeFunction {
             Self::K8sUrlGetPort => "cel_k8s_url_get_port",
             Self::K8sUrlGetEscapedPath => "cel_k8s_url_get_escaped_path",
             Self::K8sUrlGetQuery => "cel_k8s_url_get_query",
+
+            Self::K8sIpParse => "cel_k8s_ip_parse",
+            Self::K8sIsIp => "cel_k8s_is_ip",
+            Self::K8sIpIsCanonical => "cel_k8s_ip_is_canonical",
+            Self::K8sIpFamily => "cel_k8s_ip_family",
+            Self::K8sIpIsUnspecified => "cel_k8s_ip_is_unspecified",
+            Self::K8sIpIsLoopback => "cel_k8s_ip_is_loopback",
+            Self::K8sIpIsLinkLocalMulticast => "cel_k8s_ip_is_link_local_multicast",
+            Self::K8sIpIsLinkLocalUnicast => "cel_k8s_ip_is_link_local_unicast",
+            Self::K8sIpIsGlobalUnicast => "cel_k8s_ip_is_global_unicast",
+
+            Self::K8sCidrParse => "cel_k8s_cidr_parse",
+            Self::K8sIsCidr => "cel_k8s_is_cidr",
+            Self::K8sCidrIp => "cel_k8s_cidr_ip",
+            Self::K8sCidrMasked => "cel_k8s_cidr_masked",
+            Self::K8sCidrPrefixLength => "cel_k8s_cidr_prefix_length",
+            Self::K8sCidrContainsIpObj => "cel_k8s_cidr_contains_ip_obj",
+            Self::K8sCidrContainsIpStr => "cel_k8s_cidr_contains_ip_str",
+            Self::K8sCidrContainsCidrObj => "cel_k8s_cidr_contains_cidr_obj",
+            Self::K8sCidrContainsCidrStr => "cel_k8s_cidr_contains_cidr_str",
 
             Self::TimestampGetFullYear => "cel_timestamp_get_full_year",
             Self::TimestampGetFullYearTz => "cel_timestamp_get_full_year_tz",

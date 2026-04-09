@@ -645,6 +645,17 @@ pub unsafe extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
                     }
                 }
             }
+            CelValue::IpAddr(addr) => {
+                debug!(log, "Converting IpAddr to string");
+                Box::into_raw(Box::new(CelValue::String(addr.to_string())))
+            }
+            CelValue::Cidr(addr, prefix_len) => {
+                debug!(log, "Converting Cidr to string");
+                Box::into_raw(Box::new(CelValue::String(format!(
+                    "{}/{}",
+                    addr, prefix_len
+                ))))
+            }
             other => {
                 error!(log, "Cannot convert type to string";
                 "function" => "cel_string",
@@ -689,6 +700,8 @@ pub unsafe extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {
             CelValue::Type(_) => "type",
             CelValue::Error(_) => "error",
             CelValue::Url(_, _) => "url",
+            CelValue::IpAddr(_) => "net.IP",
+            CelValue::Cidr(_, _) => "net.CIDR",
         };
 
         debug!(log, "Getting type of value"; "type_name" => type_name);

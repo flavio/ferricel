@@ -89,3 +89,11 @@ fn conformance_string_ext_tests() {
 
     runner.run_test_file(test_file);
 }
+
+#[test]
+fn conformance_network_ext_tests() {
+    let runner = ConformanceTestRunner::new();
+    let test_file = Path::new("../cel-spec/tests/simple/testdata/network_ext.textproto");
+
+    runner.run_test_file(test_file);
+}

@@ -160,6 +160,23 @@ pub enum CelValue {
     /// Serializes as the URL string. Cannot be deserialized from JSON.
     #[serde(skip_deserializing)]
     Url(Url, String),
+
+    /// IpAddr - represents a parsed IP address created by the `ip()` CEL function.
+    /// Stores the parsed `std::net::IpAddr`.
+    /// Supports the Kubernetes CEL IP address library:
+    /// `family()`, `isUnspecified()`, `isLoopback()`, `isLinkLocalMulticast()`,
+    /// `isLinkLocalUnicast()`, `isGlobalUnicast()`.
+    /// Serializes as the canonical IP string. Cannot be deserialized from JSON.
+    #[serde(skip_deserializing)]
+    IpAddr(std::net::IpAddr),
+
+    /// Cidr - represents a parsed CIDR block created by the `cidr()` CEL function.
+    /// Stores the IP address part and the prefix length.
+    /// Supports the Kubernetes CEL CIDR library:
+    /// `ip()`, `masked()`, `prefixLength()`, `containsIP()`, `containsCIDR()`.
+    /// Serializes as the CIDR string (e.g. "192.168.0.0/24"). Cannot be deserialized from JSON.
+    #[serde(skip_deserializing)]
+    Cidr(std::net::IpAddr, u8),
 }
 
 // Custom serialization for CelValue to provide untagged JSON output
@@ -190,7 +207,7 @@ impl Serialize for CelValue {
             }
             CelValue::String(s) => serializer.serialize_str(s),
             CelValue::Bytes(bytes) => {
-                use base64::{engine::general_purpose, Engine as _};
+                use base64::{Engine as _, engine::general_purpose};
                 let encoded = general_purpose::STANDARD.encode(bytes);
                 serializer.serialize_str(&encoded)
             }
@@ -232,6 +249,10 @@ impl Serialize for CelValue {
                 state.end()
             }
             CelValue::Url(u, _original) => serializer.serialize_str(u.as_str()),
+            CelValue::IpAddr(addr) => serializer.serialize_str(&addr.to_string()),
+            CelValue::Cidr(addr, prefix_len) => {
+                serializer.serialize_str(&format!("{}/{}", addr, prefix_len))
+            }
         }
     }
 }
