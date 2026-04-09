@@ -1,4 +1,4 @@
-.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-list conformance-% conformance-sections-%
+.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-list conformance-% conformance-sections-% docs
 
 # Default target
 all: ferricel
@@ -182,6 +182,11 @@ conformance-list:
 	@echo "  3. CONFORMANCE_SECTION=variables make conformance-sections-basic   # See tests in section"
 	@echo "  4. CONFORMANCE_SECTION=variables make conformance-basic            # Run that section"
 
+# Build Rust documentation for all workspace components
+docs:
+	@echo "Building documentation for all workspace components..."
+	cargo doc --workspace --no-deps
+
 # Check code formatting (does not modify files)
 .PHONY: fmt
 fmt:
@@ -217,6 +222,7 @@ help:
 	@echo "  conformance-<name> - Run specific conformance test suite"
 	@echo "  conformance-sections-<name> - List sections in a conformance test suite"
 	@echo "  conformance-list - List available conformance test suites"
+	@echo "  docs             - Build Rust documentation for all workspace components"
 	@echo "  fmt              - Check code formatting (does not modify files)"
 	@echo "  lint             - Run clippy lints with warnings as errors"
 	@echo "  lint-fix         - Auto-fix clippy warnings where possible"
