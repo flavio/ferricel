@@ -1,7 +1,10 @@
 [package]
-edition = "2024"
-name    = "ferricel-types"
-version = "0.1.0"
+edition     = "2024"
+name        = "ferricel-types"
+version     = { workspace = true }
+description = "Shared type definitions for the ferricel CEL compiler"
+license     = { workspace = true }
+repository  = { workspace = true }
 
 [dependencies]
 prost       = { workspace = true }

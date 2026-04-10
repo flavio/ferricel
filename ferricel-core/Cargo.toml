@@ -1,8 +1,11 @@
 [package]
-edition = "2024"
-name    = "ferricel-core"
-version = "0.1.0"
-build   = "build.rs"
+edition     = "2024"
+name        = "ferricel-core"
+version     = { workspace = true }
+description = "Core compiler and runtime library for ferricel (CEL → WASM)"
+license     = { workspace = true }
+repository  = { workspace = true }
+build       = "build.rs"
 include = [
     "src/**/*",
     "build.rs",
@@ -15,7 +18,7 @@ include = [
 [dependencies]
 anyhow         = { workspace = true }
 cel            = "0.13"
-ferricel-types = { path = "../ferricel-types" }
+ferricel-types = { workspace = true }
 prost          = { workspace = true }
 prost-types    = { workspace = true }
 serde_json     = { workspace = true }

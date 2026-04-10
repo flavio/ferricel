@@ -8,7 +8,14 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+version    = "0.1.0"
+license    = "MIT"
+repository = "https://github.com/flavio/ferricel"
+
 [workspace.dependencies]
+ferricel-core  = { version = "0.1.0", path = "ferricel-core" }
+ferricel-types = { version = "0.1.0", path = "ferricel-types" }
 anyhow      = "1.0"
 thiserror   = "2"
 base64      = "0.22"
