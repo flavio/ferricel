@@ -18,6 +18,7 @@ A file for [guiding coding agents](https://agents.md/).
 - **Formatting**: `make fmt`
 - **Linting**: `make lint`
 - **Linting (fix some issues automatically)**: `make lint-fix`
+- **Docs**: `make docs`
 
 ## Workspace Structure
 
