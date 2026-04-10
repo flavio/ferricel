@@ -5,8 +5,10 @@
 //! See: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-cel-libraries>
 
 pub mod cidr;
+pub mod dispatch;
 pub mod ip;
 pub mod lists;
+pub mod quantity;
 pub mod regex;
 pub mod semver;
 pub mod url;

@@ -149,3 +149,16 @@ pub use kubernetes::semver::{
     cel_k8s_semver_minor, cel_k8s_semver_parse, cel_k8s_semver_parse_normalize,
     cel_k8s_semver_patch,
 };
+
+// Re-export Kubernetes quantity extension functions
+pub use kubernetes::quantity::{
+    cel_k8s_is_quantity, cel_k8s_quantity_add, cel_k8s_quantity_add_int,
+    cel_k8s_quantity_as_approx_float, cel_k8s_quantity_as_integer, cel_k8s_quantity_compare_to,
+    cel_k8s_quantity_is_greater_than, cel_k8s_quantity_is_integer, cel_k8s_quantity_is_less_than,
+    cel_k8s_quantity_parse, cel_k8s_quantity_sign, cel_k8s_quantity_sub, cel_k8s_quantity_sub_int,
+};
+
+// Re-export runtime dispatch functions for CEL methods shared across Kubernetes types
+pub use kubernetes::dispatch::{
+    cel_k8s_poly_compare_to, cel_k8s_poly_is_greater_than, cel_k8s_poly_is_less_than,
+};

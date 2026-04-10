@@ -47,6 +47,7 @@ fn cel_type_name(val: &CelValue) -> &'static str {
         CelValue::IpAddr(_) => "net.IP",
         CelValue::Cidr(_, _) => "net.CIDR",
         CelValue::Semver(_) => "semver",
+        CelValue::Quantity(_) => "quantity",
     }
 }
 

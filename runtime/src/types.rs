@@ -186,6 +186,15 @@ pub enum CelValue {
     /// Serializes as the canonical semver string (e.g. "1.2.3"). Cannot be deserialized from JSON.
     #[serde(skip_deserializing)]
     Semver(Version),
+
+    /// Quantity - represents a Kubernetes resource quantity created by the `quantity()` CEL function.
+    /// Stores the canonical string representation (e.g. "100m", "1Ki", "200M").
+    /// Supports the Kubernetes CEL quantity library:
+    /// `sign()`, `isInteger()`, `asInteger()`, `asApproximateFloat()`,
+    /// `add()`, `sub()`, `isLessThan()`, `isGreaterThan()`, `compareTo()`.
+    /// Serializes as the quantity string. Cannot be deserialized from JSON.
+    #[serde(skip_deserializing)]
+    Quantity(String),
 }
 
 // Custom serialization for CelValue to provide untagged JSON output
@@ -263,6 +272,7 @@ impl Serialize for CelValue {
                 serializer.serialize_str(&format!("{}/{}", addr, prefix_len))
             }
             CelValue::Semver(v) => serializer.serialize_str(&v.to_string()),
+            CelValue::Quantity(s) => serializer.serialize_str(s),
         }
     }
 }

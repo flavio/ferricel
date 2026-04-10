@@ -289,3 +289,20 @@ fn test_semver_whitespace_normalize_rejected() {
         "whitespace should not be trimmed during normalize"
     );
 }
+
+// ── cross-type dispatch errors ───────────────────────────────────────────────
+// Passing a Quantity where a Semver argument is expected must return an error.
+
+#[rstest]
+#[case(r#"semver("1.0.0").isLessThan(quantity("1k"))"#)]
+#[case(r#"semver("1.0.0").isGreaterThan(quantity("1k"))"#)]
+#[case(r#"semver("1.0.0").compareTo(quantity("1k"))"#)]
+fn test_semver_cross_type_dispatch_error(#[case] expr: &str) {
+    let result = compile_and_execute(expr);
+    assert!(
+        result.is_err(),
+        "Expected error for '{}', got {:?}",
+        expr,
+        result
+    );
+}

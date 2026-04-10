@@ -1018,6 +1018,11 @@ pub(crate) fn cel_equals(a_val: &CelValue, b_val: &CelValue) -> bool {
             a_prefix == b_prefix && a_addr == b_addr
         }
 
+        // Quantity equality: compare by numeric value
+        (CelValue::Quantity(a), CelValue::Quantity(b)) => {
+            crate::kubernetes::quantity::quantities_equal(a.as_str(), b.as_str())
+        }
+
         // Cross-type numeric equality (CEL spec: x == y if !(x < y || x > y))
         (CelValue::Int(a), CelValue::UInt(b)) => {
             if *a < 0 {

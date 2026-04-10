@@ -79,9 +79,22 @@ pub fn compile_named_function(
         | "isGlobalUnicast" => {
             kubernetes::ip::compile_k8s_ip_function(func_name, call_expr, body, env, ctx, module)
         }
-        // Semver functions and methods
-        "isSemver" | "semver" | "major" | "minor" | "patch" | "isLessThan" | "isGreaterThan"
-        | "compareTo" => kubernetes::semver::compile_k8s_semver_function(
+        // Semver functions and methods (excluding shared comparison methods)
+        "isSemver" | "semver" | "major" | "minor" | "patch" => {
+            kubernetes::semver::compile_k8s_semver_function(
+                func_name, call_expr, body, env, ctx, module,
+            )
+        }
+        // Polymorphic comparison methods — shared between Semver and Quantity.
+        // Routed through the quantity dispatcher which uses polymorphic runtime functions.
+        "isLessThan" | "isGreaterThan" | "compareTo" => {
+            kubernetes::quantity::compile_k8s_quantity_function(
+                func_name, call_expr, body, env, ctx, module,
+            )
+        }
+        // Quantity functions and methods
+        "quantity" | "isQuantity" | "sign" | "isInteger" | "asInteger" | "asApproximateFloat"
+        | "add" | "sub" => kubernetes::quantity::compile_k8s_quantity_function(
             func_name, call_expr, body, env, ctx, module,
         ),
         _ => extensions::compile_extension_call(call_expr, body, env, ctx, module),

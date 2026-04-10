@@ -234,6 +234,26 @@ pub enum RuntimeFunction {
     K8sSemverIsGreaterThan,
     K8sSemverCompareTo,
 
+    // Kubernetes Quantity Extensions
+    K8sQuantityParse,
+    K8sIsQuantity,
+    K8sQuantitySign,
+    K8sQuantityIsInteger,
+    K8sQuantityAsInteger,
+    K8sQuantityAsApproxFloat,
+    K8sQuantityAdd,
+    K8sQuantityAddInt,
+    K8sQuantitySub,
+    K8sQuantitySubInt,
+    K8sQuantityIsLessThan,
+    K8sQuantityIsGreaterThan,
+    K8sQuantityCompareTo,
+
+    // Kubernetes Polymorphic Comparisons (shared between Semver and Quantity)
+    K8sPolyIsLessThan,
+    K8sPolyIsGreaterThan,
+    K8sPolyCompareTo,
+
     // Timestamp accessors
     TimestampGetFullYear,
     TimestampGetFullYearTz,
@@ -462,6 +482,24 @@ impl RuntimeFunction {
             Self::K8sSemverIsLessThan => "cel_k8s_semver_is_less_than",
             Self::K8sSemverIsGreaterThan => "cel_k8s_semver_is_greater_than",
             Self::K8sSemverCompareTo => "cel_k8s_semver_compare_to",
+
+            Self::K8sQuantityParse => "cel_k8s_quantity_parse",
+            Self::K8sIsQuantity => "cel_k8s_is_quantity",
+            Self::K8sQuantitySign => "cel_k8s_quantity_sign",
+            Self::K8sQuantityIsInteger => "cel_k8s_quantity_is_integer",
+            Self::K8sQuantityAsInteger => "cel_k8s_quantity_as_integer",
+            Self::K8sQuantityAsApproxFloat => "cel_k8s_quantity_as_approx_float",
+            Self::K8sQuantityAdd => "cel_k8s_quantity_add",
+            Self::K8sQuantityAddInt => "cel_k8s_quantity_add_int",
+            Self::K8sQuantitySub => "cel_k8s_quantity_sub",
+            Self::K8sQuantitySubInt => "cel_k8s_quantity_sub_int",
+            Self::K8sQuantityIsLessThan => "cel_k8s_quantity_is_less_than",
+            Self::K8sQuantityIsGreaterThan => "cel_k8s_quantity_is_greater_than",
+            Self::K8sQuantityCompareTo => "cel_k8s_quantity_compare_to",
+
+            Self::K8sPolyIsLessThan => "cel_k8s_poly_is_less_than",
+            Self::K8sPolyIsGreaterThan => "cel_k8s_poly_is_greater_than",
+            Self::K8sPolyCompareTo => "cel_k8s_poly_compare_to",
 
             Self::TimestampGetFullYear => "cel_timestamp_get_full_year",
             Self::TimestampGetFullYearTz => "cel_timestamp_get_full_year_tz",
