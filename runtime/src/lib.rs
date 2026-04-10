@@ -141,3 +141,11 @@ pub use kubernetes::ip::{
     cel_k8s_ip_is_link_local_multicast, cel_k8s_ip_is_link_local_unicast, cel_k8s_ip_is_loopback,
     cel_k8s_ip_is_unspecified, cel_k8s_ip_parse, cel_k8s_is_ip,
 };
+
+// Re-export Kubernetes semver extension functions
+pub use kubernetes::semver::{
+    cel_k8s_is_semver, cel_k8s_is_semver_normalize, cel_k8s_semver_compare_to,
+    cel_k8s_semver_is_greater_than, cel_k8s_semver_is_less_than, cel_k8s_semver_major,
+    cel_k8s_semver_minor, cel_k8s_semver_parse, cel_k8s_semver_parse_normalize,
+    cel_k8s_semver_patch,
+};

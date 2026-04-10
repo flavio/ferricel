@@ -222,6 +222,18 @@ pub enum RuntimeFunction {
     K8sCidrContainsCidrObj,
     K8sCidrContainsCidrStr,
 
+    // Kubernetes Semver Extensions
+    K8sSemverIsSemver,
+    K8sSemverIsSemverNormalize,
+    K8sSemverParse,
+    K8sSemverParseNormalize,
+    K8sSemverMajor,
+    K8sSemverMinor,
+    K8sSemverPatch,
+    K8sSemverIsLessThan,
+    K8sSemverIsGreaterThan,
+    K8sSemverCompareTo,
+
     // Timestamp accessors
     TimestampGetFullYear,
     TimestampGetFullYearTz,
@@ -439,6 +451,17 @@ impl RuntimeFunction {
             Self::K8sCidrContainsIpStr => "cel_k8s_cidr_contains_ip_str",
             Self::K8sCidrContainsCidrObj => "cel_k8s_cidr_contains_cidr_obj",
             Self::K8sCidrContainsCidrStr => "cel_k8s_cidr_contains_cidr_str",
+
+            Self::K8sSemverIsSemver => "cel_k8s_is_semver",
+            Self::K8sSemverIsSemverNormalize => "cel_k8s_is_semver_normalize",
+            Self::K8sSemverParse => "cel_k8s_semver_parse",
+            Self::K8sSemverParseNormalize => "cel_k8s_semver_parse_normalize",
+            Self::K8sSemverMajor => "cel_k8s_semver_major",
+            Self::K8sSemverMinor => "cel_k8s_semver_minor",
+            Self::K8sSemverPatch => "cel_k8s_semver_patch",
+            Self::K8sSemverIsLessThan => "cel_k8s_semver_is_less_than",
+            Self::K8sSemverIsGreaterThan => "cel_k8s_semver_is_greater_than",
+            Self::K8sSemverCompareTo => "cel_k8s_semver_compare_to",
 
             Self::TimestampGetFullYear => "cel_timestamp_get_full_year",
             Self::TimestampGetFullYearTz => "cel_timestamp_get_full_year_tz",

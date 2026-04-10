@@ -1,5 +1,6 @@
 //! CEL value type definitions for JSON serialization and deserialization.
 
+use semver::Version;
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
 use url::Url;
@@ -177,6 +178,14 @@ pub enum CelValue {
     /// Serializes as the CIDR string (e.g. "192.168.0.0/24"). Cannot be deserialized from JSON.
     #[serde(skip_deserializing)]
     Cidr(std::net::IpAddr, u8),
+
+    /// Semver - represents a parsed semantic version created by the `semver()` CEL function.
+    /// Stores the parsed `semver::Version`.
+    /// Supports the Kubernetes CEL semver library:
+    /// `major()`, `minor()`, `patch()`, `isLessThan()`, `isGreaterThan()`, `compareTo()`.
+    /// Serializes as the canonical semver string (e.g. "1.2.3"). Cannot be deserialized from JSON.
+    #[serde(skip_deserializing)]
+    Semver(Version),
 }
 
 // Custom serialization for CelValue to provide untagged JSON output
@@ -253,6 +262,7 @@ impl Serialize for CelValue {
             CelValue::Cidr(addr, prefix_len) => {
                 serializer.serialize_str(&format!("{}/{}", addr, prefix_len))
             }
+            CelValue::Semver(v) => serializer.serialize_str(&v.to_string()),
         }
     }
 }

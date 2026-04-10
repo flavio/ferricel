@@ -79,6 +79,11 @@ pub fn compile_named_function(
         | "isGlobalUnicast" => {
             kubernetes::ip::compile_k8s_ip_function(func_name, call_expr, body, env, ctx, module)
         }
+        // Semver functions and methods
+        "isSemver" | "semver" | "major" | "minor" | "patch" | "isLessThan" | "isGreaterThan"
+        | "compareTo" => kubernetes::semver::compile_k8s_semver_function(
+            func_name, call_expr, body, env, ctx, module,
+        ),
         _ => extensions::compile_extension_call(call_expr, body, env, ctx, module),
     }
 }

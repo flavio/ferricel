@@ -1823,6 +1823,7 @@ dependencies = [
  "prost-types",
  "regex-lite",
  "rstest",
+ "semver",
  "serde",
  "serde_bytes",
  "serde_json",

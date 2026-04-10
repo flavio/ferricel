@@ -702,6 +702,7 @@ pub unsafe extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {
             CelValue::Url(_, _) => "url",
             CelValue::IpAddr(_) => "net.IP",
             CelValue::Cidr(_, _) => "net.CIDR",
+            CelValue::Semver(_) => "semver",
         };
 
         debug!(log, "Getting type of value"; "type_name" => type_name);
