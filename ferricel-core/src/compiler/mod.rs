@@ -92,7 +92,8 @@ pub fn compile_cel_to_wasm(
     let env = CompilerEnv { functions };
 
     // 4. Parse the CEL expression
-    let root_ast = Parser::default()
+    let root_ast = Parser::new()
+        .enable_optional_syntax(true)
         .parse(cel_code)
         .map_err(|e| anyhow::anyhow!("Parse error: {:?}", e))?;
 

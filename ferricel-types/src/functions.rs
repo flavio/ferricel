@@ -254,6 +254,19 @@ pub enum RuntimeFunction {
     K8sPolyIsGreaterThan,
     K8sPolyCompareTo,
 
+    // CEL Optional type
+    OptionalNone,
+    OptionalOf,
+    OptionalOfNonZeroValue,
+    OptionalHasValue,
+    OptionalValue,
+    OptionalOrValue,
+    OptionalOr,
+    /// `receiver?.field` — optional field/key select (handles maps, objects, Optional wrappers)
+    OptionalSelect,
+    /// `container[?key]` — optional index (handles arrays, maps, Optional wrappers)
+    OptionalIndex,
+
     // Timestamp accessors
     TimestampGetFullYear,
     TimestampGetFullYearTz,
@@ -500,6 +513,16 @@ impl RuntimeFunction {
             Self::K8sPolyIsLessThan => "cel_k8s_poly_is_less_than",
             Self::K8sPolyIsGreaterThan => "cel_k8s_poly_is_greater_than",
             Self::K8sPolyCompareTo => "cel_k8s_poly_compare_to",
+
+            Self::OptionalNone => "cel_optional_none",
+            Self::OptionalOf => "cel_optional_of",
+            Self::OptionalOfNonZeroValue => "cel_optional_of_non_zero_value",
+            Self::OptionalHasValue => "cel_optional_has_value",
+            Self::OptionalValue => "cel_optional_value",
+            Self::OptionalOrValue => "cel_optional_or_value",
+            Self::OptionalOr => "cel_optional_or",
+            Self::OptionalSelect => "cel_optional_select",
+            Self::OptionalIndex => "cel_optional_index",
 
             Self::TimestampGetFullYear => "cel_timestamp_get_full_year",
             Self::TimestampGetFullYearTz => "cel_timestamp_get_full_year_tz",

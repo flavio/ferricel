@@ -51,6 +51,8 @@ pub struct ProtoSchema {
 struct MessageSchema {
     /// Maps field names to their type information
     fields: HashMap<String, FieldSchema>,
+    /// True if this message is a map entry (i.e., generated for a map<K,V> field)
+    is_map_entry: bool,
 }
 
 /// Schema information for a message field.
@@ -64,6 +66,8 @@ struct FieldSchema {
     number: u32,
     /// Field kind for wire comparison
     kind: FieldKind,
+    /// True if this field is declared as `repeated` (includes map fields)
+    repeated: bool,
 }
 
 impl ProtoSchema {
@@ -117,6 +121,13 @@ impl ProtoSchema {
                 format!("{}.{}", parent_path, message_name)
             };
 
+            // Check if this message is a map entry
+            let is_map_entry = message
+                .options
+                .as_ref()
+                .and_then(|o| o.map_entry)
+                .unwrap_or(false);
+
             // Process fields
             let mut fields = HashMap::new();
             for field in &message.field {
@@ -126,6 +137,10 @@ impl ProtoSchema {
                     tn.strip_prefix('.').unwrap_or(tn).to_string()
                 });
                 let number = field.number.unwrap_or(0) as u32;
+
+                // Determine if repeated
+                use prost_types::field_descriptor_proto::Label as FLabel;
+                let repeated = field.label() == FLabel::Repeated;
 
                 // Determine field kind from the proto field type
                 // prost_types::field_descriptor_proto::Type values:
@@ -149,11 +164,18 @@ impl ProtoSchema {
                         type_name,
                         number,
                         kind,
+                        repeated,
                     },
                 );
             }
 
-            messages.insert(full_name.clone(), MessageSchema { fields });
+            messages.insert(
+                full_name.clone(),
+                MessageSchema {
+                    fields,
+                    is_map_entry,
+                },
+            );
 
             // Process nested types
             Self::process_messages(messages, package, &full_name, &message.nested_type);
@@ -211,6 +233,49 @@ impl ProtoSchema {
     /// Check if a message type exists in the schema.
     pub fn has_message_type(&self, message_type: &str) -> bool {
         self.messages.contains_key(message_type)
+    }
+
+    /// Get the default value kind for repeated/map fields of a message type.
+    ///
+    /// Only `repeated` fields are returned, since they have non-trivial proto defaults
+    /// (`{}` for map fields, `[]` for list fields) that must be returned when the field
+    /// is absent from a struct literal.  Non-repeated message fields and scalars are
+    /// intentionally omitted — their absence is either caught by wrapper-field logic or
+    /// is a genuine runtime error.
+    ///
+    /// Returns a map of `field_name → "map" | "list"`.
+    /// Returns an empty map if the message type is not in the schema.
+    pub fn get_field_default_kinds(&self, message_type: &str) -> HashMap<String, String> {
+        self.messages
+            .get(message_type)
+            .map(|msg| {
+                msg.fields
+                    .values()
+                    .filter_map(|field| {
+                        if !field.repeated {
+                            return None; // only repeated fields need a collection default
+                        }
+                        // Distinguish map fields (repeated MapEntry) from plain lists
+                        let kind_str = match &field.kind {
+                            FieldKind::Message(type_name) => {
+                                if self
+                                    .messages
+                                    .get(type_name.as_str())
+                                    .map(|m| m.is_map_entry)
+                                    .unwrap_or(false)
+                                {
+                                    "map"
+                                } else {
+                                    "list"
+                                }
+                            }
+                            _ => "list",
+                        };
+                        Some((field.name.clone(), kind_str.to_string()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Get field schema for Any unpacking: returns a map of field_number → encoded kind string.

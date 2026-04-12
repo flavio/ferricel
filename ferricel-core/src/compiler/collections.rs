@@ -11,6 +11,9 @@ use super::{
 };
 
 /// Compile an `Expr::List` node: `[elem1, elem2, ...]`
+///
+/// Handles optional elements `[?opt_expr, ...]`: if the element evaluates to
+/// `Optional(Some(v))` it is unwrapped and appended; if `Optional(None)` it is skipped.
 pub fn compile_list(
     list_expr: &ListExpr,
     body: &mut InstrSeqBuilder,
@@ -26,18 +29,56 @@ pub fn compile_list(
     body.local_set(array_ptr_local); // Pop array pointer into local
 
     // For each element in the list
-    for element in &list_expr.elements {
-        // Compile the element expression (leaves *mut CelValue on stack)
-        compile_expr(&element.expr, body, env, ctx, module)?;
+    for (idx, element) in list_expr.elements.iter().enumerate() {
+        let is_optional_elem = list_expr.optional_indices.contains(&idx);
 
-        // Create a local to hold the element pointer
-        let element_ptr_local = module.locals.add(ValType::I32);
-        body.local_set(element_ptr_local); // Pop element pointer into local
+        if is_optional_elem {
+            // Compile the element expression — expected to return Optional
+            compile_expr(&element.expr, body, env, ctx, module)?;
+            let elem_local = module.locals.add(ValType::I32);
+            body.local_tee(elem_local);
 
-        // Push: cel_array_push(array_ptr, element_ptr)
-        body.local_get(array_ptr_local); // Load array pointer
-        body.local_get(element_ptr_local); // Load element pointer
-        body.call(env.get(RuntimeFunction::ArrayPush)); // Call push (returns void)
+            // Check hasValue
+            body.call(env.get(RuntimeFunction::OptionalHasValue));
+            body.call(env.get(RuntimeFunction::ValueToBool));
+            body.unop(walrus::ir::UnaryOp::I32WrapI64);
+
+            // If has value: extract inner and push; else: skip
+            let then_seq = body.dangling_instr_seq(None);
+            let then_id = then_seq.id();
+            let else_seq = body.dangling_instr_seq(None);
+            let else_id = else_seq.id();
+
+            body.instr(walrus::ir::IfElse {
+                consequent: then_id,
+                alternative: else_id,
+            });
+
+            // Then: extract and push
+            {
+                let mut then_body = body.instr_seq(then_id);
+                then_body.local_get(elem_local);
+                then_body.call(env.get(RuntimeFunction::OptionalValue));
+                let inner_local = module.locals.add(ValType::I32);
+                then_body.local_set(inner_local);
+                then_body.local_get(array_ptr_local);
+                then_body.local_get(inner_local);
+                then_body.call(env.get(RuntimeFunction::ArrayPush));
+            }
+
+            // Else: no-op (empty block)
+            // body.instr_seq(else_id) already empty
+        } else {
+            // Normal non-optional element
+            compile_expr(&element.expr, body, env, ctx, module)?;
+
+            let element_ptr_local = module.locals.add(ValType::I32);
+            body.local_set(element_ptr_local);
+
+            body.local_get(array_ptr_local);
+            body.local_get(element_ptr_local);
+            body.call(env.get(RuntimeFunction::ArrayPush));
+        }
     }
 
     // Leave the array pointer on the stack
@@ -46,6 +87,10 @@ pub fn compile_list(
 }
 
 /// Compile an `Expr::Map` node: `{"key": value, ...}`
+///
+/// Handles optional entries `{?key: opt_value}`: if the value evaluates to
+/// `Optional(Some(v))` the entry is inserted with the unwrapped value;
+/// if `Optional(None)` the entry is omitted entirely.
 pub fn compile_map(
     map_expr: &MapExpr,
     body: &mut InstrSeqBuilder,
@@ -64,25 +109,62 @@ pub fn compile_map(
     for entry in &map_expr.entries {
         match &entry.expr {
             EntryExpr::MapEntry(map_entry) => {
-                // Compile the key expression (leaves *mut CelValue on stack)
-                compile_expr(&map_entry.key.expr, body, env, ctx, module)?;
+                if map_entry.optional {
+                    // Optional entry: only insert if value is Optional(Some(...))
+                    // Compile key
+                    compile_expr(&map_entry.key.expr, body, env, ctx, module)?;
+                    let key_ptr_local = module.locals.add(ValType::I32);
+                    body.local_set(key_ptr_local);
 
-                // Create a local to hold the key pointer
-                let key_ptr_local = module.locals.add(ValType::I32);
-                body.local_set(key_ptr_local); // Pop key pointer into local
+                    // Compile value (expected to be Optional)
+                    compile_expr(&map_entry.value.expr, body, env, ctx, module)?;
+                    let value_opt_local = module.locals.add(ValType::I32);
+                    body.local_tee(value_opt_local);
 
-                // Compile the value expression (leaves *mut CelValue on stack)
-                compile_expr(&map_entry.value.expr, body, env, ctx, module)?;
+                    // Check hasValue
+                    body.call(env.get(RuntimeFunction::OptionalHasValue));
+                    body.call(env.get(RuntimeFunction::ValueToBool));
+                    body.unop(walrus::ir::UnaryOp::I32WrapI64);
 
-                // Create a local to hold the value pointer
-                let value_ptr_local = module.locals.add(ValType::I32);
-                body.local_set(value_ptr_local); // Pop value pointer into local
+                    let then_seq = body.dangling_instr_seq(None);
+                    let then_id = then_seq.id();
+                    let else_seq = body.dangling_instr_seq(None);
+                    let else_id = else_seq.id();
 
-                // Insert: cel_map_insert(map_ptr, key_ptr, value_ptr)
-                body.local_get(map_ptr_local); // Load map pointer
-                body.local_get(key_ptr_local); // Load key pointer
-                body.local_get(value_ptr_local); // Load value pointer
-                body.call(env.get(RuntimeFunction::MapInsert)); // Call insert (returns void)
+                    body.instr(walrus::ir::IfElse {
+                        consequent: then_id,
+                        alternative: else_id,
+                    });
+
+                    // Then: extract inner and insert
+                    {
+                        let mut then_body = body.instr_seq(then_id);
+                        then_body.local_get(value_opt_local);
+                        then_body.call(env.get(RuntimeFunction::OptionalValue));
+                        let inner_local = module.locals.add(ValType::I32);
+                        then_body.local_set(inner_local);
+                        then_body.local_get(map_ptr_local);
+                        then_body.local_get(key_ptr_local);
+                        then_body.local_get(inner_local);
+                        then_body.call(env.get(RuntimeFunction::MapInsert));
+                    }
+
+                    // Else: skip (empty block)
+                } else {
+                    // Normal non-optional entry
+                    compile_expr(&map_entry.key.expr, body, env, ctx, module)?;
+                    let key_ptr_local = module.locals.add(ValType::I32);
+                    body.local_set(key_ptr_local);
+
+                    compile_expr(&map_entry.value.expr, body, env, ctx, module)?;
+                    let value_ptr_local = module.locals.add(ValType::I32);
+                    body.local_set(value_ptr_local);
+
+                    body.local_get(map_ptr_local);
+                    body.local_get(key_ptr_local);
+                    body.local_get(value_ptr_local);
+                    body.call(env.get(RuntimeFunction::MapInsert));
+                }
             }
             _ => anyhow::bail!("Unsupported map entry type: {:?}", entry.expr),
         }
@@ -165,6 +247,32 @@ pub fn compile_struct(
             body.call(env.get(RuntimeFunction::MapInsert));
         }
 
+        // Emit "__field_defaults__" metadata: field_name → default_kind string.
+        // This enables cel_get_field to return appropriate proto default values for
+        // missing fields (e.g., empty map for map fields, empty list for repeated fields).
+        let field_defaults = schema.get_field_default_kinds(&resolved_type_name);
+        if !field_defaults.is_empty() {
+            body.call(env.get(RuntimeFunction::CreateMap));
+            let defaults_map_local = module.locals.add(ValType::I32);
+            body.local_set(defaults_map_local);
+
+            for (fname, fkind) in &field_defaults {
+                let fname_local = compile_string_to_local(fname, body, env, module)?;
+                let fkind_local = compile_string_to_local(fkind, body, env, module)?;
+                body.local_get(defaults_map_local);
+                body.local_get(fname_local);
+                body.local_get(fkind_local);
+                body.call(env.get(RuntimeFunction::MapInsert));
+            }
+
+            let defaults_key_local =
+                compile_string_to_local("__field_defaults__", body, env, module)?;
+            body.local_get(map_ptr_local);
+            body.local_get(defaults_key_local);
+            body.local_get(defaults_map_local);
+            body.call(env.get(RuntimeFunction::MapInsert));
+        }
+
         // If this is google.protobuf.Any, bake __any_schema__ from the type_url
         // so the runtime can do schema-aware wire comparison of Any.value bytes.
         if resolved_type_name == "google.protobuf.Any" {
@@ -243,20 +351,64 @@ pub fn compile_struct(
     for entry in &struct_expr.entries {
         match &entry.expr {
             EntryExpr::StructField(struct_field) => {
-                // Compile field name as string key
-                let field_key_local =
-                    compile_string_to_local(&struct_field.field, body, env, module)?;
+                if struct_field.optional {
+                    // Optional field: `{?field: opt_expr}` — only insert if opt_expr is Optional(Some)
+                    // Pre-compute the field key string into a local (before the branch)
+                    let field_key_local =
+                        compile_string_to_local(&struct_field.field, body, env, module)?;
 
-                // Compile field value expression
-                compile_expr(&struct_field.value.expr, body, env, ctx, module)?;
-                let field_value_local = module.locals.add(ValType::I32);
-                body.local_set(field_value_local);
+                    // Compile the value (expected to be Optional)
+                    compile_expr(&struct_field.value.expr, body, env, ctx, module)?;
+                    let opt_local = module.locals.add(ValType::I32);
+                    body.local_tee(opt_local);
 
-                // Insert field into map
-                body.local_get(map_ptr_local);
-                body.local_get(field_key_local);
-                body.local_get(field_value_local);
-                body.call(env.get(RuntimeFunction::MapInsert));
+                    // Check hasValue
+                    body.call(env.get(RuntimeFunction::OptionalHasValue));
+                    body.call(env.get(RuntimeFunction::ValueToBool));
+                    body.unop(walrus::ir::UnaryOp::I32WrapI64);
+
+                    let then_seq = body.dangling_instr_seq(None);
+                    let then_id = then_seq.id();
+                    let else_seq = body.dangling_instr_seq(None);
+                    let else_id = else_seq.id();
+
+                    body.instr(walrus::ir::IfElse {
+                        consequent: then_id,
+                        alternative: else_id,
+                    });
+
+                    // Then branch: unwrap and insert into struct
+                    {
+                        let mut then_body = body.instr_seq(then_id);
+                        then_body.local_get(opt_local);
+                        then_body.call(env.get(RuntimeFunction::OptionalValue));
+                        let field_value_local = module.locals.add(ValType::I32);
+                        then_body.local_set(field_value_local);
+
+                        then_body.local_get(map_ptr_local);
+                        then_body.local_get(field_key_local);
+                        then_body.local_get(field_value_local);
+                        then_body.call(env.get(RuntimeFunction::MapInsert));
+                    }
+
+                    // Else branch: skip (do nothing)
+                    {
+                        body.instr_seq(else_id);
+                    }
+                } else {
+                    // Normal (non-optional) field
+                    let field_key_local =
+                        compile_string_to_local(&struct_field.field, body, env, module)?;
+
+                    compile_expr(&struct_field.value.expr, body, env, ctx, module)?;
+                    let field_value_local = module.locals.add(ValType::I32);
+                    body.local_set(field_value_local);
+
+                    body.local_get(map_ptr_local);
+                    body.local_get(field_key_local);
+                    body.local_get(field_value_local);
+                    body.call(env.get(RuntimeFunction::MapInsert));
+                }
             }
             _ => anyhow::bail!("Unsupported struct entry type: {:?}", entry.expr),
         }

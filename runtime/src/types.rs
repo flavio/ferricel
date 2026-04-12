@@ -195,6 +195,14 @@ pub enum CelValue {
     /// Serializes as the quantity string. Cannot be deserialized from JSON.
     #[serde(skip_deserializing)]
     Quantity(String),
+
+    /// Optional - represents a CEL optional value (optional_type).
+    /// `None` means no value is present; `Some(box_val)` wraps a concrete value.
+    /// Created by `optional.none()`, `optional.of(x)`, `optional.ofNonZeroValue(x)`,
+    /// and by optional field/index access (`?.` and `[?]`).
+    /// Serializes as the inner value (or null for none). Cannot be deserialized from JSON.
+    #[serde(skip_deserializing)]
+    Optional(Option<Box<CelValue>>),
 }
 
 // Custom serialization for CelValue to provide untagged JSON output
@@ -225,7 +233,7 @@ impl Serialize for CelValue {
             }
             CelValue::String(s) => serializer.serialize_str(s),
             CelValue::Bytes(bytes) => {
-                use base64::{Engine as _, engine::general_purpose};
+                use base64::{engine::general_purpose, Engine as _};
                 let encoded = general_purpose::STANDARD.encode(bytes);
                 serializer.serialize_str(&encoded)
             }
@@ -273,6 +281,10 @@ impl Serialize for CelValue {
             }
             CelValue::Semver(v) => serializer.serialize_str(&v.to_string()),
             CelValue::Quantity(s) => serializer.serialize_str(s),
+            CelValue::Optional(inner) => match inner {
+                None => serializer.serialize_none(),
+                Some(val) => val.serialize(serializer),
+            },
         }
     }
 }

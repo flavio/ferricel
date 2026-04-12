@@ -8,6 +8,47 @@ use crate::compiler::{
     helpers::{emit_string_const, get_memory_id},
 };
 
+/// Emit a WASM runtime error value for an unknown function call.
+///
+/// Instead of failing at compile time, this emits instructions that produce a
+/// `CelValue::Error("no matching overload")` at runtime — allowing the CEL
+/// short-circuit operators (`||`, `&&`) to handle the error gracefully.
+pub fn emit_unknown_function_error(
+    func_name: &str,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    let msg = format!("no matching overload for '{}'", func_name);
+    let msg_bytes = msg.as_bytes();
+    let msg_len = msg_bytes.len() as i32;
+    let memory_id = get_memory_id(module)?;
+    let ptr_local = module.locals.add(walrus::ValType::I32);
+    body.i32_const(msg_len)
+        .call(env.get(RuntimeFunction::Malloc))
+        .local_set(ptr_local);
+    for (offset, &byte) in msg_bytes.iter().enumerate() {
+        body.local_get(ptr_local);
+        body.i32_const(byte as i32);
+        body.store(
+            memory_id,
+            walrus::ir::StoreKind::I32_8 { atomic: false },
+            walrus::ir::MemArg {
+                align: 1,
+                offset: offset as u64,
+            },
+        );
+    }
+    body.local_get(ptr_local);
+    body.i32_const(msg_len);
+    body.call(env.get(RuntimeFunction::CreateError));
+    // Free the temporary message buffer
+    body.local_get(ptr_local);
+    body.i32_const(msg_len);
+    body.call(env.get(RuntimeFunction::Free));
+    Ok(())
+}
+
 /// Compile a call to a registered extension function.
 pub fn compile_extension_call(
     call_expr: &CallExpr,
@@ -17,7 +58,7 @@ pub fn compile_extension_call(
     module: &mut walrus::Module,
 ) -> Result<(), anyhow::Error> {
     if ctx.extensions.is_empty() {
-        anyhow::bail!("Unsupported function call: {}", call_expr.func_name);
+        return emit_unknown_function_error(&call_expr.func_name, body, env, module);
     }
 
     // Determine call shape.
@@ -47,13 +88,16 @@ pub fn compile_extension_call(
         namespace_str.map(|s: &str| s.to_string()),
         call_expr.func_name.clone(),
     );
-    let decl = ctx.extensions.by_name.get(&key).ok_or_else(|| {
-        let full_name = match namespace_str {
-            Some(ns) => format!("{}.{}", ns, call_expr.func_name),
-            None => call_expr.func_name.clone(),
-        };
-        anyhow::anyhow!("Unknown function: {}", full_name)
-    })?;
+    let decl = match ctx.extensions.by_name.get(&key) {
+        Some(d) => d,
+        None => {
+            let full_name = match namespace_str {
+                Some(ns) => format!("{}.{}", ns, call_expr.func_name),
+                None => call_expr.func_name.clone(),
+            };
+            return emit_unknown_function_error(&full_name, body, env, module);
+        }
+    };
 
     // Validate call style.
     match &shape {

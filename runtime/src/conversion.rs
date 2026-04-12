@@ -124,7 +124,11 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
     match value {
         CelValue::Bool(b) => {
             debug!(log, "Converting CelValue to bool"; "value" => *b);
-            if *b { 1 } else { 0 }
+            if *b {
+                1
+            } else {
+                0
+            }
         }
         other => {
             error!(log, "Type mismatch in conversion";
@@ -708,6 +712,7 @@ pub unsafe extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {
             CelValue::Cidr(_, _) => "net.CIDR",
             CelValue::Semver(_) => "semver",
             CelValue::Quantity(_) => "quantity",
+            CelValue::Optional(_) => "optional_type",
         };
 
         debug!(log, "Getting type of value"; "type_name" => type_name);

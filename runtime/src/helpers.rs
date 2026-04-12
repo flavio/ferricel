@@ -1023,6 +1023,11 @@ pub(crate) fn cel_equals(a_val: &CelValue, b_val: &CelValue) -> bool {
             crate::kubernetes::quantity::quantities_equal(a.as_str(), b.as_str())
         }
 
+        // Optional equality: none == none, some(a) == some(b) iff a == b
+        (CelValue::Optional(None), CelValue::Optional(None)) => true,
+        (CelValue::Optional(Some(a)), CelValue::Optional(Some(b))) => cel_equals(a, b),
+        (CelValue::Optional(_), CelValue::Optional(_)) => false,
+
         // Cross-type numeric equality (CEL spec: x == y if !(x < y || x > y))
         (CelValue::Int(a), CelValue::UInt(b)) => {
             if *a < 0 {
@@ -1617,6 +1622,29 @@ pub unsafe extern "C" fn cel_value_index(
         let index = &*index_ptr;
 
         match (container, index) {
+            // Optional container: propagate into inner value, keeping Optional wrapper
+            (CelValue::Optional(None), _) => {
+                debug!(log, "Indexing optional.none(), returning Optional(None)"; "function" => "cel_value_index");
+                Box::into_raw(Box::new(CelValue::Optional(None)))
+            }
+            (CelValue::Optional(Some(inner)), _) => {
+                debug!(log, "Indexing into optional, propagating to inner"; "function" => "cel_value_index");
+                // Re-box the inner value, index it, then wrap result back in Optional
+                let inner_ptr = Box::into_raw(Box::new(*inner.clone()));
+                let result_ptr = cel_value_index(inner_ptr, index_ptr);
+                // Free the temporary inner clone — cel_value_index only borrows its arguments
+                drop(Box::from_raw(inner_ptr));
+                // If the inner index errored (key absent), return Optional(None)
+                // Otherwise wrap result in Optional(Some(...))
+                if matches!(&*result_ptr, CelValue::Error(_)) {
+                    // clean up the error value
+                    drop(Box::from_raw(result_ptr));
+                    Box::into_raw(Box::new(CelValue::Optional(None)))
+                } else {
+                    let val = *Box::from_raw(result_ptr);
+                    Box::into_raw(Box::new(CelValue::Optional(Some(Box::new(val)))))
+                }
+            }
             // Array indexing with Int
             (CelValue::Array(_), CelValue::Int(idx)) => {
                 debug!(log, "Indexing array with Int"; "index" => *idx);
@@ -1659,7 +1687,7 @@ pub unsafe extern "C" fn cel_value_index(
                         debug!(log, "Indexing map"; "key" => map_key.to_string_key());
                         match map.get(&map_key) {
                             Some(value) => Box::into_raw(Box::new(value.clone())),
-                            None => crate::error::abort_with_error("no such key"),
+                            None => crate::error::create_error_value("no such key"),
                         }
                     }
                     None => {

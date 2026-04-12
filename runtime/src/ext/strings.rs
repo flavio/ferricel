@@ -4,7 +4,7 @@
 //! `charAt`, `indexOf`, `lastIndexOf`, `lowerAscii`, `upperAscii`, `replace`,
 //! `split`, `substring`, `trim`, `reverse`, `format`, and `strings.quote`.
 
-use crate::types::CelValue;
+use crate::types::{CelMapKey, CelValue};
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,6 +48,7 @@ fn cel_type_name(val: &CelValue) -> &'static str {
         CelValue::Cidr(_, _) => "net.CIDR",
         CelValue::Semver(_) => "semver",
         CelValue::Quantity(_) => "quantity",
+        CelValue::Optional(_) => "optional_type",
     }
 }
 
@@ -106,46 +107,65 @@ pub(crate) fn find_last_index_of(s: &str, sub: &str, end_offset: i64) -> i64 {
     }
 }
 
+/// Returns true if a `CelValue::Object` represents a proto message (has a `__type__` key).
+fn is_proto_message(entries: &std::collections::HashMap<CelMapKey, CelValue>) -> bool {
+    entries.contains_key(&CelMapKey::String("__type__".into()))
+}
+
 /// Format a CEL value as a string for use in `%s`.
-fn format_value_as_string(val: &CelValue) -> String {
+///
+/// Returns `Err` if the value is (or contains) a proto message object, because
+/// the CEL spec forbids formatting proto messages with the `%s` verb.
+fn format_value_as_string(val: &CelValue) -> Result<String, String> {
     match val {
-        CelValue::String(s) => s.clone(),
-        CelValue::Int(i) => i.to_string(),
-        CelValue::UInt(u) => u.to_string(),
-        CelValue::Double(d) => format_double_s(*d),
-        CelValue::Bool(b) => b.to_string(),
-        CelValue::Null => "null".to_string(),
+        CelValue::String(s) => Ok(s.clone()),
+        CelValue::Int(i) => Ok(i.to_string()),
+        CelValue::UInt(u) => Ok(u.to_string()),
+        CelValue::Double(d) => Ok(format_double_s(*d)),
+        CelValue::Bool(b) => Ok(b.to_string()),
+        CelValue::Null => Ok("null".to_string()),
         CelValue::Bytes(b) => {
             // bytes format as UTF-8 string if valid, otherwise hex
-            String::from_utf8_lossy(b).into_owned()
+            Ok(String::from_utf8_lossy(b).into_owned())
         }
         CelValue::Array(items) => {
-            let parts: Vec<String> = items.iter().map(format_value_as_string).collect();
-            format!("[{}]", parts.join(", "))
+            let mut parts = Vec::with_capacity(items.len());
+            for item in items.iter() {
+                parts.push(format_value_as_string(item)?);
+            }
+            Ok(format!("[{}]", parts.join(", ")))
         }
         CelValue::Object(entries) => {
-            // Sort by key representation for deterministic output
-            let mut pairs: Vec<String> = entries
-                .iter()
-                .map(|(k, v)| format!("{}: {}", k.to_string_key(), format_value_as_string(v)))
-                .collect();
+            // Proto messages (objects with __type__) are not allowed in %s
+            if is_proto_message(entries) {
+                return Err("format: object is not allowed in string clause".to_string());
+            }
+            // Plain CEL maps: sort by key for deterministic output
+            let mut pairs = Vec::with_capacity(entries.len());
+            for (k, v) in entries.iter() {
+                pairs.push(format!(
+                    "{}: {}",
+                    k.to_string_key(),
+                    format_value_as_string(v)?
+                ));
+            }
             pairs.sort();
-            format!("{{{}}}", pairs.join(", "))
+            Ok(format!("{{{}}}", pairs.join(", ")))
         }
         CelValue::Timestamp(ts) => {
             // Format as RFC3339 with Z for UTC
             if ts.offset().local_minus_utc() == 0 {
-                ts.format("%Y-%m-%dT%H:%M:%SZ").to_string()
+                Ok(ts.format("%Y-%m-%dT%H:%M:%SZ").to_string())
             } else {
-                ts.to_rfc3339()
+                Ok(ts.to_rfc3339())
             }
         }
         CelValue::Duration(d) => {
             // Format as seconds with 's' suffix (matching CEL spec)
-            format!("{}s", d.num_seconds())
+            Ok(format!("{}s", d.num_seconds()))
         }
-        CelValue::Type(t) => t.clone(),
-        _ => String::new(),
+        CelValue::Type(t) => Ok(t.clone()),
+        _ => Ok(String::new()),
     }
 }
 
@@ -210,7 +230,7 @@ fn format_string(fmt: &str, args: &[CelValue]) -> Result<String, String> {
                 arg_idx += 1;
 
                 match verb {
-                    's' => out.push_str(&format_value_as_string(arg)),
+                    's' => out.push_str(&format_value_as_string(arg)?),
                     'd' => out.push_str(&format_arg_decimal(arg)?),
                     'f' => out.push_str(&format_arg_fixed(arg, precision.unwrap_or(6))?),
                     'e' => out.push_str(&format_arg_sci(arg, precision.unwrap_or(6))?),

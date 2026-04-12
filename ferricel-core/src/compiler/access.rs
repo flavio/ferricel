@@ -108,7 +108,7 @@ pub fn compile_ident(
     // Note: "dyn" is NOT a type denotation - it's only valid as a function call
     match name {
         "bool" | "int" | "uint" | "double" | "string" | "bytes" | "list" | "map" | "null_type"
-        | "type" | "timestamp" | "duration" => {
+        | "type" | "timestamp" | "duration" | "optional_type" => {
             // Create a Type value for this type denotation
             // cel_create_type expects (ptr: *const u8, len: i32) — raw bytes, not a CelValue*
             let memory_id = get_memory_id(module)?;

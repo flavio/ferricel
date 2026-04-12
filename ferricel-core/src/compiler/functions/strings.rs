@@ -65,6 +65,10 @@ pub fn compile_string_function(
 }
 
 /// Compile `size()` which works on strings, bytes, arrays, or maps.
+///
+/// Supports both forms:
+/// - `size(x)` — free function with 1 arg
+/// - `x.size()` — method with target and 0 args
 fn compile_size(
     call_expr: &CallExpr,
     body: &mut InstrSeqBuilder,
@@ -72,10 +76,17 @@ fn compile_size(
     ctx: &CompilerContext,
     module: &mut walrus::Module,
 ) -> Result<(), anyhow::Error> {
-    if call_expr.args.len() != 1 {
-        anyhow::bail!("size() expects 1 argument");
+    match (call_expr.args.len(), &call_expr.target) {
+        (1, _) => {
+            // size(x) — free function form
+            compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+        }
+        (0, Some(target)) => {
+            // x.size() — method form
+            compile_expr(&target.expr, body, env, ctx, module)?;
+        }
+        _ => anyhow::bail!("size() expects 1 argument"),
     }
-    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
 
     // Call polymorphic cel_value_size which returns i64
     // We need to convert it to *mut CelValue::Int

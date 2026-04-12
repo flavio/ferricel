@@ -2,6 +2,7 @@ pub mod conversions;
 pub mod ext;
 pub mod extensions;
 pub mod kubernetes;
+pub mod optional;
 pub mod strings;
 pub mod temporal;
 
@@ -19,6 +20,12 @@ pub fn compile_named_function(
     ctx: &CompilerContext,
     module: &mut walrus::Module,
 ) -> Result<(), anyhow::Error> {
+    // Try optional functions first (some names like "none", "of", "or", "value" etc.
+    // are only treated as optional when target is the "optional" namespace or receiver is Optional)
+    if optional::compile_optional_function(func_name, call_expr, body, env, ctx, module)? {
+        return Ok(());
+    }
+
     match func_name {
         // Core string functions
         "size" | "startsWith" | "endsWith" | "contains" | "matches" => {

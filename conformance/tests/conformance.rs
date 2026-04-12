@@ -97,3 +97,11 @@ fn conformance_network_ext_tests() {
 
     runner.run_test_file(test_file);
 }
+
+#[test]
+fn conformance_optionals_tests() {
+    let runner = ConformanceTestRunner::new();
+    let test_file = Path::new("../cel-spec/tests/simple/testdata/optionals.textproto");
+
+    runner.run_test_file(test_file);
+}

@@ -5,6 +5,7 @@ use walrus::{InstrSeqBuilder, ValType};
 use super::{
     context::{CompilerContext, CompilerEnv},
     expr::compile_expr,
+    helpers,
 };
 
 /// Compile a binary operator: validate 2 args, compile both, call a runtime function.
@@ -237,6 +238,94 @@ fn compile_index(
     Ok(())
 }
 
+/// Compile the optional index operator: container[?index]
+///
+/// Returns `Optional(Some(value))` if the key/index exists,
+/// `Optional(None)` if the key/index is absent (no error).
+///
+/// AST: `func_name = "_[?_]"`, `args = [container, index]`
+fn compile_opt_index(
+    call_expr: &CallExpr,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    if call_expr.args.len() != 2 {
+        anyhow::bail!("Optional index operator _[?_] expects 2 arguments (container, index)");
+    }
+    // Compile container, then key; delegate all logic to the runtime
+    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+    compile_expr(&call_expr.args[1].expr, body, env, ctx, module)?;
+    body.call(env.get(RuntimeFunction::OptionalIndex));
+    Ok(())
+}
+
+/// Compile the optional select operator: receiver?.field
+///
+/// Delegates to `cel_optional_select(receiver, field_name_ptr, field_name_len)` which
+/// handles all cases: Optional(None), Optional(Some(map/object)), plain map, plain object.
+///
+/// AST: `func_name = "_?._"`, `args = [receiver, field_as_string_literal_or_ident]`
+fn compile_opt_select(
+    call_expr: &CallExpr,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    use cel::common::ast::Expr as CelExpr;
+
+    if call_expr.args.len() != 2 {
+        anyhow::bail!("Optional select operator _?._ expects 2 arguments");
+    }
+
+    // args[1] holds the field name.
+    // The cel-rust parser emits it as a Literal(String) for `a?.b` (the field is quoted),
+    // but other transformations may produce an Ident. Accept both.
+    let field_name = match &call_expr.args[1].expr {
+        CelExpr::Ident(name) => name.clone(),
+        CelExpr::Literal(cel::common::ast::LiteralValue::String(s)) => s.to_string(),
+        _ => anyhow::bail!("Optional select _?._ second argument must be a field name identifier"),
+    };
+
+    // Save receiver to a local so we can push arguments in the right order.
+    compile_expr(&call_expr.args[0].expr, body, env, ctx, module)?;
+    let receiver_local = module.locals.add(ValType::I32);
+    body.local_set(receiver_local);
+
+    // Write field name into WASM memory.
+    let field_bytes = field_name.as_bytes();
+    let field_len = field_bytes.len() as i32;
+    let field_ptr_local = module.locals.add(ValType::I32);
+    let memory_id = helpers::get_memory_id(module)?;
+
+    body.i32_const(field_len)
+        .call(env.get(RuntimeFunction::Malloc))
+        .local_set(field_ptr_local);
+
+    for (offset, &byte) in field_bytes.iter().enumerate() {
+        body.local_get(field_ptr_local);
+        body.i32_const(byte as i32);
+        body.store(
+            memory_id,
+            walrus::ir::StoreKind::I32_8 { atomic: false },
+            walrus::ir::MemArg {
+                align: 1,
+                offset: offset as u64,
+            },
+        );
+    }
+
+    // Call cel_optional_select(receiver, field_ptr, field_len) → *mut CelValue
+    body.local_get(receiver_local);
+    body.local_get(field_ptr_local);
+    body.i32_const(field_len);
+    body.call(env.get(RuntimeFunction::OptionalSelect));
+
+    Ok(())
+}
+
 /// Top-level operator dispatcher. Returns `true` if the func_name was recognized as
 /// an operator, `false` otherwise (so the caller can fall through to named functions).
 pub fn compile_operator(
@@ -398,6 +487,12 @@ pub fn compile_operator(
 
         // Index operator
         operators::INDEX => compile_index(call_expr, body, env, ctx, module)?,
+
+        // Optional index operator: container[?key]
+        operators::OPT_INDEX => compile_opt_index(call_expr, body, env, ctx, module)?,
+
+        // Optional select operator: receiver?.field
+        operators::OPT_SELECT => compile_opt_select(call_expr, body, env, ctx, module)?,
 
         // Not an operator
         _ => return Ok(false),

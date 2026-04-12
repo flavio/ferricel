@@ -58,6 +58,34 @@ pub unsafe extern "C" fn cel_get_field(
 
     // Extract the field from the object
     match obj {
+        CelValue::Optional(None) => {
+            // Field access on optional.none() propagates to optional.none()
+            debug!(log, "Field access on optional.none(), returning none"; "field" => field_name.as_str());
+            Box::into_raw(Box::new(CelValue::Optional(None)))
+        }
+        CelValue::Optional(Some(inner)) => {
+            // Field access on optional.of(x) propagates into x.
+            // Per CEL spec: if x is not a map/object, field access is an error (not Optional(None)).
+            debug!(log, "Field access on optional, propagating into inner"; "field" => field_name.as_str());
+            match inner.as_ref() {
+                CelValue::Object(map) => {
+                    use crate::types::CelMapKey;
+                    let key = CelMapKey::String(field_name);
+                    match map.get(&key) {
+                        Some(value) => Box::into_raw(Box::new(CelValue::Optional(Some(Box::new(
+                            value.clone(),
+                        ))))),
+                        None => Box::into_raw(Box::new(CelValue::Optional(None))),
+                    }
+                }
+                other => {
+                    error!(log, "Cannot access field on non-object value inside optional";
+                        "field" => field_name,
+                        "inner_type" => format!("{:?}", other));
+                    crate::error::create_error_value("no such key")
+                }
+            }
+        }
         CelValue::Object(map) => {
             debug!(log, "Accessing field from object"; 
                 "field" => field_name.as_str(),
@@ -83,6 +111,12 @@ pub unsafe extern "C" fn cel_get_field(
                             "field" => field_name.as_str());
                         let boxed_value = Box::new(CelValue::Null);
                         return Box::into_raw(boxed_value);
+                    }
+
+                    // Check __field_defaults__ for proto message default values
+                    // (e.g., empty map for map fields, empty list for repeated fields)
+                    if let Some(default_val) = get_proto_field_default(map, &field_name) {
+                        return Box::into_raw(Box::new(default_val));
                     }
 
                     // Otherwise, field not found is an error
@@ -128,6 +162,35 @@ fn is_wrapper_field_unset(
     }
 
     false
+}
+
+/// Look up the proto default value for a missing field using `__field_defaults__` metadata.
+///
+/// Returns `Some(CelValue)` if the field has a known default:
+/// - `"map"` → `CelValue::Object({})` (empty map)
+/// - `"list"` → `CelValue::Array([])` (empty list)
+/// - `"null"` → `CelValue::Null`
+///
+/// Returns `None` if no `__field_defaults__` metadata exists or the field is not in it.
+fn get_proto_field_default(
+    map: &std::collections::HashMap<crate::types::CelMapKey, CelValue>,
+    field_name: &str,
+) -> Option<CelValue> {
+    use crate::types::CelMapKey;
+
+    let defaults_key = CelMapKey::String("__field_defaults__".into());
+    if let Some(CelValue::Object(defaults_map)) = map.get(&defaults_key) {
+        let field_key = CelMapKey::String(field_name.to_string());
+        if let Some(CelValue::String(kind)) = defaults_map.get(&field_key) {
+            return match kind.as_str() {
+                "map" => Some(CelValue::Object(std::collections::HashMap::new())),
+                "list" => Some(CelValue::Array(vec![])),
+                "null" => Some(CelValue::Null),
+                _ => None,
+            };
+        }
+    }
+    None
 }
 
 /// Check if a field exists in a CelValue object (for has() macro).
@@ -183,6 +246,14 @@ pub unsafe extern "C" fn cel_has_field(
     // Returns false if obj is not an Object or if field is missing
     use crate::types::CelMapKey;
     let has_field = match obj {
+        CelValue::Optional(None) => false,
+        CelValue::Optional(Some(inner)) => match inner.as_ref() {
+            CelValue::Object(map) => {
+                let key = CelMapKey::String(field_name);
+                map.contains_key(&key)
+            }
+            _ => false,
+        },
         CelValue::Object(map) => {
             let key = CelMapKey::String(field_name);
             map.contains_key(&key)

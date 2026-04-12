@@ -18,6 +18,7 @@ mod logical;
 mod map;
 mod membership;
 mod memory;
+pub mod optional;
 pub(crate) mod proto_wire;
 mod serialization;
 mod string;
@@ -114,6 +115,13 @@ pub use temporal::{
 
 // Re-export logging functions
 pub use logging::cel_set_log_level;
+
+// Re-export optional type functions
+pub use optional::{
+    cel_optional_has_value, cel_optional_index, cel_optional_none, cel_optional_of,
+    cel_optional_of_non_zero_value, cel_optional_or, cel_optional_or_value, cel_optional_select,
+    cel_optional_value,
+};
 
 // Re-export extension call wrappers
 pub use extensions::{
