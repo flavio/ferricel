@@ -203,6 +203,14 @@ pub enum CelValue {
     /// Serializes as the inner value (or null for none). Cannot be deserialized from JSON.
     #[serde(skip_deserializing)]
     Optional(Option<Box<CelValue>>),
+
+    /// Format - represents a Kubernetes CEL format validator (format_type).
+    /// Stores the format name string (e.g. "dns1123Label", "uuid").
+    /// Created by `format.dns1123Label()`, `format.named("uuid")`, etc.
+    /// Supports `validate(string) -> ?list<string>`.
+    /// Serializes as the format name string. Cannot be deserialized from JSON.
+    #[serde(skip_deserializing)]
+    Format(String),
 }
 
 // Custom serialization for CelValue to provide untagged JSON output
@@ -233,7 +241,7 @@ impl Serialize for CelValue {
             }
             CelValue::String(s) => serializer.serialize_str(s),
             CelValue::Bytes(bytes) => {
-                use base64::{engine::general_purpose, Engine as _};
+                use base64::{Engine as _, engine::general_purpose};
                 let encoded = general_purpose::STANDARD.encode(bytes);
                 serializer.serialize_str(&encoded)
             }
@@ -285,6 +293,7 @@ impl Serialize for CelValue {
                 None => serializer.serialize_none(),
                 Some(val) => val.serialize(serializer),
             },
+            CelValue::Format(name) => serializer.serialize_str(name),
         }
     }
 }

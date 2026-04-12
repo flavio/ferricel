@@ -267,6 +267,23 @@ pub enum RuntimeFunction {
     /// `container[?key]` — optional index (handles arrays, maps, Optional wrappers)
     OptionalIndex,
 
+    // Kubernetes Format Extensions
+    K8sFormatNamed,
+    K8sFormatDns1123Label,
+    K8sFormatDns1123Subdomain,
+    K8sFormatDns1035Label,
+    K8sFormatQualifiedName,
+    K8sFormatDns1123LabelPrefix,
+    K8sFormatDns1123SubdomainPrefix,
+    K8sFormatDns1035LabelPrefix,
+    K8sFormatLabelValue,
+    K8sFormatUri,
+    K8sFormatUuid,
+    K8sFormatByte,
+    K8sFormatDate,
+    K8sFormatDatetime,
+    K8sFormatValidate,
+
     // Timestamp accessors
     TimestampGetFullYear,
     TimestampGetFullYearTz,
@@ -523,6 +540,22 @@ impl RuntimeFunction {
             Self::OptionalOr => "cel_optional_or",
             Self::OptionalSelect => "cel_optional_select",
             Self::OptionalIndex => "cel_optional_index",
+
+            Self::K8sFormatNamed => "cel_k8s_format_named",
+            Self::K8sFormatDns1123Label => "cel_k8s_format_dns1123_label",
+            Self::K8sFormatDns1123Subdomain => "cel_k8s_format_dns1123_subdomain",
+            Self::K8sFormatDns1035Label => "cel_k8s_format_dns1035_label",
+            Self::K8sFormatQualifiedName => "cel_k8s_format_qualified_name",
+            Self::K8sFormatDns1123LabelPrefix => "cel_k8s_format_dns1123_label_prefix",
+            Self::K8sFormatDns1123SubdomainPrefix => "cel_k8s_format_dns1123_subdomain_prefix",
+            Self::K8sFormatDns1035LabelPrefix => "cel_k8s_format_dns1035_label_prefix",
+            Self::K8sFormatLabelValue => "cel_k8s_format_label_value",
+            Self::K8sFormatUri => "cel_k8s_format_uri",
+            Self::K8sFormatUuid => "cel_k8s_format_uuid",
+            Self::K8sFormatByte => "cel_k8s_format_byte",
+            Self::K8sFormatDate => "cel_k8s_format_date",
+            Self::K8sFormatDatetime => "cel_k8s_format_datetime",
+            Self::K8sFormatValidate => "cel_k8s_format_validate",
 
             Self::TimestampGetFullYear => "cel_timestamp_get_full_year",
             Self::TimestampGetFullYearTz => "cel_timestamp_get_full_year_tz",

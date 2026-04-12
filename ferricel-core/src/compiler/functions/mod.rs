@@ -104,6 +104,24 @@ pub fn compile_named_function(
         | "add" | "sub" => kubernetes::quantity::compile_k8s_quantity_function(
             func_name, call_expr, body, env, ctx, module,
         ),
+        // Kubernetes Format library: format.named() and format.<name>() constructors, <fmt>.validate()
+        "named"
+        | "validate"
+        | "dns1123Label"
+        | "dns1123Subdomain"
+        | "dns1035Label"
+        | "qualifiedName"
+        | "dns1123LabelPrefix"
+        | "dns1123SubdomainPrefix"
+        | "dns1035LabelPrefix"
+        | "labelValue"
+        | "uri"
+        | "uuid"
+        | "byte"
+        | "date"
+        | "datetime" => kubernetes::format::compile_k8s_format_function(
+            func_name, call_expr, body, env, ctx, module,
+        ),
         _ => extensions::compile_extension_call(call_expr, body, env, ctx, module),
     }
 }

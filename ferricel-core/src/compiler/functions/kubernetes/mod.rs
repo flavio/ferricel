@@ -1,4 +1,5 @@
 pub mod cidr;
+pub mod format;
 pub mod ip;
 pub mod lists;
 pub mod quantity;

@@ -49,6 +49,7 @@ fn cel_type_name(val: &CelValue) -> &'static str {
         CelValue::Semver(_) => "semver",
         CelValue::Quantity(_) => "quantity",
         CelValue::Optional(_) => "optional_type",
+        CelValue::Format(_) => "format",
     }
 }
 
