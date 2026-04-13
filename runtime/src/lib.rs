@@ -82,6 +82,11 @@ pub use string::{
 // Re-export CEL encoder extension library functions
 pub use ext::encoders::{cel_base64_decode, cel_base64_encode};
 
+// Re-export CEL regex extension library functions
+pub use ext::regex::{
+    cel_regex_extract, cel_regex_extract_all, cel_regex_replace, cel_regex_replace_n,
+};
+
 // Re-export CEL extended string library functions
 pub use ext::strings::{
     cel_string_char_at, cel_string_format, cel_string_index_of, cel_string_index_of_offset,
@@ -130,6 +135,54 @@ pub use optional::{
 pub use extensions::{
     cel_ext_call_0, cel_ext_call_1, cel_ext_call_2, cel_ext_call_3, cel_ext_call_4,
 };
+
+// Shared test helpers available to all test modules within this crate.
+#[cfg(test)]
+pub(crate) mod test_helpers {
+    use crate::types::CelValue;
+
+    pub(crate) fn make_val(v: CelValue) -> *mut CelValue {
+        Box::into_raw(Box::new(v))
+    }
+
+    pub(crate) fn make_str(s: &str) -> *mut CelValue {
+        make_val(CelValue::String(s.to_string()))
+    }
+
+    pub(crate) fn make_int(n: i64) -> *mut CelValue {
+        make_val(CelValue::Int(n))
+    }
+
+    pub(crate) fn make_array(elements: Vec<CelValue>) -> *mut CelValue {
+        make_val(CelValue::Array(elements))
+    }
+
+    pub(crate) fn read_val(ptr: *mut CelValue) -> CelValue {
+        let v = unsafe { (*ptr).clone() };
+        unsafe { drop(Box::from_raw(ptr)) };
+        v
+    }
+
+    /// `optional.of(s)` — wraps a string in `CelValue::Optional(Some(...))`.
+    pub(crate) fn some_str(s: &str) -> CelValue {
+        CelValue::Optional(Some(Box::new(CelValue::String(s.to_string()))))
+    }
+
+    /// `optional.none()` — returns `CelValue::Optional(None)`.
+    pub(crate) fn none() -> CelValue {
+        CelValue::Optional(None)
+    }
+
+    /// Builds a `CelValue::Array` of strings from a slice of `&str`.
+    pub(crate) fn strs(items: &[&str]) -> CelValue {
+        CelValue::Array(
+            items
+                .iter()
+                .map(|s| CelValue::String(s.to_string()))
+                .collect(),
+        )
+    }
+}
 
 // Re-export Kubernetes list extension functions
 pub use kubernetes::lists::{

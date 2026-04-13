@@ -16,25 +16,7 @@ pub mod url;
 
 #[cfg(test)]
 pub(super) mod test_helpers {
-    use crate::types::CelValue;
-
-    pub(super) unsafe fn read_val(ptr: *mut CelValue) -> CelValue {
-        (*ptr).clone()
-    }
-
-    pub(super) unsafe fn make_val(v: CelValue) -> *mut CelValue {
-        Box::into_raw(Box::new(v))
-    }
-
-    pub(super) unsafe fn make_str(s: &str) -> *mut CelValue {
-        make_val(CelValue::String(s.to_string()))
-    }
-
-    pub(super) unsafe fn make_int(n: i64) -> *mut CelValue {
-        make_val(CelValue::Int(n))
-    }
-
-    pub(super) unsafe fn make_array(elements: Vec<CelValue>) -> *mut CelValue {
-        make_val(CelValue::Array(elements))
-    }
+    // Re-export the crate-level helpers so existing `super::super::test_helpers::*`
+    // imports in kubernetes submodules continue to work unchanged.
+    pub(super) use crate::test_helpers::{make_array, make_int, make_str, make_val, read_val};
 }

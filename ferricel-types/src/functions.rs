@@ -151,6 +151,12 @@ pub enum RuntimeFunction {
     Base64Encode,
     Base64Decode,
 
+    // Regex extension
+    RegexReplace,
+    RegexReplaceN,
+    RegexExtract,
+    RegexExtractAll,
+
     ListJoin,
     ListJoinSep,
 
@@ -445,6 +451,11 @@ impl RuntimeFunction {
 
             Self::Base64Encode => "cel_base64_encode",
             Self::Base64Decode => "cel_base64_decode",
+
+            Self::RegexReplace => "cel_regex_replace",
+            Self::RegexReplaceN => "cel_regex_replace_n",
+            Self::RegexExtract => "cel_regex_extract",
+            Self::RegexExtractAll => "cel_regex_extract_all",
 
             Self::ListJoin => "cel_list_join",
             Self::ListJoinSep => "cel_list_join_sep",

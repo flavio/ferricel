@@ -31,6 +31,17 @@ pub fn compile_named_function(
         "size" | "startsWith" | "endsWith" | "contains" | "matches" => {
             strings::compile_string_function(func_name, call_expr, body, env, ctx, module)
         }
+        // Regex extension: regex.replace / regex.extract / regex.extractAll
+        // This guard must come BEFORE the extended string library arm that also matches "replace",
+        // so that `regex.replace(...)` is routed here instead of to the string dispatcher.
+        "replace" | "extract" | "extractAll"
+            if matches!(
+                &call_expr.target,
+                Some(t) if matches!(&t.expr, cel::common::ast::Expr::Ident(name) if name == "regex")
+            ) =>
+        {
+            ext::regex::compile_ext_regex_function(func_name, call_expr, body, env, ctx, module)
+        }
         // Extended string library
         "lowerAscii" | "upperAscii" | "trim" | "reverse" | "charAt" | "replace" | "split"
         | "substring" | "format" | "quote" => {

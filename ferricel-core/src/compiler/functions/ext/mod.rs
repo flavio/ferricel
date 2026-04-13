@@ -7,4 +7,5 @@
 pub mod encoders;
 pub mod lists;
 pub mod poly;
+pub mod regex;
 pub mod strings;
