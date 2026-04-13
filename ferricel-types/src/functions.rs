@@ -146,6 +146,11 @@ pub enum RuntimeFunction {
     StringReverse,
     StringFormat,
     StringsQuote,
+
+    // Encoders extension
+    Base64Encode,
+    Base64Decode,
+
     ListJoin,
     ListJoinSep,
 
@@ -437,6 +442,10 @@ impl RuntimeFunction {
             Self::StringReverse => "cel_string_reverse",
             Self::StringFormat => "cel_string_format",
             Self::StringsQuote => "cel_strings_quote",
+
+            Self::Base64Encode => "cel_base64_encode",
+            Self::Base64Decode => "cel_base64_decode",
+
             Self::ListJoin => "cel_list_join",
             Self::ListJoinSep => "cel_list_join_sep",
 

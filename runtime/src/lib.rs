@@ -79,6 +79,9 @@ pub use string::{
     cel_string_size, cel_string_starts_with,
 };
 
+// Re-export CEL encoder extension library functions
+pub use ext::encoders::{cel_base64_decode, cel_base64_encode};
+
 // Re-export CEL extended string library functions
 pub use ext::strings::{
     cel_string_char_at, cel_string_format, cel_string_index_of, cel_string_index_of_offset,

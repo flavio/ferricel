@@ -36,6 +36,18 @@ pub fn compile_named_function(
         | "substring" | "format" | "quote" => {
             ext::strings::compile_ext_string_function(func_name, call_expr, body, env, ctx, module)
         }
+        // Encoders extension: base64.encode / base64.decode
+        // Guard on the "base64" namespace to avoid collisions with user-defined functions.
+        "encode" | "decode"
+            if matches!(
+                &call_expr.target,
+                Some(t) if matches!(&t.expr, cel::common::ast::Expr::Ident(name) if name == "base64")
+            ) =>
+        {
+            ext::encoders::compile_ext_encoder_function(
+                func_name, call_expr, body, env, ctx, module,
+            )
+        }
         // Extended list library
         "join" => {
             ext::lists::compile_ext_list_function(func_name, call_expr, body, env, ctx, module)
