@@ -82,6 +82,14 @@ pub use string::{
 // Re-export CEL encoder extension library functions
 pub use ext::encoders::{cel_base64_decode, cel_base64_encode};
 
+// Re-export CEL math extension library functions
+pub use ext::math::{
+    cel_math_abs, cel_math_bit_and, cel_math_bit_not, cel_math_bit_or, cel_math_bit_shift_left,
+    cel_math_bit_shift_right, cel_math_bit_xor, cel_math_ceil, cel_math_floor, cel_math_greatest,
+    cel_math_is_finite, cel_math_is_inf, cel_math_is_nan, cel_math_least, cel_math_round,
+    cel_math_sign, cel_math_sqrt, cel_math_trunc,
+};
+
 // Re-export CEL regex extension library functions
 pub use ext::regex::{
     cel_regex_extract, cel_regex_extract_all, cel_regex_replace, cel_regex_replace_n,

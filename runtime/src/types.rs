@@ -213,6 +213,39 @@ pub enum CelValue {
     Format(String),
 }
 
+impl CelValue {
+    /// Returns the CEL type name string for this value, as used by the `type()` function.
+    ///
+    /// These names match the CEL specification:
+    /// - `null` → `"null_type"`
+    /// - `google.protobuf.Timestamp` / `google.protobuf.Duration` for the well-known types
+    /// - Kubernetes extension types use their library-defined names
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            CelValue::Null => "null_type",
+            CelValue::Bool(_) => "bool",
+            CelValue::Int(_) => "int",
+            CelValue::UInt(_) => "uint",
+            CelValue::Double(_) => "double",
+            CelValue::String(_) => "string",
+            CelValue::Bytes(_) => "bytes",
+            CelValue::Array(_) => "list",
+            CelValue::Object(_) => "map",
+            CelValue::Timestamp(_) => "google.protobuf.Timestamp",
+            CelValue::Duration(_) => "google.protobuf.Duration",
+            CelValue::Type(_) => "type",
+            CelValue::Error(_) => "error",
+            CelValue::Url(_, _) => "url",
+            CelValue::IpAddr(_) => "net.IP",
+            CelValue::Cidr(_, _) => "net.CIDR",
+            CelValue::Semver(_) => "semver",
+            CelValue::Quantity(_) => "quantity",
+            CelValue::Optional(_) => "optional_type",
+            CelValue::Format(_) => "format",
+        }
+    }
+}
+
 // Custom serialization for CelValue to provide untagged JSON output
 // with special formatting for Timestamp and Duration types.
 impl Serialize for CelValue {

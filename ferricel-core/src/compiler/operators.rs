@@ -9,7 +9,7 @@ use super::{
 };
 
 /// Compile a binary operator: validate 2 args, compile both, call a runtime function.
-fn compile_binary_op(
+pub(crate) fn compile_binary_op(
     call_expr: &CallExpr,
     op_name: &str,
     runtime_fn: RuntimeFunction,
@@ -28,7 +28,7 @@ fn compile_binary_op(
 }
 
 /// Compile a unary operator: validate 1 arg, compile it, call a runtime function.
-fn compile_unary_op(
+pub(crate) fn compile_unary_op(
     call_expr: &CallExpr,
     op_name: &str,
     runtime_fn: RuntimeFunction,

@@ -27,32 +27,6 @@ pub(crate) fn cp_to_byte_offset(s: &str, cp_offset: usize) -> Option<usize> {
         })
 }
 
-/// Returns a static type name string for a CelValue (used in error messages).
-fn cel_type_name(val: &CelValue) -> &'static str {
-    match val {
-        CelValue::Null => "null",
-        CelValue::Bool(_) => "bool",
-        CelValue::Int(_) => "int",
-        CelValue::UInt(_) => "uint",
-        CelValue::Double(_) => "double",
-        CelValue::String(_) => "string",
-        CelValue::Bytes(_) => "bytes",
-        CelValue::Array(_) => "list",
-        CelValue::Object(_) => "map",
-        CelValue::Timestamp(_) => "timestamp",
-        CelValue::Duration(_) => "duration",
-        CelValue::Type(_) => "type",
-        CelValue::Error(_) => "error",
-        CelValue::Url(_, _) => "url",
-        CelValue::IpAddr(_) => "net.IP",
-        CelValue::Cidr(_, _) => "net.CIDR",
-        CelValue::Semver(_) => "semver",
-        CelValue::Quantity(_) => "quantity",
-        CelValue::Optional(_) => "optional_type",
-        CelValue::Format(_) => "format",
-    }
-}
-
 /// Find the first codepoint index of `sub` in `s` starting from codepoint offset `start`.
 /// Returns -1 if not found.
 pub(crate) fn find_index_of(s: &str, sub: &str, start: usize) -> i64 {
@@ -270,7 +244,7 @@ fn format_arg_decimal(val: &CelValue) -> Result<String, String> {
         }
         _ => Err(format!(
             "format: %%d expects int/uint/double, got {}",
-            cel_type_name(val)
+            val.type_name()
         )),
     }
 }
@@ -320,7 +294,7 @@ fn format_arg_binary(val: &CelValue) -> Result<String, String> {
         }
         _ => Err(format!(
             "format: %%b expects int/uint/bool/bytes, got {}",
-            cel_type_name(val)
+            val.type_name()
         )),
     }
 }
@@ -331,7 +305,7 @@ fn format_arg_octal(val: &CelValue) -> Result<String, String> {
         CelValue::UInt(u) => Ok(format!("{u:o}")),
         _ => Err(format!(
             "format: %%o expects int/uint, got {}",
-            cel_type_name(val)
+            val.type_name()
         )),
     }
 }
@@ -368,7 +342,7 @@ fn format_arg_hex(val: &CelValue, upper: bool) -> Result<String, String> {
         }
         _ => Err(format!(
             "format: %%x/X expects int/uint/string/bytes, got {}",
-            cel_type_name(val)
+            val.type_name()
         )),
     }
 }
@@ -380,7 +354,7 @@ fn to_float(val: &CelValue) -> Result<f64, String> {
         CelValue::UInt(u) => Ok(*u as f64),
         _ => Err(format!(
             "format: %%f/e expects numeric, got {}",
-            cel_type_name(val)
+            val.type_name()
         )),
     }
 }

@@ -6,6 +6,7 @@
 
 pub mod encoders;
 pub mod lists;
+pub mod math;
 pub mod poly;
 pub mod regex;
 pub mod strings;

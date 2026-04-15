@@ -59,6 +59,20 @@ pub fn compile_named_function(
                 func_name, call_expr, body, env, ctx, module,
             )
         }
+        // Math extension: math.greatest, math.least, math.ceil, math.floor, math.round,
+        // math.trunc, math.abs, math.sign, math.isInf, math.isNaN, math.isFinite,
+        // math.bitAnd, math.bitOr, math.bitXor, math.bitNot, math.bitShiftLeft,
+        // math.bitShiftRight, math.sqrt
+        "greatest" | "least" | "ceil" | "floor" | "round" | "trunc" | "abs" | "sign" | "isInf"
+        | "isNaN" | "isFinite" | "bitOr" | "bitAnd" | "bitXor" | "bitNot" | "bitShiftLeft"
+        | "bitShiftRight" | "sqrt"
+            if matches!(
+                &call_expr.target,
+                Some(t) if matches!(&t.expr, cel::common::ast::Expr::Ident(name) if name == "math")
+            ) =>
+        {
+            ext::math::compile_ext_math_function(func_name, call_expr, body, env, ctx, module)
+        }
         // Extended list library
         "join" => {
             ext::lists::compile_ext_list_function(func_name, call_expr, body, env, ctx, module)

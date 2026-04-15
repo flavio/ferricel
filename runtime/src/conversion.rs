@@ -689,28 +689,7 @@ pub unsafe extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {
             abort_with_error("no such overload");
         }
 
-        let type_name = match &*ptr {
-            CelValue::Null => "null_type",
-            CelValue::Bool(_) => "bool",
-            CelValue::Int(_) => "int",
-            CelValue::UInt(_) => "uint",
-            CelValue::Double(_) => "double",
-            CelValue::String(_) => "string",
-            CelValue::Bytes(_) => "bytes",
-            CelValue::Array(_) => "list",
-            CelValue::Object(_) => "map",
-            CelValue::Timestamp(_) => "google.protobuf.Timestamp",
-            CelValue::Duration(_) => "google.protobuf.Duration",
-            CelValue::Type(_) => "type",
-            CelValue::Error(_) => "error",
-            CelValue::Url(_, _) => "url",
-            CelValue::IpAddr(_) => "net.IP",
-            CelValue::Cidr(_, _) => "net.CIDR",
-            CelValue::Semver(_) => "semver",
-            CelValue::Quantity(_) => "quantity",
-            CelValue::Optional(_) => "optional_type",
-            CelValue::Format(_) => "format",
-        };
+        let type_name = (&*ptr).type_name();
 
         debug!(log, "Getting type of value"; "type_name" => type_name);
         Box::into_raw(Box::new(CelValue::Type(type_name.to_string())))
