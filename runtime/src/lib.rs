@@ -82,6 +82,9 @@ pub use string::{
 // Re-export CEL encoder extension library functions
 pub use ext::encoders::{cel_base64_decode, cel_base64_encode};
 
+// Re-export CEL sets extension library functions
+pub use ext::sets::{cel_sets_contains, cel_sets_equivalent, cel_sets_intersects};
+
 // Re-export CEL math extension library functions
 pub use ext::math::{
     cel_math_abs, cel_math_bit_and, cel_math_bit_not, cel_math_bit_or, cel_math_bit_shift_left,

@@ -27,6 +27,18 @@ pub fn compile_named_function(
     }
 
     match func_name {
+        // Sets extension: sets.contains / sets.intersects / sets.equivalent
+        // Must come BEFORE the core string arm that unconditionally matches "contains".
+        // The guard on the "sets" namespace routes `sets.contains(...)` here instead of
+        // to the string dispatcher.
+        "contains" | "intersects" | "equivalent"
+            if matches!(
+                &call_expr.target,
+                Some(t) if matches!(&t.expr, cel::common::ast::Expr::Ident(name) if name == "sets")
+            ) =>
+        {
+            ext::sets::compile_ext_sets_function(func_name, call_expr, body, env, ctx, module)
+        }
         // Core string functions
         "size" | "startsWith" | "endsWith" | "contains" | "matches" => {
             strings::compile_string_function(func_name, call_expr, body, env, ctx, module)

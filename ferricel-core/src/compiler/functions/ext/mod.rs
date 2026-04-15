@@ -9,4 +9,5 @@ pub mod lists;
 pub mod math;
 pub mod poly;
 pub mod regex;
+pub mod sets;
 pub mod strings;

@@ -3,4 +3,5 @@ mod lists;
 mod math;
 mod poly;
 mod regex;
+mod sets;
 mod strings;

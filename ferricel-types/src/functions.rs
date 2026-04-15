@@ -171,6 +171,11 @@ pub enum RuntimeFunction {
     MathBitShiftRight,
     MathSqrt,
 
+    // Sets extension
+    SetsContains,
+    SetsIntersects,
+    SetsEquivalent,
+
     // Regex extension
     RegexReplace,
     RegexReplaceN,
@@ -490,6 +495,10 @@ impl RuntimeFunction {
             Self::MathBitShiftLeft => "cel_math_bit_shift_left",
             Self::MathBitShiftRight => "cel_math_bit_shift_right",
             Self::MathSqrt => "cel_math_sqrt",
+
+            Self::SetsContains => "cel_sets_contains",
+            Self::SetsIntersects => "cel_sets_intersects",
+            Self::SetsEquivalent => "cel_sets_equivalent",
 
             Self::RegexReplace => "cel_regex_replace",
             Self::RegexReplaceN => "cel_regex_replace_n",
