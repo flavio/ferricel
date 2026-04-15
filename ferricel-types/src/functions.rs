@@ -184,6 +184,14 @@ pub enum RuntimeFunction {
 
     ListJoin,
     ListJoinSep,
+    ListDistinct,
+    ListFlatten,
+    ListFlattenDepth,
+    ListRange,
+    ListReverse,
+    ListSlice,
+    ListSort,
+    ReversePoly,
 
     // Membership
     ValueIn,
@@ -507,6 +515,14 @@ impl RuntimeFunction {
 
             Self::ListJoin => "cel_list_join",
             Self::ListJoinSep => "cel_list_join_sep",
+            Self::ListDistinct => "cel_list_distinct",
+            Self::ListFlatten => "cel_list_flatten",
+            Self::ListFlattenDepth => "cel_list_flatten_depth",
+            Self::ListRange => "cel_list_range",
+            Self::ListReverse => "cel_list_reverse",
+            Self::ListSlice => "cel_list_slice",
+            Self::ListSort => "cel_list_sort",
+            Self::ReversePoly => "cel_reverse_poly",
 
             Self::ValueIn => "cel_value_in",
             Self::ValueIndex => "cel_value_index",

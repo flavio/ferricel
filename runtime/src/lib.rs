@@ -108,10 +108,13 @@ pub use ext::strings::{
 };
 
 // Re-export CEL extended list library functions
-pub use ext::lists::{cel_list_join, cel_list_join_sep};
+pub use ext::lists::{
+    cel_list_distinct, cel_list_flatten, cel_list_flatten_depth, cel_list_join, cel_list_join_sep,
+    cel_list_range, cel_list_reverse, cel_list_slice, cel_list_sort,
+};
 
 // Re-export polymorphic indexOf / lastIndexOf
-pub use ext::poly::{cel_index_of_poly, cel_last_index_of_poly};
+pub use ext::poly::{cel_index_of_poly, cel_last_index_of_poly, cel_reverse_poly};
 
 pub use bytes::{
     cel_bytes_concat, cel_bytes_eq, cel_bytes_gt, cel_bytes_gte, cel_bytes_lt, cel_bytes_lte,

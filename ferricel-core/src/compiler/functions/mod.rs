@@ -54,10 +54,35 @@ pub fn compile_named_function(
         {
             ext::regex::compile_ext_regex_function(func_name, call_expr, body, env, ctx, module)
         }
-        // Extended string library
-        "lowerAscii" | "upperAscii" | "trim" | "reverse" | "charAt" | "replace" | "split"
-        | "substring" | "format" | "quote" => {
+        // Extended string library.
+        // Note: "reverse" is intentionally excluded here — it is polymorphic
+        // (shared between strings and lists) and dispatched via ReversePoly below.
+        "lowerAscii" | "upperAscii" | "trim" | "charAt" | "replace" | "split" | "substring"
+        | "format" | "quote" => {
             ext::strings::compile_ext_string_function(func_name, call_expr, body, env, ctx, module)
+        }
+        // Polymorphic reverse: dispatches to cel_reverse_poly which handles both
+        // String (character reversal) and Array (element reversal) receivers.
+        "reverse" => {
+            use crate::compiler::helpers::compile_call_unary;
+            compile_call_unary(
+                call_expr,
+                "reverse",
+                ferricel_types::functions::RuntimeFunction::ReversePoly,
+                body,
+                env,
+                ctx,
+                module,
+            )
+        }
+        // lists.range(n) — namespace-qualified, no receiver.
+        "range"
+            if matches!(
+                &call_expr.target,
+                Some(t) if matches!(&t.expr, cel::common::ast::Expr::Ident(name) if name == "lists")
+            ) =>
+        {
+            ext::lists::compile_list_range(call_expr, body, env, ctx, module)
         }
         // Encoders extension: base64.encode / base64.decode
         // Guard on the "base64" namespace to avoid collisions with user-defined functions.
@@ -86,7 +111,7 @@ pub fn compile_named_function(
             ext::math::compile_ext_math_function(func_name, call_expr, body, env, ctx, module)
         }
         // Extended list library
-        "join" => {
+        "join" | "distinct" | "flatten" | "slice" | "sort" => {
             ext::lists::compile_ext_list_function(func_name, call_expr, body, env, ctx, module)
         }
         // indexOf / lastIndexOf: overloaded by arity (polymorphic or string+offset)

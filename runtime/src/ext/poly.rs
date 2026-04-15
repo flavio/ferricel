@@ -1,12 +1,31 @@
-//! Polymorphic `indexOf` / `lastIndexOf` for both strings and lists.
-//!
-//! These functions dispatch on the receiver type:
-//! - `String` → substring search (codepoint index)
-//! - `Array`  → element equality search (element index)
+//! Polymorphic functions overloaded by receiver type:
+//! - `indexOf` / `lastIndexOf`: `String` → substring search; `Array` → element search
+//! - `reverse`: `String` → character reversal; `Array` → element reversal
 
-use super::strings::{find_index_of, find_last_index_of};
+use super::lists::cel_list_reverse;
+use super::strings::{cel_string_reverse, find_index_of, find_last_index_of};
 use crate::helpers::cel_equals;
 use crate::types::CelValue;
+
+/// Polymorphic `reverse`:
+/// - If receiver is a `String`, reverses the Unicode characters.
+/// - If receiver is an `Array`, reverses the element order.
+///
+/// # Safety
+///
+/// Caller must ensure all pointer arguments point to valid `CelValue` instances
+/// allocated by the WASM host.
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_reverse_poly(receiver_ptr: *const CelValue) -> *mut CelValue {
+    match unsafe { &*receiver_ptr } {
+        CelValue::String(_) => unsafe { cel_string_reverse(receiver_ptr) },
+        CelValue::Array(_) => unsafe { cel_list_reverse(receiver_ptr) },
+        _ => Box::into_raw(Box::new(CelValue::Error(
+            "reverse: receiver must be a string or list".to_string(),
+        ))),
+    }
+}
 
 /// Polymorphic `indexOf(arg)`:
 /// - If receiver is a `String`, performs substring search (returns codepoint index or -1).
@@ -213,6 +232,46 @@ mod tests {
         unsafe {
             let result_ptr =
                 cel_last_index_of_poly(&receiver as *const CelValue, &arg as *const CelValue);
+            assert!(matches!(&*result_ptr, CelValue::Error(_)));
+            cel_free_value(result_ptr);
+        }
+    }
+
+    // ── cel_reverse_poly ──────────────────────────────────────────────────────
+
+    #[rstest]
+    #[case::basic("gums", "smug")]
+    #[case::empty("", "")]
+    #[case::unicode("héllo", "olléh")]
+    fn test_reverse_poly_string(#[case] input: &str, #[case] expected: &str) {
+        let receiver = CelValue::String(input.to_string());
+        unsafe {
+            let result_ptr = cel_reverse_poly(&receiver as *const CelValue);
+            assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
+            cel_free_value(result_ptr);
+        }
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![])]
+    #[case::ints(
+        vec![CelValue::Int(5), CelValue::Int(1), CelValue::Int(2)],
+        vec![CelValue::Int(2), CelValue::Int(1), CelValue::Int(5)]
+    )]
+    fn test_reverse_poly_list(#[case] input: Vec<CelValue>, #[case] expected: Vec<CelValue>) {
+        let receiver = CelValue::Array(input);
+        unsafe {
+            let result_ptr = cel_reverse_poly(&receiver as *const CelValue);
+            assert_eq!(&*result_ptr, &CelValue::Array(expected));
+            cel_free_value(result_ptr);
+        }
+    }
+
+    #[test]
+    fn test_reverse_poly_wrong_type_returns_error() {
+        let receiver = CelValue::Int(42);
+        unsafe {
+            let result_ptr = cel_reverse_poly(&receiver as *const CelValue);
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
         }
