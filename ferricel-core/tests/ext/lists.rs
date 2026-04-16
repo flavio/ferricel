@@ -220,3 +220,45 @@ fn test_last(#[case] expr: &str, #[case] expected: i64) {
         expr, expected
     );
 }
+
+// ── sortBy ────────────────────────────────────────────────────────────────────
+// Test cases ported from google/cel-go ext/lists_test.go (TestLists + TestListsCosts)
+
+#[rstest]
+// empty list (from cel-go: `[].sortBy(e, e) == []`)
+#[case::empty("[].sortBy(e, e) == []", 1)]
+// single element (from cel-go: `["a"].sortBy(e, e) == ["a"]`)
+#[case::single(r#"["a"].sortBy(e, e) == ["a"]"#, 1)]
+// int key transform: sort by negated square (from cel-go)
+#[case::int_key_transform("[-3, 1, -5, -2, 4].sortBy(e, -(e * e)) == [-5, 4, -3, -2, 1]", 1)]
+// chained with map (from cel-go)
+#[case::chained_map(
+    "[-3, 1, -5, -2, 4].map(e, e * 2).sortBy(e, -(e * e)) == [-10, 8, -6, -4, 2]",
+    1
+)]
+// chained with lists.range (from cel-go)
+#[case::chained_range("lists.range(3).sortBy(e, -e) == [2, 1, 0]", 1)]
+// conditional key expression (from cel-go)
+#[case::conditional_key(
+    r#"["a", "c", "b", "first"].sortBy(e, e == "first" ? "" : e) == ["first", "a", "b", "c"]"#,
+    1
+)]
+// sort maps by int field (from cel-go TestListsCosts list_sortBy)
+#[case::maps_int_field(r#"[{"x": 4}, {"x": 3}].sortBy(m, m["x"]) == [{"x": 3}, {"x": 4}]"#, 1)]
+// sort maps by string field (from cel-go TestListsVersion version=2)
+#[case::maps_string_field(
+    r#"[{"field": "lo"}, {"field": "hi"}].sortBy(m, m["field"]) == [{"field": "hi"}, {"field": "lo"}]"#,
+    1
+)]
+// plain string sort (identity key)
+#[case::strings(r#"["d", "b", "c", "a"].sortBy(e, e) == ["a", "b", "c", "d"]"#, 1)]
+// plain int sort (identity key)
+#[case::ints("[3, 1, 4, 1, 5, 9, 2, 6].sortBy(e, e) == [1, 1, 2, 3, 4, 5, 6, 9]", 1)]
+fn test_sort_by(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
+    );
+}

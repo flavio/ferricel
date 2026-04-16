@@ -193,6 +193,7 @@ pub enum RuntimeFunction {
     ListSort,
     ListFirst,
     ListLast,
+    ListSortByAssociatedKeys,
     ReversePoly,
 
     // Membership
@@ -526,6 +527,7 @@ impl RuntimeFunction {
             Self::ListSort => "cel_list_sort",
             Self::ListFirst => "cel_list_first",
             Self::ListLast => "cel_list_last",
+            Self::ListSortByAssociatedKeys => "cel_list_sort_by_associated_keys",
             Self::ReversePoly => "cel_reverse_poly",
 
             Self::ValueIn => "cel_value_in",

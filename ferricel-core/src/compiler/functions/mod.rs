@@ -121,7 +121,7 @@ pub fn compile_named_function(
             ext::math::compile_ext_math_function(func_name, call_expr, body, env, ctx, module)
         }
         // Extended list library
-        "join" | "distinct" | "flatten" | "slice" | "sort" | "first" | "last" => {
+        "join" | "distinct" | "flatten" | "slice" | "sort" | "sortBy" | "first" | "last" => {
             ext::lists::compile_ext_list_function(func_name, call_expr, body, env, ctx, module)
         }
         // indexOf / lastIndexOf: overloaded by arity (polymorphic or string+offset)

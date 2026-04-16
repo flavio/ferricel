@@ -356,6 +356,83 @@ pub unsafe extern "C" fn cel_list_sort(list_ptr: *const CelValue) -> *mut CelVal
     Box::into_raw(Box::new(CelValue::Array(sorted)))
 }
 
+/// Sorts `values` according to the ordering of `keys`, returning a reordered copy of `values`.
+///
+/// Both lists must have the same length. Keys must be comparable and of the same type.
+/// This is the hidden runtime backing for `sortBy(e, keyExpr)`.
+///
+/// # Safety
+///
+/// Caller must ensure both pointer arguments point to valid `CelValue` instances.
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
+    values_ptr: *const CelValue,
+    keys_ptr: *const CelValue,
+) -> *mut CelValue {
+    let values = match unsafe { &*values_ptr } {
+        CelValue::Array(v) => v.clone(),
+        _ => {
+            return Box::into_raw(Box::new(CelValue::Error(
+                "sortByAssociatedKeys: values receiver is not a list".to_string(),
+            )));
+        }
+    };
+    let keys = match unsafe { &*keys_ptr } {
+        CelValue::Array(k) => k.clone(),
+        _ => {
+            return Box::into_raw(Box::new(CelValue::Error(
+                "sortByAssociatedKeys: keys argument is not a list".to_string(),
+            )));
+        }
+    };
+    if values.len() != keys.len() {
+        return Box::into_raw(Box::new(CelValue::Error(format!(
+            "expected a list of the same size as the associated keys list, but got {} and {} elements respectively",
+            values.len(),
+            keys.len()
+        ))));
+    }
+    if values.is_empty() {
+        return Box::into_raw(Box::new(CelValue::Array(vec![])));
+    }
+    // Validate keys are comparable and uniform type
+    let first_key = &keys[0];
+    for key in &keys[1..] {
+        if cel_value_less_than(first_key, key).is_err()
+            && cel_value_less_than(key, first_key).is_err()
+        {
+            return Box::into_raw(Box::new(CelValue::Error(
+                "list elements must be comparable".to_string(),
+            )));
+        }
+    }
+    // Build index array and sort by keys
+    let mut indices: Vec<usize> = (0..values.len()).collect();
+    let mut sort_err: Option<String> = None;
+    indices.sort_by(|&a, &b| {
+        if sort_err.is_some() {
+            return std::cmp::Ordering::Equal;
+        }
+        match cel_value_less_than(&keys[a], &keys[b]) {
+            Ok(true) => std::cmp::Ordering::Less,
+            Ok(false) => match cel_value_less_than(&keys[b], &keys[a]) {
+                Ok(true) => std::cmp::Ordering::Greater,
+                _ => std::cmp::Ordering::Equal,
+            },
+            Err(_) => {
+                sort_err = Some("list elements must have the same type".to_string());
+                std::cmp::Ordering::Equal
+            }
+        }
+    });
+    if let Some(err) = sort_err {
+        return Box::into_raw(Box::new(CelValue::Error(err)));
+    }
+    let result: Vec<CelValue> = indices.into_iter().map(|i| values[i].clone()).collect();
+    Box::into_raw(Box::new(CelValue::Array(result)))
+}
+
 /// Returns an `optional` containing the first element of the list, or `optional.none()` if empty.
 ///
 /// # Safety
@@ -795,6 +872,77 @@ mod tests {
         unsafe {
             let result_ptr = cel_list_last(&val as *const CelValue);
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
+            cel_free_value(result_ptr);
+        }
+    }
+
+    // ── sort_by_associated_keys ───────────────────────────────────────────────
+
+    #[rstest]
+    #[case::empty(vec![], vec![], vec![])]
+    #[case::already_sorted(
+        vec![CelValue::String("a".into()), CelValue::String("b".into())],
+        vec![CelValue::Int(1), CelValue::Int(2)],
+        vec![CelValue::String("a".into()), CelValue::String("b".into())]
+    )]
+    #[case::int_keys_reorder(
+        vec![CelValue::String("foo".into()), CelValue::String("bar".into()), CelValue::String("baz".into())],
+        vec![CelValue::Int(3), CelValue::Int(1), CelValue::Int(2)],
+        vec![CelValue::String("bar".into()), CelValue::String("baz".into()), CelValue::String("foo".into())]
+    )]
+    #[case::string_keys(
+        vec![CelValue::Int(1), CelValue::Int(2), CelValue::Int(3)],
+        vec![CelValue::String("c".into()), CelValue::String("a".into()), CelValue::String("b".into())],
+        vec![CelValue::Int(2), CelValue::Int(3), CelValue::Int(1)]
+    )]
+    #[case::single(
+        vec![CelValue::Int(42)],
+        vec![CelValue::Int(99)],
+        vec![CelValue::Int(42)]
+    )]
+    fn test_sort_by_associated_keys(
+        #[case] values: Vec<CelValue>,
+        #[case] keys: Vec<CelValue>,
+        #[case] expected: Vec<CelValue>,
+    ) {
+        let vals = CelValue::Array(values);
+        let ks = CelValue::Array(keys);
+        unsafe {
+            let result_ptr =
+                cel_list_sort_by_associated_keys(&vals as *const CelValue, &ks as *const CelValue);
+            assert_eq!(&*result_ptr, &CelValue::Array(expected));
+            cel_free_value(result_ptr);
+        }
+    }
+
+    #[test]
+    fn test_sort_by_associated_keys_length_mismatch() {
+        let vals = CelValue::Array(vec![CelValue::Int(1), CelValue::Int(2)]);
+        let ks = CelValue::Array(vec![CelValue::Int(1)]);
+        unsafe {
+            let result_ptr =
+                cel_list_sort_by_associated_keys(&vals as *const CelValue, &ks as *const CelValue);
+            assert!(
+                matches!(&*result_ptr, CelValue::Error(e) if e.contains("same size")),
+                "expected length-mismatch error, got {:?}",
+                &*result_ptr
+            );
+            cel_free_value(result_ptr);
+        }
+    }
+
+    #[test]
+    fn test_sort_by_associated_keys_mixed_key_types() {
+        let vals = CelValue::Array(vec![CelValue::Int(1), CelValue::Int(2)]);
+        let ks = CelValue::Array(vec![CelValue::Int(1), CelValue::String("x".into())]);
+        unsafe {
+            let result_ptr =
+                cel_list_sort_by_associated_keys(&vals as *const CelValue, &ks as *const CelValue);
+            assert!(
+                matches!(&*result_ptr, CelValue::Error(_)),
+                "expected error for mixed key types, got {:?}",
+                &*result_ptr
+            );
             cel_free_value(result_ptr);
         }
     }
