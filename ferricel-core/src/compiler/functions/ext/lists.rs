@@ -62,6 +62,24 @@ pub fn compile_ext_list_function(
             ctx,
             module,
         ),
+        "first" => compile_call_unary(
+            call_expr,
+            "first",
+            RuntimeFunction::ListFirst,
+            body,
+            env,
+            ctx,
+            module,
+        ),
+        "last" => compile_call_unary(
+            call_expr,
+            "last",
+            RuntimeFunction::ListLast,
+            body,
+            env,
+            ctx,
+            module,
+        ),
         _ => anyhow::bail!("Unknown ext list function: {}", func_name),
     }
 }

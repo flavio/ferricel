@@ -191,6 +191,8 @@ pub enum RuntimeFunction {
     ListReverse,
     ListSlice,
     ListSort,
+    ListFirst,
+    ListLast,
     ReversePoly,
 
     // Membership
@@ -522,6 +524,8 @@ impl RuntimeFunction {
             Self::ListReverse => "cel_list_reverse",
             Self::ListSlice => "cel_list_slice",
             Self::ListSort => "cel_list_sort",
+            Self::ListFirst => "cel_list_first",
+            Self::ListLast => "cel_list_last",
             Self::ReversePoly => "cel_reverse_poly",
 
             Self::ValueIn => "cel_value_in",

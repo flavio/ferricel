@@ -162,3 +162,61 @@ fn test_sort_mixed_types_returns_error() {
     let result = compile_and_execute(r#"["d", 3, 2, "c"].sort()"#);
     assert!(result.is_err(), "Expected error for mixed-type sort");
 }
+
+// ── first ─────────────────────────────────────────────────────────────────────
+
+#[rstest]
+// empty list → optional.none() → hasValue() == false
+#[case::empty_has_value("[].first().hasValue()", 0)]
+// orValue fallback on empty
+#[case::empty_or_value("[].first().orValue(99) == 99", 1)]
+// ints
+#[case::ints_value("[1, 2, 3].first().value() == 1", 1)]
+#[case::ints_has_value("[1, 2, 3].first().hasValue()", 1)]
+// strings
+#[case::strings_value(r#"["a", "b", "c"].first().value() == "a""#, 1)]
+#[case::strings_or_value(r#"["z"].first().orValue("fallback") == "z""#, 1)]
+// bools
+#[case::bools_value("[true, false].first().value() == true", 1)]
+// doubles
+#[case::doubles_value("[1.5, 2.5].first().value() == 1.5", 1)]
+// single element
+#[case::single("[42].first().value() == 42", 1)]
+fn test_first(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
+    );
+}
+
+// ── last ──────────────────────────────────────────────────────────────────────
+
+#[rstest]
+// empty list → optional.none() → hasValue() == false
+#[case::empty_has_value("[].last().hasValue()", 0)]
+// orValue fallback on empty
+#[case::empty_or_value(r#"[].last().orValue("test") == "test""#, 1)]
+// ints
+#[case::ints_value("[1, 2, 3].last().value() == 3", 1)]
+#[case::ints_has_value("[1, 2, 3].last().hasValue()", 1)]
+// strings
+#[case::strings_value(r#"["a", "b", "c"].last().value() == "c""#, 1)]
+#[case::strings_or_value(r#"["z"].last().orValue("fallback") == "z""#, 1)]
+// bools
+#[case::bools_value("[true, false].last().value() == false", 1)]
+// doubles
+#[case::doubles_value("[1.5, 2.5].last().value() == 2.5", 1)]
+// single element — first and last are the same
+#[case::single("[42].last().value() == 42", 1)]
+// first and last differ on a multi-element list
+#[case::first_ne_last("[1, 2, 3].first().value() != [1, 2, 3].last().value()", 1)]
+fn test_last(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
+    );
+}

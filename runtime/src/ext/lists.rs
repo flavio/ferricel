@@ -356,6 +356,56 @@ pub unsafe extern "C" fn cel_list_sort(list_ptr: *const CelValue) -> *mut CelVal
     Box::into_raw(Box::new(CelValue::Array(sorted)))
 }
 
+/// Returns an `optional` containing the first element of the list, or `optional.none()` if empty.
+///
+/// # Safety
+///
+/// Caller must ensure the pointer argument points to a valid `CelValue` instance
+/// allocated by the WASM host.
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_list_first(list_ptr: *const CelValue) -> *mut CelValue {
+    let list = match unsafe { &*list_ptr } {
+        CelValue::Array(v) => v,
+        _ => {
+            return Box::into_raw(Box::new(CelValue::Error(
+                "first: receiver is not a list".to_string(),
+            )));
+        }
+    };
+    if list.is_empty() {
+        return Box::into_raw(Box::new(CelValue::Optional(None)));
+    }
+    Box::into_raw(Box::new(CelValue::Optional(Some(Box::new(
+        list[0].clone(),
+    )))))
+}
+
+/// Returns an `optional` containing the last element of the list, or `optional.none()` if empty.
+///
+/// # Safety
+///
+/// Caller must ensure the pointer argument points to a valid `CelValue` instance
+/// allocated by the WASM host.
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_list_last(list_ptr: *const CelValue) -> *mut CelValue {
+    let list = match unsafe { &*list_ptr } {
+        CelValue::Array(v) => v,
+        _ => {
+            return Box::into_raw(Box::new(CelValue::Error(
+                "last: receiver is not a list".to_string(),
+            )));
+        }
+    };
+    if list.is_empty() {
+        return Box::into_raw(Box::new(CelValue::Optional(None)));
+    }
+    Box::into_raw(Box::new(CelValue::Optional(Some(Box::new(
+        list[list.len() - 1].clone(),
+    )))))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -662,6 +712,88 @@ mod tests {
         let list = CelValue::Array(vec![CelValue::String("d".into()), CelValue::Int(3)]);
         unsafe {
             let result_ptr = cel_list_sort(&list as *const CelValue);
+            assert!(matches!(&*result_ptr, CelValue::Error(_)));
+            cel_free_value(result_ptr);
+        }
+    }
+
+    // ── first ─────────────────────────────────────────────────────────────────
+
+    #[rstest]
+    #[case::empty(vec![], None)]
+    #[case::single_int(vec![CelValue::Int(42)], Some(CelValue::Int(42)))]
+    #[case::ints(
+        vec![CelValue::Int(1), CelValue::Int(2), CelValue::Int(3)],
+        Some(CelValue::Int(1))
+    )]
+    #[case::strings(
+        vec![CelValue::String("a".into()), CelValue::String("b".into()), CelValue::String("c".into())],
+        Some(CelValue::String("a".into()))
+    )]
+    #[case::bools(
+        vec![CelValue::Bool(true), CelValue::Bool(false)],
+        Some(CelValue::Bool(true))
+    )]
+    #[case::doubles(
+        vec![CelValue::Double(1.5), CelValue::Double(2.5)],
+        Some(CelValue::Double(1.5))
+    )]
+    fn test_list_first(#[case] input: Vec<CelValue>, #[case] expected_inner: Option<CelValue>) {
+        let list = CelValue::Array(input);
+        unsafe {
+            let result_ptr = cel_list_first(&list as *const CelValue);
+            let expected = CelValue::Optional(expected_inner.map(Box::new));
+            assert_eq!(&*result_ptr, &expected);
+            cel_free_value(result_ptr);
+        }
+    }
+
+    #[test]
+    fn test_list_first_non_list_returns_error() {
+        let val = CelValue::Int(42);
+        unsafe {
+            let result_ptr = cel_list_first(&val as *const CelValue);
+            assert!(matches!(&*result_ptr, CelValue::Error(_)));
+            cel_free_value(result_ptr);
+        }
+    }
+
+    // ── last ──────────────────────────────────────────────────────────────────
+
+    #[rstest]
+    #[case::empty(vec![], None)]
+    #[case::single_int(vec![CelValue::Int(42)], Some(CelValue::Int(42)))]
+    #[case::ints(
+        vec![CelValue::Int(1), CelValue::Int(2), CelValue::Int(3)],
+        Some(CelValue::Int(3))
+    )]
+    #[case::strings(
+        vec![CelValue::String("a".into()), CelValue::String("b".into()), CelValue::String("c".into())],
+        Some(CelValue::String("c".into()))
+    )]
+    #[case::bools(
+        vec![CelValue::Bool(true), CelValue::Bool(false)],
+        Some(CelValue::Bool(false))
+    )]
+    #[case::doubles(
+        vec![CelValue::Double(1.5), CelValue::Double(2.5)],
+        Some(CelValue::Double(2.5))
+    )]
+    fn test_list_last(#[case] input: Vec<CelValue>, #[case] expected_inner: Option<CelValue>) {
+        let list = CelValue::Array(input);
+        unsafe {
+            let result_ptr = cel_list_last(&list as *const CelValue);
+            let expected = CelValue::Optional(expected_inner.map(Box::new));
+            assert_eq!(&*result_ptr, &expected);
+            cel_free_value(result_ptr);
+        }
+    }
+
+    #[test]
+    fn test_list_last_non_list_returns_error() {
+        let val = CelValue::Int(42);
+        unsafe {
+            let result_ptr = cel_list_last(&val as *const CelValue);
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
         }
