@@ -27,6 +27,16 @@ pub fn compile_named_function(
     }
 
     match func_name {
+        // cel.bind(var, init, body) — variable binding macro.
+        // Must come before any unguarded arm to avoid shadowing user-defined "bind" functions.
+        "bind"
+            if matches!(
+                &call_expr.target,
+                Some(t) if matches!(&t.expr, cel::common::ast::Expr::Ident(name) if name == "cel")
+            ) =>
+        {
+            ext::bind::compile_cel_bind(call_expr, body, env, ctx, module)
+        }
         // Sets extension: sets.contains / sets.intersects / sets.equivalent
         // Must come BEFORE the core string arm that unconditionally matches "contains".
         // The guard on the "sets" namespace routes `sets.contains(...)` here instead of

@@ -84,6 +84,8 @@ conformance-%: $(RUNTIME_TARGET)
 			cargo test --package conformance --test conformance conformance_encoders_ext_tests -- --nocapture ;; \
 		math-ext) \
 			cargo test --package conformance --test conformance conformance_math_ext_tests -- --nocapture ;; \
+		bindings-ext) \
+			cargo test --package conformance --test conformance conformance_bindings_ext_tests -- --nocapture ;; \
 		all) \
 			$(MAKE) conformance-tests ;; \
 		list) \
@@ -106,6 +108,7 @@ conformance-%: $(RUNTIME_TARGET)
 			echo "  conformance-optionals   - CEL optional type support"; \
 			echo "  conformance-encoders-ext - Base64 encoder/decoder extension"; \
 			echo "  conformance-math-ext    - Math extension (greatest, least, ceil, abs, bitwise, etc.)"; \
+		echo "  conformance-bindings-ext - Bindings extension (cel.bind variable binding)"; \
 			echo "  conformance-all         - Run all conformance tests"; \
 			echo "  conformance-list        - Show this list"; \
 			echo ""; \
@@ -150,6 +153,8 @@ conformance-sections-%: $(RUNTIME_TARGET)
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_encoders_ext_tests -- --nocapture ;; \
 		math-ext) \
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_math_ext_tests -- --nocapture ;; \
+		bindings-ext) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_bindings_ext_tests -- --nocapture ;; \
 		*) \
 			echo "Error: Unknown conformance test suite '$*'"; \
 			echo ""; \
@@ -168,6 +173,7 @@ conformance-sections-%: $(RUNTIME_TARGET)
 			echo "  conformance-sections-optionals   - List sections in optionals suite"; \
 			echo "  conformance-sections-encoders-ext - List sections in encoders-ext suite"; \
 			echo "  conformance-sections-math-ext    - List sections in math-ext suite"; \
+		echo "  conformance-sections-bindings-ext - List sections in bindings-ext suite"; \
 			echo ""; \
 			echo "To list tests in a specific section, use:"; \
 			echo "  CONFORMANCE_SECTION=<section_name> make conformance-sections-<suite>"; \
