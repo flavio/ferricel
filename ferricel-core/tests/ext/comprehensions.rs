@@ -1,0 +1,145 @@
+use crate::common::*;
+use rstest::rstest;
+
+// ─── exists(i, v, pred) ────────────────────────────────────────────────────
+
+#[rstest]
+#[case::all_true("[1, 2, 3].exists(i, v, i > -1 && v > 0)", 1)]
+#[case::some_true("[1, 2, 3].exists(i, v, i == 1 && v == 2)", 1)]
+#[case::none_true("![1, 2, 3].exists(i, v, i > 2 && v > 3)", 1)]
+#[case::empty("![].exists(i, v, i == 0 || v == 2)", 1)]
+// true absorbs errors that come later (short-circuit)
+#[case::type_shortcircuit("[1, 'foo', 3].exists(i, v, i == 1 && v != '1')", 1)]
+// Map receiver
+#[case::map_basic("{'key1':1, 'key2':2}.exists(k, v, k == 'key2' && v == 2)", 1)]
+#[case::map_not("!{'key1':1, 'key2':2}.exists(k, v, k == 'key3' || v == 3)", 1)]
+fn test_exists_two_var(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' expected {}",
+        expr, expected
+    );
+}
+
+// ─── all(i, v, pred) ───────────────────────────────────────────────────────
+
+#[rstest]
+#[case::all_true("[1, 2, 3].all(i, v, i > -1 && v > 0)", 1)]
+#[case::some_true("![1, 2, 3].all(i, v, i == 1 && v == 2)", 1)]
+#[case::none_true("![1, 2, 3].all(i, v, i == 3 || v == 4)", 1)]
+#[case::empty("[].all(i, v, i > -1 || v > 0)", 1)]
+// false absorbs errors that come after (short-circuit)
+#[case::error_shortcircuit("[1, 2, 3].all(i, v, 6 / (2 - v) == i) == false", 1)]
+// Map receiver
+#[case::map_not("!{'key1':1, 'key2':2}.all(k, v, k == 'key2' && v == 2)", 1)]
+fn test_all_two_var(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' expected {}",
+        expr, expected
+    );
+}
+
+// ─── existsOne(i, v, pred) ─────────────────────────────────────────────────
+
+#[rstest]
+#[case::empty("![].existsOne(i, v, i == 3 || v == 7)", 1)]
+#[case::one_true("[7].existsOne(i, v, i == 0 && v == 7)", 1)]
+#[case::one_false("![8].existsOne(i, v, i == 0 && v == 7)", 1)]
+#[case::none("![1, 2, 3].existsOne(i, v, i > 2 || v > 3)", 1)]
+#[case::one("[5, 7, 8].existsOne(i, v, v % 5 == i)", 1)]
+#[case::many("![0, 1, 2, 3, 4].existsOne(i, v, v % 2 == i)", 1)]
+// Map receiver — exactly one entry satisfies the predicate
+#[case::map_one(
+    "{6: 'six', 7: 'seven', 8: 'eight'}.existsOne(k, v, k % 5 == 2 && v == 'seven')",
+    1
+)]
+fn test_exists_one_two_var(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' expected {}",
+        expr, expected
+    );
+}
+
+// ─── transformList(i, v, expr) ─────────────────────────────────────────────
+
+#[test]
+fn test_transform_list_empty() {
+    let r = compile_and_execute_json("[].transformList(i, v, i + v)").unwrap();
+    assert_eq!(r, serde_json::json!([]));
+}
+
+#[test]
+fn test_transform_list_one() {
+    let r = compile_and_execute_json("[3].transformList(i, v, v * v + i)").unwrap();
+    assert_eq!(r, serde_json::json!([9]));
+}
+
+#[test]
+fn test_transform_list_many() {
+    let r = compile_and_execute_json("[2, 4, 6].transformList(i, v, v / 2 + i)").unwrap();
+    assert_eq!(r, serde_json::json!([1, 3, 5]));
+}
+
+#[test]
+fn test_transform_list_filter_empty() {
+    let r = compile_and_execute_json("[].transformList(i, v, i > 0, v)").unwrap();
+    assert_eq!(r, serde_json::json!([]));
+}
+
+#[test]
+fn test_transform_list_filter_one() {
+    let r =
+        compile_and_execute_json("[3].transformList(i, v, i == 0 && v == 3, v * v + i)").unwrap();
+    assert_eq!(r, serde_json::json!([9]));
+}
+
+#[test]
+fn test_transform_list_filter_many() {
+    let r = compile_and_execute_json("[2, 4, 6].transformList(i, v, i != 1 && v != 4, v / 2 + i)")
+        .unwrap();
+    assert_eq!(r, serde_json::json!([1, 5]));
+}
+
+// ─── transformMap(k, v, expr) ──────────────────────────────────────────────
+
+#[test]
+fn test_transform_map_empty() {
+    let r = compile_and_execute_json("{}.transformMap(k, v, k + v)").unwrap();
+    assert_eq!(r, serde_json::json!({}));
+}
+
+#[test]
+fn test_transform_map_one() {
+    let r = compile_and_execute_json("{'foo': 'bar'}.transformMap(k, v, k + v)").unwrap();
+    assert_eq!(r, serde_json::json!({"foo": "foobar"}));
+}
+
+#[test]
+fn test_transform_map_filter_empty() {
+    let r = compile_and_execute_json("{}.transformMap(k, v, k == 'x', k + v)").unwrap();
+    assert_eq!(r, serde_json::json!({}));
+}
+
+#[test]
+fn test_transform_map_filter_one() {
+    let r = compile_and_execute_json(
+        "{'foo': 'bar'}.transformMap(k, v, k == 'foo' && v == 'bar', k + v)",
+    )
+    .unwrap();
+    assert_eq!(r, serde_json::json!({"foo": "foobar"}));
+}
+
+// transformMap on list receiver: key = index (Int), value = transform result
+#[test]
+fn test_transform_map_from_list() {
+    let r = compile_and_execute_json(
+        "[1, 2, 3].transformMap(indexVar, valueVar, (indexVar * valueVar) + valueVar)",
+    )
+    .unwrap();
+    assert_eq!(r, serde_json::json!({"0": 1, "1": 4, "2": 9}));
+}

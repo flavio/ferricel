@@ -12,6 +12,7 @@ mod extensions;
 mod field_access;
 mod globals;
 mod helpers;
+mod iter;
 mod kubernetes;
 pub mod logging;
 mod logical;
@@ -64,7 +65,9 @@ pub use field_access::{cel_get_field, cel_has_field};
 
 pub use array::{cel_array_get, cel_array_len, cel_array_push, cel_create_array};
 
-pub use map::{cel_create_map, cel_map_insert};
+pub use map::{cel_create_map, cel_map_get, cel_map_insert, cel_map_keys};
+
+pub use iter::{cel_cond_inc, cel_iter_prepare, cel_iter_var1, cel_iter_var2};
 
 pub use helpers::{
     cel_create_bool, cel_create_double, cel_create_duration, cel_create_error, cel_create_int,

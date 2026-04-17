@@ -37,6 +37,26 @@ pub fn compile_named_function(
         {
             ext::bind::compile_cel_bind(call_expr, body, env, ctx, module)
         }
+        // Two-variable comprehension macros — exists/all/existsOne with 3 args.
+        // The CEL parser (v0.13.0) does NOT expand these as Comprehension nodes, so they
+        // arrive here as regular Call nodes. Must come BEFORE the unguarded "exists" etc.
+        // arms (there are none currently, but guard ensures correct routing if added later).
+        "exists" | "all" | "existsOne" | "exists_one"
+            if call_expr.args.len() == 3 && call_expr.target.is_some() =>
+        {
+            ext::comprehensions::compile_two_var_comprehension(
+                func_name, call_expr, body, env, ctx, module,
+            )
+        }
+        // transformList / transformMap — always two-variable (3 or 4 args).
+        "transformList" | "transformMap"
+            if (call_expr.args.len() == 3 || call_expr.args.len() == 4)
+                && call_expr.target.is_some() =>
+        {
+            ext::comprehensions::compile_two_var_comprehension(
+                func_name, call_expr, body, env, ctx, module,
+            )
+        }
         // Sets extension: sets.contains / sets.intersects / sets.equivalent
         // Must come BEFORE the core string arm that unconditionally matches "contains".
         // The guard on the "sets" namespace routes `sets.contains(...)` here instead of

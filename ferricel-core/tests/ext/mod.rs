@@ -1,3 +1,4 @@
+mod comprehensions;
 mod encoders;
 mod lists;
 mod math;

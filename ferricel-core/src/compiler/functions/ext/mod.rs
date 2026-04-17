@@ -5,6 +5,7 @@
 //! See: <https://github.com/google/cel-spec/blob/master/extensions/>
 
 pub mod bind;
+pub mod comprehensions;
 pub mod encoders;
 pub mod lists;
 pub mod math;

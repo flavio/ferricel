@@ -107,6 +107,22 @@ pub enum RuntimeFunction {
     // Map
     CreateMap,
     MapInsert,
+    /// Returns the keys of a map as an array.
+    MapKeys,
+    /// Gets a value from a map by key.
+    MapGet,
+
+    // Polymorphic iteration primitives (work for both lists and maps)
+    /// Prepares the range for iteration: lists → self; maps → keys array.
+    IterPrepare,
+    /// Returns var1 for the current iteration step: lists → Int(index); maps → key.
+    IterVar1,
+    /// Returns var2 for the current iteration step: lists → element; maps → value.
+    IterVar2,
+
+    // Two-variable comprehension helpers
+    /// For existsOne: if pred=Bool(true) → accu+1; if Bool(false) → accu; if error → error.
+    CondInc,
 
     // Value Creation Helpers
     CreateInt,
@@ -449,6 +465,14 @@ impl RuntimeFunction {
 
             Self::CreateMap => "cel_create_map",
             Self::MapInsert => "cel_map_insert",
+            Self::MapKeys => "cel_map_keys",
+            Self::MapGet => "cel_map_get",
+
+            Self::IterPrepare => "cel_iter_prepare",
+            Self::IterVar1 => "cel_iter_var1",
+            Self::IterVar2 => "cel_iter_var2",
+
+            Self::CondInc => "cel_cond_inc",
 
             Self::CreateInt => "cel_create_int",
             Self::CreateUint => "cel_create_uint",

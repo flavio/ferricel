@@ -422,6 +422,10 @@ pub fn compile_struct(
 /// Compile an `Expr::Comprehension` node: macros like `all()`, `exists()`, `filter()`, etc.
 ///
 /// The CEL parser automatically expands these macros into comprehension expressions.
+///
+/// This implementation supports both list and map ranges via `cel_iter_prepare`:
+/// - Lists: iterates elements directly (index 0..len).
+/// - Maps: `cel_iter_prepare` extracts the keys into an array; the iter_var is bound to each key.
 pub fn compile_comprehension(
     comp_expr: &ComprehensionExpr,
     body: &mut InstrSeqBuilder,
@@ -429,35 +433,36 @@ pub fn compile_comprehension(
     ctx: &CompilerContext,
     module: &mut walrus::Module,
 ) -> Result<(), anyhow::Error> {
-    // Step 1: Compile the iter_range (the array to iterate over)
+    // Step 1: Compile the iter_range (the list or map to iterate over)
     compile_expr(&comp_expr.iter_range.expr, body, env, ctx, module)?;
 
-    // Create a local to hold the array pointer
-    let array_ptr_local = module.locals.add(ValType::I32);
-    body.local_set(array_ptr_local);
+    // Store the range pointer (original; used for element access)
+    let range_local = module.locals.add(ValType::I32);
+    body.local_set(range_local);
 
-    // Step 2: Get the array length
-    body.local_get(array_ptr_local);
+    // Step 2: Prepare for iteration — for lists returns range itself; for maps returns keys array.
+    body.local_get(range_local);
+    body.call(env.get(RuntimeFunction::IterPrepare));
+    let prepared_local = module.locals.add(ValType::I32);
+    body.local_set(prepared_local);
+
+    // Step 3: Get the iteration length from the prepared array
+    body.local_get(prepared_local);
     body.call(env.get(RuntimeFunction::ArrayLen)); // Returns i32 length
-
-    // Create a local to hold the length
     let length_local = module.locals.add(ValType::I32);
     body.local_set(length_local);
 
-    // Step 3: Initialize the accumulator variable
-    // Compile accu_init (e.g., CelValue::Bool(true) for all())
+    // Step 4: Initialize the accumulator variable
     compile_expr(&comp_expr.accu_init.expr, body, env, ctx, module)?;
-
-    // Create a local to hold the accumulator pointer
     let accu_local = module.locals.add(ValType::I32);
     body.local_set(accu_local);
 
-    // Step 4: Initialize loop counter (index = 0)
+    // Step 5: Initialize loop counter (index = 0)
     let index_local = module.locals.add(ValType::I32);
     body.i32_const(0);
     body.local_set(index_local);
 
-    // Step 5: Create the loop using WASM block/loop instructions
+    // Step 6: Create the loop using WASM block/loop instructions
     // Structure: block $exit { loop $continue { ... } }
     let exit_block = body.dangling_instr_seq(None);
     let exit_block_id = exit_block.id();
@@ -482,12 +487,13 @@ pub fn compile_comprehension(
         block: exit_block_id,
     }); // Exit if true
 
-    // Get the current element: cel_array_get(array_ptr, index)
-    loop_body.local_get(array_ptr_local);
+    // Get the current element via cel_iter_var2(range, prepared, index).
+    // For lists: returns array[index]. For maps: returns map_value[key].
+    // The iter_var in single-var comprehensions is always bound to var2 (the value/element).
+    loop_body.local_get(range_local);
+    loop_body.local_get(prepared_local);
     loop_body.local_get(index_local);
-    loop_body.call(env.get(RuntimeFunction::ArrayGet)); // Returns *mut CelValue
-
-    // Create a local for the current element
+    loop_body.call(env.get(RuntimeFunction::IterVar2));
     let element_local = module.locals.add(ValType::I32);
     loop_body.local_set(element_local);
 
