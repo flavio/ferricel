@@ -485,7 +485,15 @@ pub unsafe extern "C" fn cel_value_add(
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot add null values";
                 "function" => "cel_value_add");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
+        }
+
+        // Propagate errors
+        if let CelValue::Error(_) = &*a_ptr {
+            return a_ptr;
+        }
+        if let CelValue::Error(_) = &*b_ptr {
+            return b_ptr;
         }
 
         let a_val = &*a_ptr;
@@ -494,8 +502,17 @@ pub unsafe extern "C" fn cel_value_add(
         match (a_val, b_val) {
             (CelValue::Int(a), CelValue::Int(b)) => {
                 debug!(log, "Performing Int addition"; "left" => *a, "right" => *b);
-                let result = arithmetic::cel_int_add(*a, *b);
-                cel_create_int(result)
+                match a.checked_add(*b) {
+                    Some(result) => cel_create_int(result),
+                    None => {
+                        error!(log, "Integer overflow in addition";
+                            "operation" => "cel_value_add",
+                            "type" => "Int",
+                            "left" => *a,
+                            "right" => *b);
+                        crate::error::create_error_value("return error for overflow")
+                    }
+                }
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
                 debug!(log, "Performing UInt addition"; "left" => *a, "right" => *b);
@@ -507,7 +524,7 @@ pub unsafe extern "C" fn cel_value_add(
                             "type" => "UInt",
                             "left" => *a,
                             "right" => *b);
-                        abort_with_error("return error for overflow");
+                        crate::error::create_error_value("return error for overflow")
                     }
                 }
             }
@@ -551,7 +568,7 @@ pub unsafe extern "C" fn cel_value_add(
                     "operation" => "cel_value_add",
                     "left_type" => format!("{:?}", a_val),
                     "right_type" => format!("{:?}", b_val));
-                abort_with_error("no such overload");
+                crate::error::create_error_value("no such overload")
             }
         }
     }
@@ -579,7 +596,15 @@ pub unsafe extern "C" fn cel_value_sub(
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot subtract null values";
                 "function" => "cel_value_sub");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
+        }
+
+        // Propagate errors
+        if let CelValue::Error(_) = &*a_ptr {
+            return a_ptr;
+        }
+        if let CelValue::Error(_) = &*b_ptr {
+            return b_ptr;
         }
 
         let a_val = &*a_ptr;
@@ -596,7 +621,7 @@ pub unsafe extern "C" fn cel_value_sub(
                             "type" => "Int",
                             "left" => *a,
                             "right" => *b);
-                        abort_with_error("return error for overflow");
+                        crate::error::create_error_value("return error for overflow")
                     }
                 }
             }
@@ -610,7 +635,7 @@ pub unsafe extern "C" fn cel_value_sub(
                             "type" => "UInt",
                             "left" => *a,
                             "right" => *b);
-                        abort_with_error("return error for overflow");
+                        crate::error::create_error_value("return error for overflow")
                     }
                 }
             }
@@ -636,7 +661,7 @@ pub unsafe extern "C" fn cel_value_sub(
                     "operation" => "cel_value_sub",
                     "left_type" => format!("{:?}", a_val),
                     "right_type" => format!("{:?}", b_val));
-                abort_with_error("no such overload");
+                crate::error::create_error_value("no such overload")
             }
         }
     }
@@ -661,7 +686,15 @@ pub unsafe extern "C" fn cel_value_mul(
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot multiply null values";
                 "function" => "cel_value_mul");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
+        }
+
+        // Propagate errors
+        if let CelValue::Error(_) = &*a_ptr {
+            return a_ptr;
+        }
+        if let CelValue::Error(_) = &*b_ptr {
+            return b_ptr;
         }
 
         let a_val = &*a_ptr;
@@ -678,7 +711,7 @@ pub unsafe extern "C" fn cel_value_mul(
                             "type" => "Int",
                             "left" => *a,
                             "right" => *b);
-                        abort_with_error("return error for overflow");
+                        crate::error::create_error_value("return error for overflow")
                     }
                 }
             }
@@ -692,7 +725,7 @@ pub unsafe extern "C" fn cel_value_mul(
                             "type" => "UInt",
                             "left" => *a,
                             "right" => *b);
-                        abort_with_error("return error for overflow");
+                        crate::error::create_error_value("return error for overflow")
                     }
                 }
             }
@@ -706,7 +739,7 @@ pub unsafe extern "C" fn cel_value_mul(
                     "operation" => "cel_value_mul",
                     "left_type" => format!("{:?}", a_val),
                     "right_type" => format!("{:?}", b_val));
-                abort_with_error("no such overload");
+                crate::error::create_error_value("no such overload")
             }
         }
     }
@@ -731,7 +764,15 @@ pub unsafe extern "C" fn cel_value_div(
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot divide null values";
                 "function" => "cel_value_div");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
+        }
+
+        // Propagate errors
+        if let CelValue::Error(_) = &*a_ptr {
+            return a_ptr;
+        }
+        if let CelValue::Error(_) = &*b_ptr {
+            return b_ptr;
         }
 
         let a_val = &*a_ptr;
@@ -781,7 +822,7 @@ pub unsafe extern "C" fn cel_value_div(
                     "operation" => "cel_value_div",
                     "left_type" => format!("{:?}", a_val),
                     "right_type" => format!("{:?}", b_val));
-                abort_with_error("no such overload");
+                crate::error::create_error_value("no such overload")
             }
         }
     }
@@ -807,7 +848,15 @@ pub unsafe extern "C" fn cel_value_mod(
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot modulo null values";
                 "function" => "cel_value_mod");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
+        }
+
+        // Propagate errors
+        if let CelValue::Error(_) = &*a_ptr {
+            return a_ptr;
+        }
+        if let CelValue::Error(_) = &*b_ptr {
+            return b_ptr;
         }
 
         let a_val = &*a_ptr;
@@ -822,11 +871,11 @@ pub unsafe extern "C" fn cel_value_mod(
                         "type" => "Int",
                         "dividend" => *a,
                         "divisor" => *b);
-                    abort_with_error("modulus by zero");
+                    return crate::error::create_error_value("modulus by zero");
                 }
                 match a.checked_rem(*b) {
                     Some(result) => cel_create_int(result),
-                    None => abort_with_error("return error for overflow"),
+                    None => crate::error::create_error_value("return error for overflow"),
                 }
             }
             (CelValue::UInt(a), CelValue::UInt(b)) => {
@@ -837,7 +886,7 @@ pub unsafe extern "C" fn cel_value_mod(
                         "type" => "UInt",
                         "dividend" => *a,
                         "divisor" => *b);
-                    abort_with_error("modulus by zero");
+                    return crate::error::create_error_value("modulus by zero");
                 }
                 cel_create_uint(a % b)
             }
@@ -846,7 +895,7 @@ pub unsafe extern "C" fn cel_value_mod(
                     "operation" => "cel_value_mod",
                     "left_type" => format!("{:?}", a_val),
                     "right_type" => format!("{:?}", b_val));
-                abort_with_error("no such overload")
+                crate::error::create_error_value("no_such_overload")
             }
         }
     }
@@ -1102,7 +1151,7 @@ pub unsafe extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot compare null values";
                 "function" => "cel_value_eq");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
         }
 
         // Check for errors and propagate them BEFORE type checking
@@ -1138,7 +1187,7 @@ pub unsafe extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot compare null values";
                 "function" => "cel_value_ne");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
         }
 
         // Check for errors and propagate them BEFORE type checking
@@ -1174,7 +1223,7 @@ pub unsafe extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot compare null values";
                 "function" => "cel_value_gt");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
         }
 
         let a_val = &*a_ptr;
@@ -1223,7 +1272,7 @@ pub unsafe extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue
                     "operation" => "cel_value_gt",
                     "left_type" => format!("{:?}", a_val),
                     "right_type" => format!("{:?}", b_val));
-                abort_with_error("no such overload");
+                return crate::error::create_error_value("no such overload");
             }
         };
         cel_create_bool(if result { 1 } else { 0 })
@@ -1291,7 +1340,7 @@ pub unsafe extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot compare null values";
                 "function" => "cel_value_lt");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
         }
 
         // Check for errors and propagate them BEFORE type checking
@@ -1312,7 +1361,7 @@ pub unsafe extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue
                     "operation" => "cel_value_lt",
                     "left_type" => format!("{:?}", a_val),
                     "right_type" => format!("{:?}", b_val));
-                abort_with_error("no such overload")
+                crate::error::create_error_value("no such overload")
             }
         }
     }
@@ -1338,7 +1387,7 @@ pub unsafe extern "C" fn cel_value_gte(
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot compare null values";
                 "function" => "cel_value_gte");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
         }
 
         // Check for errors and propagate them BEFORE type checking
@@ -1388,7 +1437,7 @@ pub unsafe extern "C" fn cel_value_gte(
                     "operation" => "cel_value_gte",
                     "left_type" => format!("{:?}", a_val),
                     "right_type" => format!("{:?}", b_val));
-                abort_with_error("no such overload");
+                return crate::error::create_error_value("no such overload");
             }
         };
         cel_create_bool(if result { 1 } else { 0 })
@@ -1415,7 +1464,7 @@ pub unsafe extern "C" fn cel_value_lte(
         if a_ptr.is_null() || b_ptr.is_null() {
             error!(log, "Cannot compare null values";
                 "function" => "cel_value_lte");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
         }
 
         // Check for errors and propagate them BEFORE type checking
@@ -1465,7 +1514,7 @@ pub unsafe extern "C" fn cel_value_lte(
                     "operation" => "cel_value_lte",
                     "left_type" => format!("{:?}", a_val),
                     "right_type" => format!("{:?}", b_val));
-                abort_with_error("no such overload");
+                return crate::error::create_error_value("no such overload");
             }
         };
         cel_create_bool(if result { 1 } else { 0 })
@@ -1500,6 +1549,7 @@ pub unsafe extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
         if ptr.is_null() {
             error!(log, "Cannot get size of null value";
                 "function" => "cel_value_size");
+            // size() returns i64, can't return an error pointer — abort is the only option here
             abort_with_error("no such overload");
         }
 
@@ -1548,17 +1598,22 @@ pub unsafe extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
         if ptr.is_null() {
             error!(log, "Cannot negate null value";
                 "function" => "cel_value_negate");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
         }
 
         let value = &*ptr;
+
+        // Propagate errors
+        if let CelValue::Error(_) = value {
+            return ptr;
+        }
 
         match value {
             CelValue::Int(i) => {
                 debug!(log, "Performing Int negation"; "value" => *i);
                 match i.checked_neg() {
                     Some(result) => cel_create_int(result),
-                    None => abort_with_error("return error for overflow"),
+                    None => crate::error::create_error_value("return error for overflow"),
                 }
             }
             CelValue::Double(d) => {
@@ -1573,7 +1628,7 @@ pub unsafe extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
                 error!(log, "Negation not supported for this type";
                     "function" => "cel_value_negate",
                     "type" => format!("{:?}", other));
-                abort_with_error("no such overload")
+                crate::error::create_error_value("no such overload")
             }
         }
     }
@@ -1610,12 +1665,12 @@ pub unsafe extern "C" fn cel_value_index(
         if container_ptr.is_null() {
             error!(log, "Cannot index null container";
                 "function" => "cel_value_index");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
         }
         if index_ptr.is_null() {
             error!(log, "Cannot use null index";
                 "function" => "cel_value_index");
-            abort_with_error("no such overload");
+            return crate::error::create_error_value("no such overload");
         }
 
         let container = &*container_ptr;
@@ -1659,7 +1714,7 @@ pub unsafe extern "C" fn cel_value_index(
                         error!(log, "UInt index too large to convert to Int";
                             "function" => "cel_value_index",
                             "index" => *idx);
-                        abort_with_error("no such overload");
+                        return crate::error::create_error_value("no such overload");
                     }
                 };
                 array::cel_array_get(container_ptr, idx_i64 as i32)
@@ -1694,7 +1749,7 @@ pub unsafe extern "C" fn cel_value_index(
                         error!(log, "Map key must be bool, int, uint, or string";
                             "function" => "cel_value_index",
                             "key_type" => format!("{:?}", key));
-                        abort_with_error("no such overload");
+                        crate::error::create_error_value("no such overload")
                     }
                 }
             }
@@ -1711,7 +1766,7 @@ pub unsafe extern "C" fn cel_value_index(
                     "function" => "cel_value_index",
                     "container_type" => format!("{:?}", container),
                     "index_type" => format!("{:?}", index));
-                abort_with_error("no such overload");
+                crate::error::create_error_value("no such overload")
             }
         }
     }

@@ -24,6 +24,7 @@ use slog::warn;
 ///
 /// # Errors
 /// Calls cel_abort on integer overflow
+#[allow(dead_code)]
 pub(crate) fn cel_int_add(a: i64, b: i64) -> i64 {
     match a.checked_add(b) {
         Some(result) => result,
