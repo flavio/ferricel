@@ -88,6 +88,8 @@ conformance-%: $(RUNTIME_TARGET)
 			cargo test --package conformance --test conformance conformance_bindings_ext_tests -- --nocapture ;; \
 		macros2) \
 			cargo test --package conformance --test conformance conformance_macros2_tests -- --nocapture ;; \
+		macros) \
+			cargo test --package conformance --test conformance conformance_macros_tests -- --nocapture ;; \
 		all) \
 			$(MAKE) conformance-tests ;; \
 		list) \
@@ -159,6 +161,8 @@ conformance-sections-%: $(RUNTIME_TARGET)
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_bindings_ext_tests -- --nocapture ;; \
 		macros2) \
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_macros2_tests -- --nocapture ;; \
+		macros) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_macros_tests -- --nocapture ;; \
 		*) \
 			echo "Error: Unknown conformance test suite '$*'"; \
 			echo ""; \

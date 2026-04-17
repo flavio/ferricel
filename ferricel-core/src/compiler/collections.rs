@@ -426,6 +426,18 @@ pub fn compile_struct(
 /// This implementation supports both list and map ranges via `cel_iter_prepare`:
 /// - Lists: iterates elements directly (index 0..len).
 /// - Maps: `cel_iter_prepare` extracts the keys into an array; the iter_var is bound to each key.
+///
+/// # Map iteration (single-variable)
+///
+/// For single-variable comprehensions over maps, the iter_var is bound to the **key** at each
+/// step. This matches the CEL specification: `m.exists(k, pred)`, `m.all(k, pred)`,
+/// `m.map(k, f)`, and `m.filter(k, pred)` all iterate over the map's keys.
+///
+/// # Map/filter error propagation
+///
+/// The `map` and `filter` macros expand to a list-concat loop_step (`accu + [expr]`). If the
+/// transform or predicate expression produces a `CelValue::Error`, this implementation detects
+/// the pattern and propagates the error immediately rather than embedding it in the result list.
 pub fn compile_comprehension(
     comp_expr: &ComprehensionExpr,
     body: &mut InstrSeqBuilder,
@@ -487,37 +499,88 @@ pub fn compile_comprehension(
         block: exit_block_id,
     }); // Exit if true
 
-    // Get the current element via cel_iter_var2(range, prepared, index).
-    // For lists: returns array[index]. For maps: returns map_value[key].
-    // The iter_var in single-var comprehensions is always bound to var2 (the value/element).
-    loop_body.local_get(range_local);
+    // Get the current element/key using ArrayGet(prepared, index).
+    //
+    // For lists:  prepared = the list itself  → ArrayGet returns the element at that index.
+    // For maps:   prepared = the keys array   → ArrayGet returns the key at that index.
+    //
+    // This correctly implements single-var CEL semantics:
+    //   - list.exists(e, pred)  → e = each element
+    //   - map.exists(k, pred)   → k = each key     (NOT the value)
+    //
+    // Previously `cel_iter_var2` was used here, which returns the map VALUE for maps —
+    // that violated the CEL spec which requires single-var map iteration over keys.
     loop_body.local_get(prepared_local);
     loop_body.local_get(index_local);
-    loop_body.call(env.get(RuntimeFunction::IterVar2));
+    loop_body.call(env.get(RuntimeFunction::ArrayGet));
     let element_local = module.locals.add(ValType::I32);
     loop_body.local_set(element_local);
 
-    // Create a new context with the iteration variable bound to the element
+    // Create a new context with the iteration variable bound to the element/key
     let inner_ctx = ctx.with_local(comp_expr.iter_var.clone(), element_local);
 
     // Also bind the accumulator variable to the context
     let inner_ctx = inner_ctx.with_local(comp_expr.accu_var.clone(), accu_local);
 
-    // Compile the loop_step (e.g., @result && predicate)
-    // This updates the accumulator
-    compile_expr(
-        &comp_expr.loop_step.expr,
-        &mut loop_body,
-        env,
-        &inner_ctx,
-        module,
-    )?;
+    // Detect the map/filter pattern: accu_init is an empty list and loop_step is a list concat.
+    // In this case we compile the step with explicit error propagation instead of using the
+    // generic compile_expr path (which would embed errors into the result list).
+    let is_list_accumulator =
+        matches!(&comp_expr.accu_init.expr, Expr::List(l) if l.elements.is_empty());
+    let map_inner = if is_list_accumulator {
+        extract_map_concat_inner(&comp_expr.loop_step.expr, &comp_expr.accu_var)
+    } else {
+        None
+    };
 
-    // Store the new accumulator value
-    loop_body.local_set(accu_local);
+    if let Some(inner_expr) = map_inner {
+        // Map/filter pattern: compile inner_expr, check for error, then push to accu.
+        // If inner_expr errors, store error in accu and exit the loop.
+        let result_local = module.locals.add(ValType::I32);
+        compile_expr(inner_expr, &mut loop_body, env, &inner_ctx, module)?;
+        loop_body.local_set(result_local);
+        loop_body.local_get(result_local);
+        loop_body.call(env.get(RuntimeFunction::IsError));
+
+        let err_then = loop_body.dangling_instr_seq(None);
+        let err_then_id = err_then.id();
+        let err_else = loop_body.dangling_instr_seq(None);
+        let err_else_id = err_else.id();
+        {
+            let mut t = loop_body.instr_seq(err_then_id);
+            t.local_get(result_local);
+            t.local_set(accu_local);
+            t.instr(walrus::ir::Br {
+                block: exit_block_id,
+            });
+        }
+        {
+            let mut e = loop_body.instr_seq(err_else_id);
+            e.local_get(accu_local);
+            e.local_get(result_local);
+            e.call(env.get(RuntimeFunction::ArrayPush));
+        }
+        loop_body.instr(walrus::ir::IfElse {
+            consequent: err_then_id,
+            alternative: err_else_id,
+        });
+    } else {
+        // General case: compile the loop_step normally.
+        compile_expr(
+            &comp_expr.loop_step.expr,
+            &mut loop_body,
+            env,
+            &inner_ctx,
+            module,
+        )?;
+        // Store the new accumulator value
+        loop_body.local_set(accu_local);
+    }
 
     // Check the loop_cond to see if we should short-circuit
     // For all(), this is: @not_strictly_false(@result)
+    // Re-bind accu in inner_ctx since it may have been updated
+    let inner_ctx = inner_ctx.with_local(comp_expr.accu_var.clone(), accu_local);
     compile_expr(
         &comp_expr.loop_cond.expr,
         &mut loop_body,
@@ -553,4 +616,44 @@ pub fn compile_comprehension(
     compile_expr(&comp_expr.result.expr, body, env, &result_ctx, module)?;
 
     Ok(())
+}
+
+/// Detect the `map` comprehension loop_step pattern.
+///
+/// The CEL parser expands `list.map(n, f(n))` to a comprehension whose `loop_step` is:
+///   `_+_(@accu, [f(n)])`
+///
+/// For `filter`, the step is conditional:
+///   `@accu_var ? _+_(@accu, [n]) : @accu`  (i.e. `_?_(_:_)(pred, _+_(@accu, [elem]), @accu)`)
+///
+/// In both cases we want to find the inner expression being appended so we can check it for
+/// errors before pushing. Returns the inner expression if the pattern matches, `None` otherwise.
+fn extract_map_concat_inner<'a>(step: &'a Expr, accu_var: &str) -> Option<&'a Expr> {
+    match step {
+        // Direct concat: _+_(@accu, [inner])
+        Expr::Call(call) if call.func_name == "_+_" && call.args.len() == 2 => {
+            let rhs = &call.args[1].expr;
+            if let Expr::List(list) = rhs
+                && list.elements.len() == 1
+                && !list.optional_indices.contains(&0)
+            {
+                return Some(&list.elements[0].expr);
+            }
+            None
+        }
+        // Filter conditional: _?_(_:_)(pred, _+_(@accu, [elem]), @accu_ref)
+        Expr::Call(call) if call.func_name == "_?_(_:_)" && call.args.len() == 3 => {
+            // args[1] should be _+_(@accu, [elem])
+            let consequent = &call.args[1].expr;
+            // args[2] should be @accu (the else branch keeps accu unchanged)
+            let alternative = &call.args[2].expr;
+            let alt_is_accu = matches!(alternative, Expr::Ident(name) if name == accu_var);
+            if alt_is_accu {
+                extract_map_concat_inner(consequent, accu_var)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }

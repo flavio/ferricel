@@ -137,3 +137,11 @@ fn conformance_macros2_tests() {
 
     runner.run_test_file(test_file);
 }
+
+#[test]
+fn conformance_macros_tests() {
+    let runner = ConformanceTestRunner::new();
+    let test_file = Path::new("../cel-spec/tests/simple/testdata/macros.textproto");
+
+    runner.run_test_file(test_file);
+}
