@@ -164,7 +164,83 @@ Warning: Struct 'cel.expr.TestAllTypes' looks like a protobuf message, but no sc
 
 The compilation will succeed, but wrapper type semantics won't work correctly. To fix this, provide the proto descriptor.
 
-## Building from Source
+## CEL Specification Coverage
+
+Ferricel targets full compliance with the [CEL specification](https://github.com/google/cel-spec) and the [cel-go extension libraries](https://pkg.go.dev/github.com/google/cel-go/ext). Conformance is validated against the official CEL conformance test suite (**1458/1460 passing, 99.9%**). The two remaining failures are parser-level bugs in the upstream `cel` crate (negative hex literals and a string escape sequence edge case).
+
+### Core CEL Specification
+
+| Feature | Status |
+|---|---|
+| Integer arithmetic (`+`, `-`, `*`, `/`, `%`) with overflow detection | Supported |
+| Floating-point arithmetic | Supported |
+| Unsigned integer (`uint`) arithmetic | Supported |
+| Boolean logic (`&&`, `\|\|`, `!`) with short-circuit evaluation | Supported |
+| Comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`) | Supported |
+| String operations (`+`, `size`, `contains`, `startsWith`, `endsWith`, `matches`) | Supported |
+| Bytes operations | Supported |
+| List literals, indexing, membership (`in`) | Supported |
+| Map literals, field access, indexing | Supported |
+| Conditional expressions (`? :`) | Supported |
+| Null handling and null propagation | Supported |
+| Type conversions (`int()`, `uint()`, `double()`, `string()`, `bytes()`, `bool()`) | Supported |
+| Timestamp and Duration types | Supported |
+| Timestamp/Duration arithmetic and field accessors | Supported |
+| `size()` function | Supported |
+| Single-variable comprehensions (`all`, `exists`, `exists_one`, `map`, `filter`) | Supported |
+| Logical error propagation through `&&` / `\|\|` | Supported |
+| Optional types (`optional.of`, `optional.none`, `.orValue`, `.value`) | Supported |
+| Protocol Buffer message construction and field access | Supported |
+| Protobuf wrapper type semantics (`google.protobuf.*Value`) | Supported |
+| `dyn()` type erasure | Supported |
+| `type()` introspection | Supported |
+
+### cel-go Extension Libraries
+
+| Extension | Functions | Status |
+|---|---|---|
+| **Bindings** | `cel.bind(var, init, body)` | Supported |
+| **Encoders** | `base64.encode`, `base64.decode` | Supported |
+| **Math** | `math.greatest`, `math.least` | Supported |
+| | `math.bitOr`, `math.bitAnd`, `math.bitXor`, `math.bitNot` | Supported |
+| | `math.bitShiftLeft`, `math.bitShiftRight` | Supported |
+| | `math.ceil`, `math.floor`, `math.round`, `math.trunc` | Supported |
+| | `math.abs`, `math.sign` | Supported |
+| | `math.isInf`, `math.isNaN`, `math.isFinite` | Supported |
+| | `math.sqrt` | Supported |
+| **Strings** | `charAt`, `indexOf`, `lastIndexOf` | Supported |
+| | `lowerAscii`, `upperAscii`, `trim` | Supported |
+| | `replace`, `split`, `substring`, `join` | Supported |
+| | `reverse`, `strings.quote` | Supported |
+| | `format` (string interpolation) | Supported |
+| **Lists** | `slice`, `flatten`, `distinct`, `reverse` | Supported |
+| | `sort`, `sortBy` | Supported |
+| | `first`, `last` | Supported |
+| | `lists.range(n)` | Supported |
+| **Sets** | `sets.contains`, `sets.equivalent`, `sets.intersects` | Supported |
+| **TwoVarComprehensions** | `all(i, v, pred)`, `exists(i, v, pred)`, `existsOne(i, v, pred)` | Supported |
+| | `transformList(i, v, [filter,] expr)` | Supported |
+| | `transformMap(i, v, [filter,] expr)` | Supported |
+| | `transformMapEntry(i, v, [filter,] mapExpr)` | Supported |
+| **Regex** | `regex.replace`, `regex.extract`, `regex.extractAll` | Supported |
+| **Protos** | `proto.getExt`, `proto.hasExt` | Not supported |
+
+### Kubernetes CEL Extensions
+
+Ferricel also supports the [Kubernetes CEL validation libraries](https://kubernetes.io/docs/reference/using-api/cel/):
+
+| Extension | Status |
+|---|---|
+| IP address functions (`ip()`, `isIP()`, `family()`, etc.) | Supported |
+| CIDR functions (`cidr()`, `isCIDR()`, `containsIP()`, etc.) | Supported |
+| URL functions (`url()`, `isURL()`, `getHost()`, etc.) | Supported |
+| Quantity functions (`quantity()`, `isQuantity()`, `add()`, `sub()`, etc.) | Supported |
+| Semver functions (`semver()`, `isSemver()`, `major()`, `minor()`, `patch()`, etc.) | Supported |
+| Format validation (`format.named()`, `format.dns1123Label()`, etc.) | Supported |
+| List extensions (`isSorted()`, `sum()`, `min()`, `max()`) | Supported |
+| Regex extensions (`find()`, `findAll()`) | Supported |
+
+
 
 ```bash
 # Build the project
