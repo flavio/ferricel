@@ -198,15 +198,24 @@ impl ConformanceTestRunner {
                 std::process::exit(1);
             }
 
-            // Collect results for this section with parallel execution
-            let section_results: Vec<_> = tests_to_run
-                .par_iter()
-                .map(|test| {
-                    let result = self.run_single_test(file_name, &section.name, test);
-                    stats.record(&result);
-                    (test.name.clone(), result)
-                })
-                .collect();
+            // Collect results for this section with parallel execution.
+            // Use a custom thread pool with an 8 MB stack to avoid overflows in
+            // the recursive compiler (compile_expr) on Rayon worker threads,
+            // which default to only 2 MB on Linux.
+            let pool = rayon::ThreadPoolBuilder::new()
+                .stack_size(8 * 1024 * 1024)
+                .build()
+                .expect("Failed to build Rayon thread pool");
+            let section_results: Vec<_> = pool.install(|| {
+                tests_to_run
+                    .par_iter()
+                    .map(|test| {
+                        let result = self.run_single_test(file_name, &section.name, test);
+                        stats.record(&result);
+                        (test.name.clone(), result)
+                    })
+                    .collect()
+            });
 
             // Print results sequentially for cleaner output
             for (test_name, result) in section_results {
