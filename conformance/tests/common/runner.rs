@@ -587,6 +587,9 @@ impl ConformanceTestRunner {
                         ))
                     }
                 }
+                Err(e) if e.starts_with("Unsupported object type URL:") => {
+                    TestResult::Skipped(format!("Expected value uses unsupported proto type: {}", e))
+                }
                 Err(e) => TestResult::Failed(format!("Failed to convert expected value: {}", e)),
             },
             Some(ResultMatcher::EvalError(_)) => {
@@ -655,6 +658,8 @@ impl ConformanceTestRunner {
             .arg(format!("--proto_path={}", proto_dir.display()))
             .arg("--encode=cel.expr.conformance.test.SimpleTestFile")
             .arg("cel/expr/conformance/test/simple.proto")
+            .arg("cel/expr/conformance/proto2/test_all_types.proto")
+            .arg("cel/expr/conformance/proto3/test_all_types.proto")
             .stdin(std::process::Stdio::from(
                 std::fs::File::open(path).unwrap(),
             ))

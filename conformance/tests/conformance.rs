@@ -131,6 +131,14 @@ fn conformance_bindings_ext_tests() {
 }
 
 #[test]
+fn conformance_parse_tests() {
+    let runner = ConformanceTestRunner::new();
+    let test_file = Path::new("../cel-spec/tests/simple/testdata/parse.textproto");
+
+    runner.run_test_file(test_file);
+}
+
+#[test]
 fn conformance_macros2_tests() {
     let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/macros2.textproto");
