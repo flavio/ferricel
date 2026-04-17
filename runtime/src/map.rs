@@ -78,6 +78,83 @@ pub unsafe extern "C" fn cel_map_insert(
     }
 }
 
+/// Merge all entries from `entry_ptr` (a CelValue::Object) into `accu_ptr`.
+///
+/// Returns `accu_ptr` on success, or a new `CelValue::Error` pointer if any key
+/// from `entry_ptr` already exists in `accu_ptr` (duplicate key error).
+///
+/// This is the runtime backing for `transformMapEntry`: the transform expression
+/// must evaluate to a map literal, and each of its entries is inserted into the
+/// accumulator with strict duplicate-key checking.
+///
+/// # Safety
+///
+/// Both pointer arguments must be valid, aligned, non-null CelValue pointers.
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_map_insert_entry(
+    accu_ptr: *mut CelValue,
+    entry_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let log = crate::logging::get_logger();
+
+    if accu_ptr.is_null() {
+        error!(log, "Accumulator pointer is null"; "function" => "cel_map_insert_entry");
+        return crate::error::create_error_value("no such overload");
+    }
+    if entry_ptr.is_null() {
+        error!(log, "Entry pointer is null"; "function" => "cel_map_insert_entry");
+        return crate::error::create_error_value("no such overload");
+    }
+
+    // If the entry is already an error (e.g. transform expression failed), propagate it.
+    let entry_val = unsafe { &*entry_ptr };
+    if let CelValue::Error(_) = entry_val {
+        return entry_ptr;
+    }
+
+    let entry_map = match entry_val {
+        CelValue::Object(m) => m,
+        _ => {
+            error!(log, "transformMapEntry: entry expression must evaluate to a map";
+                "function" => "cel_map_insert_entry",
+                "actual" => format!("{:?}", entry_val));
+            return crate::error::create_error_value("no such overload");
+        }
+    };
+
+    let accu_val = unsafe { &mut *accu_ptr };
+    let accu_map = match accu_val {
+        CelValue::Object(m) => m,
+        _ => {
+            error!(log, "Accumulator is not a map"; "function" => "cel_map_insert_entry");
+            return crate::error::create_error_value("no such overload");
+        }
+    };
+
+    // Collect entries first to avoid borrow conflict.
+    let entries: Vec<(CelMapKey, CelValue)> = entry_map
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    for (map_key, value) in entries {
+        if accu_map.contains_key(&map_key) {
+            error!(log, "transformMapEntry: duplicate key";
+                "key" => map_key.to_string_key());
+            return crate::error::create_error_value(&format!(
+                "insert failed: key {} already exists",
+                map_key.to_string_key()
+            ));
+        }
+        debug!(log, "Inserting entry into accumulator map";
+            "key" => map_key.to_string_key());
+        accu_map.insert(map_key, value);
+    }
+
+    accu_ptr
+}
+
 /// Return the keys of a CelValue map as a new CelValue::Array.
 ///
 /// The order of keys matches HashMap iteration order (unspecified).

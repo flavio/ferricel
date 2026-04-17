@@ -48,8 +48,8 @@ pub fn compile_named_function(
                 func_name, call_expr, body, env, ctx, module,
             )
         }
-        // transformList / transformMap — always two-variable (3 or 4 args).
-        "transformList" | "transformMap"
+        // transformList / transformMap / transformMapEntry — always two-variable (3 or 4 args).
+        "transformList" | "transformMap" | "transformMapEntry"
             if (call_expr.args.len() == 3 || call_expr.args.len() == 4)
                 && call_expr.target.is_some() =>
         {

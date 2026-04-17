@@ -72,6 +72,7 @@ pub fn compile_two_var_comprehension(
         "existsOne" | "exists_one" => compile_exists_one(call_expr, body, env, ctx, module),
         "transformList" => compile_transform_list(call_expr, body, env, ctx, module),
         "transformMap" => compile_transform_map(call_expr, body, env, ctx, module),
+        "transformMapEntry" => compile_transform_map_entry(call_expr, body, env, ctx, module),
         _ => anyhow::bail!("Unknown two-var comprehension macro: {func_name}"),
     }
 }
@@ -617,7 +618,7 @@ fn compile_transform_list(
 
     emit_index_increment_and_loop(index_local, continue_loop_id, &mut lb);
 
-    // Result: accu (the accumulated array)
+    // Result: accu (the accumulated map)
     body.local_get(accu_local);
     Ok(())
 }
@@ -789,6 +790,172 @@ fn compile_transform_map(
             consequent: err_then_id,
             alternative: err_else_id,
         });
+    }
+
+    emit_index_increment_and_loop(index_local, continue_loop_id, &mut lb);
+
+    // Result: accu (the accumulated map)
+    body.local_get(accu_local);
+    Ok(())
+}
+
+// ─── transformMapEntry(k, v, entry_expr) and transformMapEntry(k, v, filter, entry_expr) ─
+
+/// Compile `range.transformMapEntry(var1, var2, entry_expr)` (3-arg form)
+/// or      `range.transformMapEntry(var1, var2, filter_expr, entry_expr)` (4-arg form).
+///
+/// The `entry_expr` must evaluate to a map literal. All entries from that map are merged
+/// into the output map. Duplicate keys across iterations produce a runtime error.
+fn compile_transform_map_entry(
+    call_expr: &CallExpr,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    let nargs = call_expr.args.len();
+    if nargs != 3 && nargs != 4 {
+        anyhow::bail!("transformMapEntry() expects 3 or 4 arguments, got {nargs}");
+    }
+    let target = call_expr
+        .target
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("transformMapEntry() requires a receiver"))?;
+    let (var1, var2) = extract_var_names(call_expr, "transformMapEntry")?;
+    let (filter_expr, entry_expr) = if nargs == 4 {
+        (Some(&call_expr.args[2].expr), &call_expr.args[3].expr)
+    } else {
+        (None, &call_expr.args[2].expr)
+    };
+
+    let (range_local, prepared_local, length_local, index_local) =
+        emit_loop_setup(&target.expr, body, env, ctx, module)?;
+
+    // accu = {} (empty map)
+    body.call(env.get(RuntimeFunction::CreateMap));
+    let accu_local = module.locals.add(walrus::ValType::I32);
+    body.local_set(accu_local);
+
+    let exit_block = body.dangling_instr_seq(None);
+    let exit_block_id = exit_block.id();
+    let continue_loop = body.dangling_instr_seq(None);
+    let continue_loop_id = continue_loop.id();
+
+    body.instr(walrus::ir::Block { seq: exit_block_id });
+    body.instr_seq(exit_block_id).instr(walrus::ir::Loop {
+        seq: continue_loop_id,
+    });
+
+    let mut lb = body.instr_seq(continue_loop_id);
+
+    emit_loop_exit_check(index_local, length_local, exit_block_id, &mut lb);
+
+    let inner_ctx = emit_bind_iter_vars(
+        range_local,
+        prepared_local,
+        index_local,
+        &var1,
+        &var2,
+        &mut lb,
+        env,
+        ctx,
+        module,
+    );
+    let inner_ctx = inner_ctx.with_local("@accu".to_string(), accu_local);
+
+    // Shared temp local for error-checking intermediate results.
+    let result_local = module.locals.add(walrus::ValType::I32);
+
+    // Emit: evaluate entry_expr, check for error, then call MapInsertEntry(accu, entry).
+    // MapInsertEntry returns accu (success) or error (duplicate key).
+    // Store result back into accu_local; if error, br $exit.
+    macro_rules! emit_insert_entry {
+        ($seq:expr) => {{
+            let seq: &mut InstrSeqBuilder = $seq;
+            compile_expr(entry_expr, seq, env, &inner_ctx, module)?;
+            seq.local_set(result_local);
+            // Check if entry expression itself errored
+            seq.local_get(result_local);
+            seq.call(env.get(RuntimeFunction::IsError));
+            let eerr_then = seq.dangling_instr_seq(None);
+            let eerr_then_id = eerr_then.id();
+            let eerr_else = seq.dangling_instr_seq(None);
+            let eerr_else_id = eerr_else.id();
+            {
+                let mut t = seq.instr_seq(eerr_then_id);
+                t.local_get(result_local);
+                t.local_set(accu_local);
+                t.instr(walrus::ir::Br {
+                    block: exit_block_id,
+                });
+            }
+            {
+                // else: call MapInsertEntry(accu, entry) → new accu (or error)
+                let mut e = seq.instr_seq(eerr_else_id);
+                e.local_get(accu_local);
+                e.local_get(result_local);
+                e.call(env.get(RuntimeFunction::MapInsertEntry));
+                e.local_set(accu_local);
+                // Check if MapInsertEntry returned an error (duplicate key)
+                e.local_get(accu_local);
+                e.call(env.get(RuntimeFunction::IsError));
+                e.instr(walrus::ir::BrIf {
+                    block: exit_block_id,
+                });
+            }
+            seq.instr(walrus::ir::IfElse {
+                consequent: eerr_then_id,
+                alternative: eerr_else_id,
+            });
+        }};
+    }
+
+    if let Some(filt) = filter_expr {
+        // Evaluate filter; propagate error immediately.
+        compile_expr(filt, &mut lb, env, &inner_ctx, module)?;
+        lb.local_set(result_local);
+        lb.local_get(result_local);
+        lb.call(env.get(RuntimeFunction::IsError));
+        let ferr_then = lb.dangling_instr_seq(None);
+        let ferr_then_id = ferr_then.id();
+        let ferr_else = lb.dangling_instr_seq(None);
+        let ferr_else_id = ferr_else.id();
+        {
+            let mut t = lb.instr_seq(ferr_then_id);
+            t.local_get(result_local);
+            t.local_set(accu_local);
+            t.instr(walrus::ir::Br {
+                block: exit_block_id,
+            });
+        }
+        {
+            let mut e = lb.instr_seq(ferr_else_id);
+            e.local_get(result_local);
+            e.call(env.get(RuntimeFunction::IsStrictlyTrue));
+
+            let then_seq = e.dangling_instr_seq(None);
+            let then_id = then_seq.id();
+            let else_seq = e.dangling_instr_seq(None);
+            let else_id = else_seq.id();
+
+            {
+                let mut then_body = e.instr_seq(then_id);
+                emit_insert_entry!(&mut then_body);
+            }
+            {
+                let _ = e.instr_seq(else_id);
+            }
+            e.instr(walrus::ir::IfElse {
+                consequent: then_id,
+                alternative: else_id,
+            });
+        }
+        lb.instr(walrus::ir::IfElse {
+            consequent: ferr_then_id,
+            alternative: ferr_else_id,
+        });
+    } else {
+        emit_insert_entry!(&mut lb);
     }
 
     emit_index_increment_and_loop(index_local, continue_loop_id, &mut lb);

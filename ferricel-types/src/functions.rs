@@ -111,6 +111,9 @@ pub enum RuntimeFunction {
     MapKeys,
     /// Gets a value from a map by key.
     MapGet,
+    /// Inserts all entries from a single-entry (or multi-entry) map into the accumulator map.
+    /// Returns the accumulator on success, or a CelValue::Error if a duplicate key is found.
+    MapInsertEntry,
 
     // Polymorphic iteration primitives (work for both lists and maps)
     /// Prepares the range for iteration: lists → self; maps → keys array.
@@ -467,6 +470,7 @@ impl RuntimeFunction {
             Self::MapInsert => "cel_map_insert",
             Self::MapKeys => "cel_map_keys",
             Self::MapGet => "cel_map_get",
+            Self::MapInsertEntry => "cel_map_insert_entry",
 
             Self::IterPrepare => "cel_iter_prepare",
             Self::IterVar1 => "cel_iter_var1",

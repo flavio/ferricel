@@ -65,7 +65,7 @@ pub use field_access::{cel_get_field, cel_has_field};
 
 pub use array::{cel_array_get, cel_array_len, cel_array_push, cel_create_array};
 
-pub use map::{cel_create_map, cel_map_get, cel_map_insert, cel_map_keys};
+pub use map::{cel_create_map, cel_map_get, cel_map_insert, cel_map_insert_entry, cel_map_keys};
 
 pub use iter::{cel_cond_inc, cel_iter_prepare, cel_iter_var1, cel_iter_var2};
 

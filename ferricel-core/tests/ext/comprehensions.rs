@@ -143,3 +143,74 @@ fn test_transform_map_from_list() {
     .unwrap();
     assert_eq!(r, serde_json::json!({"0": 1, "1": 4, "2": 9}));
 }
+
+// ─── transformMapEntry(k, v, entry_expr) ───────────────────────────────────
+
+#[test]
+fn test_transform_map_entry_empty_map() {
+    let r = compile_and_execute_json("{}.transformMapEntry(k, v, {v: k})").unwrap();
+    assert_eq!(r, serde_json::json!({}));
+}
+
+#[test]
+fn test_transform_map_entry_key_value_swap() {
+    // {'greeting': 'hello'}.transformMapEntry(k, v, {v: k}) → {'hello': 'greeting'}
+    let r = compile_and_execute_json(
+        "{'greeting': 'hello'}.transformMapEntry(keyVar, valueVar, {valueVar: keyVar})",
+    )
+    .unwrap();
+    assert_eq!(r, serde_json::json!({"hello": "greeting"}));
+}
+
+#[test]
+fn test_transform_map_entry_from_list_reverse_index() {
+    // [1, 2, 3].transformMapEntry(i, v, {v: i}) → {1: 0, 2: 1, 3: 2}
+    // Keys are integers from the list values
+    let r = compile_and_execute_json(
+        "[1, 2, 3].transformMapEntry(indexVar, valueVar, {valueVar: indexVar})",
+    )
+    .unwrap();
+    // Int keys serialize as strings in JSON
+    assert_eq!(r, serde_json::json!({"1": 0, "2": 1, "3": 2}));
+}
+
+#[test]
+fn test_transform_map_entry_filter_keep_some() {
+    // {'a': 1, 'b': 2, 'c': 3}.transformMapEntry(k, v, v > 1, {k + '_new': v * 10})
+    // Only entries where v > 1 are transformed → {'b_new': 20, 'c_new': 30}
+    let r = compile_and_execute_json(
+        "{'a': 1, 'b': 2, 'c': 3}.transformMapEntry(k, v, v > 1, {k + '_new': v * 10})",
+    )
+    .unwrap();
+    // Order is unspecified for maps; compare as a set
+    let obj = r.as_object().unwrap();
+    assert_eq!(obj.len(), 2);
+    assert_eq!(obj["b_new"], serde_json::json!(20));
+    assert_eq!(obj["c_new"], serde_json::json!(30));
+}
+
+#[test]
+fn test_transform_map_entry_duplicate_key_error() {
+    // {'greeting': 'aloha', 'farewell': 'aloha'}.transformMapEntry(k, v, {v: k})
+    // Both entries map to value key 'aloha' → duplicate key error
+    let result = compile_and_execute_json(
+        "{'greeting': 'aloha', 'farewell': 'aloha'}.transformMapEntry(k, v, {v: k})",
+    )
+    .unwrap();
+    // Error serializes as {"error": "<message>"}
+    let error_msg = result
+        .get("error")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    assert!(
+        error_msg.contains("insert failed"),
+        "Expected duplicate key error, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_transform_map_entry_empty_list() {
+    let r = compile_and_execute_json("[].transformMapEntry(i, v, {'k': v})").unwrap();
+    assert_eq!(r, serde_json::json!({}));
+}
