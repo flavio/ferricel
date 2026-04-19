@@ -94,3 +94,22 @@ Similar to issue #3 for bytes: triple-quoted strings that contain the single-cha
 These are not bugs but features not yet implemented in ferricel:
 
 - **Proto message construction and field access** — tests using `TestAllTypes` proto messages are automatically skipped in the conformance runner.
+
+---
+
+## Leading-dot identifier resolution blocked by `cel` crate parser
+
+The CEL spec allows a leading dot on identifiers (`.y`, `.y.z`) to force resolution in
+the root scope, bypassing both the active container and comprehension-local variables.
+Example: inside `[1].exists(y, .y == 1)`, `.y` refers to the global variable `y`, not
+the iteration variable.
+
+The `cel` crate (v0.13.0) silently drops the leading dot for plain `Ident` nodes in
+`visit_Ident` (`src/parser/parser.rs`), making `.y` indistinguishable from `y` in the
+AST. It correctly preserves leading dots for `GlobalCall` and `CreateMessage` nodes, but
+not for bare identifiers.
+
+**Affected conformance tests (`namespace` suite):**
+- `namespace_shadowing/disambiguation` — `.y` should resolve to root-scope `y` (bypassing container `com.example`)
+- `namespace_shadowing/comprehension_shadowing_disambiguation` — `.y` inside comprehension should bypass local `y`
+- `namespace_shadowing/comprehension_shadowing_namespaced_selector_disambiguation` — `.y.z` inside comprehension should bypass local `y` and container

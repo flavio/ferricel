@@ -66,6 +66,196 @@ pub fn resolve_type_name(
     None
 }
 
+/// Build the ordered list of candidate variable names for a given base name and container.
+///
+/// CEL name resolution order (most specific to least):
+///   container.A.B.C.name, ..., A.name, name
+///
+/// If the name has a leading dot, only the root-scope name is returned (container bypassed).
+pub fn variable_candidates(name: &str, container: &Option<String>) -> Vec<String> {
+    // Leading dot means root scope only — bypass container
+    if let Some(stripped) = name.strip_prefix('.') {
+        return vec![stripped.to_string()];
+    }
+
+    let mut candidates = Vec::new();
+
+    if let Some(container_str) = container {
+        let parts: Vec<&str> = container_str.split('.').collect();
+        // Most specific first: A.B.C.name, A.B.name, A.name
+        for i in (1..=parts.len()).rev() {
+            let prefix = parts[0..i].join(".");
+            candidates.push(format!("{}.{}", prefix, name));
+        }
+    }
+
+    // Always try the bare name last (root scope)
+    candidates.push(name.to_string());
+
+    candidates
+}
+
+/// Emit WASM code that tries each candidate variable name in order, returning the
+/// first non-null result. Leaves a `*mut CelValue` (i32) on the stack.
+///
+/// If none of the candidates resolves, the result is a null pointer. Callers that
+/// need a non-null result should chain this with a field-access fallback.
+fn emit_variable_lookup_chain(
+    candidates: &[String],
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+) -> Result<walrus::LocalId, anyhow::Error> {
+    let memory_id = get_memory_id(module)?;
+    let result_local = module.locals.add(ValType::I32);
+
+    // Emit the first (most specific) candidate unconditionally, then wrap each
+    // successive fallback in an if-null branch.
+    //
+    // For candidates [A, B, C] we generate (innermost-first):
+    //   result = get_var(A)
+    //   if result == 0: result = get_var(B)
+    //     if result == 0: result = get_var(C)
+
+    // Emit all candidates into a flat list of instructions, then nest them.
+    // We build from the last candidate inward.
+
+    // Helper: emit `cel_get_variable(name)` and store into result_local.
+    let emit_get = |name: &str,
+                    body: &mut InstrSeqBuilder,
+                    module: &mut walrus::Module|
+     -> Result<(), anyhow::Error> {
+        let name_bytes = name.as_bytes();
+        let name_len = name_bytes.len() as i32;
+        let ptr_local = module.locals.add(ValType::I32);
+
+        body.i32_const(name_len)
+            .call(env.get(RuntimeFunction::Malloc))
+            .local_set(ptr_local);
+
+        for (offset, &byte) in name_bytes.iter().enumerate() {
+            body.local_get(ptr_local);
+            body.i32_const(byte as i32);
+            body.store(
+                memory_id,
+                walrus::ir::StoreKind::I32_8 { atomic: false },
+                walrus::ir::MemArg {
+                    align: 1,
+                    offset: offset as u64,
+                },
+            );
+        }
+
+        body.local_get(ptr_local)
+            .i32_const(name_len)
+            .call(env.get(RuntimeFunction::GetVariable))
+            .local_set(result_local);
+
+        Ok(())
+    };
+
+    if candidates.is_empty() {
+        // Edge case: no candidates — push null
+        body.i32_const(0).local_set(result_local);
+        body.local_get(result_local);
+        return Ok(result_local);
+    }
+
+    if candidates.len() == 1 {
+        emit_get(&candidates[0], body, module)?;
+        body.local_get(result_local);
+        return Ok(result_local);
+    }
+
+    // Multiple candidates: try first, then if null try rest recursively.
+    // We build it iteratively from last to first using a stack of closures is awkward
+    // in Rust, so instead we use walrus dangling sequences.
+    //
+    // Emit: get(candidates[0]); if result==0 { get(candidates[1]); if result==0 { ... } }
+    emit_get(&candidates[0], body, module)?;
+
+    // Build the chain for candidates[1..] using nested dangling sequences
+    build_fallback_chain(&candidates[1..], result_local, body, env, module, memory_id)?;
+
+    body.local_get(result_local);
+    Ok(result_local)
+}
+
+/// Recursively builds the "if null, try next" chain for a slice of candidate names.
+fn build_fallback_chain(
+    remaining: &[String],
+    result_local: walrus::LocalId,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+    memory_id: walrus::MemoryId,
+) -> Result<(), anyhow::Error> {
+    if remaining.is_empty() {
+        return Ok(());
+    }
+
+    // if result_local == 0 (null): try next candidate
+    body.local_get(result_local)
+        .unop(walrus::ir::UnaryOp::I32Eqz);
+
+    let then_seq = body.dangling_instr_seq(None);
+    let then_id = then_seq.id();
+    let else_seq = body.dangling_instr_seq(None);
+    let else_id = else_seq.id();
+
+    body.instr(walrus::ir::IfElse {
+        consequent: then_id,
+        alternative: else_id,
+    });
+
+    // Then branch: try next candidate
+    {
+        let mut then_body = body.instr_seq(then_id);
+        let name = &remaining[0];
+        let name_bytes = name.as_bytes();
+        let name_len = name_bytes.len() as i32;
+        let ptr_local = module.locals.add(ValType::I32);
+
+        then_body
+            .i32_const(name_len)
+            .call(env.get(RuntimeFunction::Malloc))
+            .local_set(ptr_local);
+
+        for (offset, &byte) in name_bytes.iter().enumerate() {
+            then_body.local_get(ptr_local);
+            then_body.i32_const(byte as i32);
+            then_body.store(
+                memory_id,
+                walrus::ir::StoreKind::I32_8 { atomic: false },
+                walrus::ir::MemArg {
+                    align: 1,
+                    offset: offset as u64,
+                },
+            );
+        }
+
+        then_body
+            .local_get(ptr_local)
+            .i32_const(name_len)
+            .call(env.get(RuntimeFunction::GetVariable))
+            .local_set(result_local);
+
+        build_fallback_chain(
+            &remaining[1..],
+            result_local,
+            &mut then_body,
+            env,
+            module,
+            memory_id,
+        )?;
+    }
+
+    // Else branch: result is already set (non-null), nothing to do
+    // (empty else branch is valid in WASM)
+
+    Ok(())
+}
+
 /// Attempt to collect a `Select` (or `Ident`) chain into a dotted qualified name.
 ///
 /// Returns `Some("a.b.c")` when the entire expression is of the form
@@ -83,12 +273,24 @@ pub fn try_collect_qualified_ident(expr: &Expr) -> Option<String> {
     }
 }
 
+/// Return the root identifier name of a Select chain, or the ident name itself.
+/// e.g. `x.y.z` → `Some("x")`, `x` → `Some("x")`, `f(x).y` → `None`
+fn root_ident(expr: &Expr) -> Option<&str> {
+    match expr {
+        Expr::Ident(name) => Some(name.as_str()),
+        Expr::Select(s) if !s.test => root_ident(&s.operand.expr),
+        _ => None,
+    }
+}
+
 /// Compile an `Expr::Ident` node.
 ///
-/// Handles:
-/// - Local variables from comprehension scope (fast path via local_get)
-/// - Type denotations (bool, int, uint, double, string, bytes, list, map, etc.)
-/// - Runtime variables looked up from the bindings map
+/// Resolution order (per CEL spec):
+/// 1. Local variables from comprehension scope (fast path via local_get)
+/// 2. Type denotations (bool, int, uint, double, string, bytes, list, map, etc.)
+/// 3. Runtime variable lookup with container-aware resolution:
+///    - With container "A.B": tries A.B.name, A.name, name (first non-null wins)
+///    - Without container: tries name directly
 pub fn compile_ident(
     name: &str,
     body: &mut InstrSeqBuilder,
@@ -98,58 +300,23 @@ pub fn compile_ident(
 ) -> Result<(), anyhow::Error> {
     // First check if this is a local variable (from comprehension scope)
     if let Some(&local_id) = ctx.local_vars.get(name) {
-        // This is a local variable, load it from the local
         body.local_get(local_id);
         return Ok(());
     }
 
-    // Not a local variable, check global variables and type denotations
     // Type denotations - these are constant Type values
     // Note: "dyn" is NOT a type denotation - it's only valid as a function call
     match name {
         "bool" | "int" | "uint" | "double" | "string" | "bytes" | "list" | "map" | "null_type"
         | "type" | "timestamp" | "duration" | "optional_type" => {
-            // Create a Type value for this type denotation
-            // cel_create_type expects (ptr: *const u8, len: i32) — raw bytes, not a CelValue*
             let memory_id = get_memory_id(module)?;
             emit_string_const(name, body, env, memory_id, module);
             body.call(env.get(RuntimeFunction::CreateType));
         }
         _ => {
-            // All other identifiers are runtime variables
-            // Look them up from the bindings map via cel_get_variable
-            let var_name = name.as_bytes();
-            let var_name_len = var_name.len() as i32;
-
-            // Allocate memory for variable name
-            let var_name_ptr_local = module.locals.add(ValType::I32);
-            body.i32_const(var_name_len)
-                .call(env.get(RuntimeFunction::Malloc))
-                .local_set(var_name_ptr_local);
-
-            // Write variable name bytes to memory
-            let memory_id = get_memory_id(module)?;
-
-            for (offset, &byte) in var_name.iter().enumerate() {
-                body.local_get(var_name_ptr_local);
-                body.i32_const(byte as i32);
-                body.store(
-                    memory_id,
-                    walrus::ir::StoreKind::I32_8 { atomic: false },
-                    walrus::ir::MemArg {
-                        align: 1,
-                        offset: offset as u64,
-                    },
-                );
-            }
-
-            // Call cel_get_variable(name_ptr, name_len) -> *mut CelValue
-            body.local_get(var_name_ptr_local)
-                .i32_const(var_name_len)
-                .call(env.get(RuntimeFunction::GetVariable));
-
-            // The result is a pointer to the variable's value (or null if not found)
-            // Null will cause runtime errors when operations try to use it
+            // Build the ordered list of candidates using container resolution
+            let candidates = variable_candidates(name, &ctx.container);
+            emit_variable_lookup_chain(&candidates, body, env, module)?;
         }
     }
 
@@ -158,9 +325,14 @@ pub fn compile_ident(
 
 /// Compile an `Expr::Select` node.
 ///
-/// Handles:
-/// - Qualified type names that map to proto message types (compiled as type denotations)
-/// - Regular field access: compiles operand, then calls GetField or HasField
+/// Resolution order (per CEL spec — longest prefix wins):
+/// 1. If the entire chain is a known proto type or K8s type literal → type denotation
+/// 2. If the root ident is a comprehension local → skip variable lookup, do field access
+/// 3. Try to resolve the full dotted name as a variable (with container expansion):
+///    - e.g. `x.y` with container `A.B` tries: `A.B.x.y`, `A.x.y`, `x.y`
+///    - If found, use it
+/// 4. Fall back to field access: resolve the operand (recursively applying same rules),
+///    then call cel_get_field
 pub fn compile_select(
     select_expr: &cel::common::ast::SelectExpr,
     body: &mut InstrSeqBuilder,
@@ -169,13 +341,9 @@ pub fn compile_select(
     module: &mut walrus::Module,
 ) -> Result<(), anyhow::Error> {
     // Well-known Kubernetes CEL extension type literals.
-    // These are expressed in CEL as `net.IP` / `net.CIDR` (a Select on the `net` ident),
-    // but are not proto message types — they must be handled before the schema lookup.
     const K8S_TYPE_LITERALS: &[&str] = &["net.IP", "net.CIDR"];
 
-    // Before treating this as a runtime field access, check whether the entire
-    // Select chain forms a qualified type name that exists in the proto schema
-    // or is a well-known Kubernetes CEL extension type literal.
+    // Check whether the entire Select chain forms a qualified type name.
     let qualified_name = if !select_expr.test {
         try_collect_qualified_ident(&Expr::Select(select_expr.clone())).filter(|name| {
             K8S_TYPE_LITERALS.contains(&name.as_str())
@@ -190,47 +358,107 @@ pub fn compile_select(
     };
 
     if let Some(type_name) = qualified_name {
-        // Emit a type denotation: cel_create_type(ptr, len)
-        // cel_create_type expects (ptr: *const u8, len: i32) — raw bytes, not a CelValue*
+        // Type denotation: cel_create_type(ptr, len)
         let memory_id = get_memory_id(module)?;
         emit_string_const(&type_name, body, env, memory_id, module);
         body.call(env.get(RuntimeFunction::CreateType));
+        return Ok(());
+    }
+
+    // If the root of this Select chain is a comprehension local, skip variable
+    // lookup entirely — it must be a field access on the local value.
+    let root_is_local = root_ident(&Expr::Select(select_expr.clone()))
+        .map(|r| ctx.local_vars.contains_key(r))
+        .unwrap_or(false);
+
+    if !select_expr.test && !root_is_local {
+        // Try to resolve the full dotted name as a variable first (longest prefix rule).
+        if let Some(full_name) = try_collect_qualified_ident(&Expr::Select(select_expr.clone())) {
+            let candidates = variable_candidates(&full_name, &ctx.container);
+
+            // Emit: result = try_variable_chain(candidates)
+            // If non-null, use it. If null, fall through to field access.
+            let memory_id = get_memory_id(module)?;
+            let result_local = module.locals.add(ValType::I32);
+
+            // Try all candidates
+            emit_variable_lookup_chain(&candidates, body, env, module)?;
+            body.local_set(result_local);
+
+            // if result != null: use it; else: do field access
+            body.local_get(result_local)
+                .unop(walrus::ir::UnaryOp::I32Eqz);
+
+            let then_seq = body.dangling_instr_seq(Some(ValType::I32));
+            let then_id = then_seq.id();
+            let else_seq = body.dangling_instr_seq(Some(ValType::I32));
+            let else_id = else_seq.id();
+
+            body.instr(walrus::ir::IfElse {
+                consequent: then_id,
+                alternative: else_id,
+            });
+
+            // Then branch (null — not found as variable): do field access
+            {
+                let mut then_body = body.instr_seq(then_id);
+                compile_field_access(select_expr, &mut then_body, env, ctx, module, memory_id)?;
+            }
+
+            // Else branch (non-null — found as variable): return result
+            body.instr_seq(else_id).local_get(result_local);
+
+            return Ok(());
+        }
+    }
+
+    // Default: plain field access (test selects, local-rooted chains, non-collectable chains)
+    let memory_id = get_memory_id(module)?;
+    compile_field_access(select_expr, body, env, ctx, module, memory_id)?;
+
+    Ok(())
+}
+
+/// Emit field-access WASM for a SelectExpr: compile the operand, then call GetField/HasField.
+fn compile_field_access(
+    select_expr: &cel::common::ast::SelectExpr,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    ctx: &CompilerContext,
+    module: &mut walrus::Module,
+    memory_id: walrus::MemoryId,
+) -> Result<(), anyhow::Error> {
+    super::expr::compile_expr(&select_expr.operand.expr, body, env, ctx, module)?;
+
+    let field_name = &select_expr.field;
+    let field_bytes = field_name.as_bytes();
+    let field_len = field_bytes.len() as i32;
+
+    let field_ptr_local = module.locals.add(ValType::I32);
+
+    body.i32_const(field_len)
+        .call(env.get(RuntimeFunction::Malloc))
+        .local_tee(field_ptr_local);
+
+    for (offset, &byte) in field_bytes.iter().enumerate() {
+        body.local_get(field_ptr_local);
+        body.i32_const(byte as i32);
+        body.store(
+            memory_id,
+            walrus::ir::StoreKind::I32_8 { atomic: false },
+            walrus::ir::MemArg {
+                align: 1,
+                offset: offset as u64,
+            },
+        );
+    }
+
+    body.i32_const(field_len);
+
+    if select_expr.test {
+        body.call(env.get(RuntimeFunction::HasField));
     } else {
-        // Regular field access: compile operand, then call cel_get_field / cel_has_field
-        super::expr::compile_expr(&select_expr.operand.expr, body, env, ctx, module)?;
-
-        let field_name = &select_expr.field;
-        let field_bytes = field_name.as_bytes();
-        let field_len = field_bytes.len() as i32;
-
-        let field_ptr_local = module.locals.add(ValType::I32);
-
-        body.i32_const(field_len)
-            .call(env.get(RuntimeFunction::Malloc))
-            .local_tee(field_ptr_local);
-
-        let memory_id = get_memory_id(module)?;
-
-        for (offset, &byte) in field_bytes.iter().enumerate() {
-            body.local_get(field_ptr_local);
-            body.i32_const(byte as i32);
-            body.store(
-                memory_id,
-                walrus::ir::StoreKind::I32_8 { atomic: false },
-                walrus::ir::MemArg {
-                    align: 1,
-                    offset: offset as u64,
-                },
-            );
-        }
-
-        body.i32_const(field_len);
-
-        if select_expr.test {
-            body.call(env.get(RuntimeFunction::HasField));
-        } else {
-            body.call(env.get(RuntimeFunction::GetField));
-        }
+        body.call(env.get(RuntimeFunction::GetField));
     }
 
     Ok(())

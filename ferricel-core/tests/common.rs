@@ -218,6 +218,28 @@ pub(crate) fn make_engine_with_sum(
     (engine, decl)
 }
 
+/// Compile `cel_expr` with an optional container name, execute with arbitrary JSON bindings,
+/// and return the result as a `serde_json::Value`.
+pub(crate) fn compile_and_execute_with_container(
+    cel_expr: &str,
+    container: Option<&str>,
+    bindings: serde_json::Value,
+) -> Result<serde_json::Value, anyhow::Error> {
+    let logger = create_test_logger();
+    let compiler_options = CompilerOptions {
+        proto_descriptor: None,
+        container: container.map(|s| s.to_string()),
+        logger: logger.clone(),
+        extensions: vec![],
+    };
+    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
+    let bindings_str = serde_json::to_string(&bindings)?;
+    let json_result = CelEngine::new(logger)
+        .with_log_level(LogLevel::Info)
+        .execute(&wasm_bytes, Some(&bindings_str))?;
+    Ok(serde_json::from_str(&json_result)?)
+}
+
 /// Build [`CompilerOptions`] with a single extension declaration and no other
 /// customisation.
 pub(crate) fn options_with_ext(decl: ExtensionDecl) -> CompilerOptions {

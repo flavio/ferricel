@@ -587,9 +587,9 @@ impl ConformanceTestRunner {
                         ))
                     }
                 }
-                Err(e) if e.starts_with("Unsupported object type URL:") => {
-                    TestResult::Skipped(format!("Expected value uses unsupported proto type: {}", e))
-                }
+                Err(e) if e.starts_with("Unsupported object type URL:") => TestResult::Skipped(
+                    format!("Expected value uses unsupported proto type: {}", e),
+                ),
                 Err(e) => TestResult::Failed(format!("Failed to convert expected value: {}", e)),
             },
             Some(ResultMatcher::EvalError(_)) => {
