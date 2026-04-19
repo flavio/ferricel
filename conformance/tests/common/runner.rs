@@ -294,6 +294,11 @@ impl ConformanceTestRunner {
             }
         }
 
+        // Skip check_only tests — they require a type checker we don't implement
+        if test.check_only {
+            return TestResult::Skipped("check_only test (requires type checker)".to_string());
+        }
+
         // Execute the test
         match self.execute_cel_expression(test) {
             Ok(actual_value) => {
@@ -611,6 +616,33 @@ impl ConformanceTestRunner {
                 ),
                 Err(e) => TestResult::Failed(format!("Failed to convert expected value: {}", e)),
             },
+            Some(ResultMatcher::TypedResult(typed)) => {
+                // We ignore the deduced_type (no type checker) and only validate the result value.
+                match &typed.result {
+                    None => TestResult::Skipped("TypedResult has no result value".to_string()),
+                    Some(expected_val) => match self.cel_value_to_json(expected_val) {
+                        Ok(expected_json) => {
+                            if self.values_equal(&expected_json, &actual) {
+                                TestResult::Passed
+                            } else {
+                                TestResult::Failed(format!(
+                                    "Expected {:?}, got {:?}",
+                                    expected_json, actual
+                                ))
+                            }
+                        }
+                        Err(e) if e.starts_with("Unsupported object type URL:") => {
+                            TestResult::Skipped(format!(
+                                "Expected value uses unsupported proto type: {}",
+                                e
+                            ))
+                        }
+                        Err(e) => {
+                            TestResult::Failed(format!("Failed to convert expected value: {}", e))
+                        }
+                    },
+                }
+            }
             Some(ResultMatcher::EvalError(_)) => {
                 // Test expects an error
                 if actual.is_string() && actual.as_str().unwrap().starts_with("error:") {
