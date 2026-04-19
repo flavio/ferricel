@@ -275,6 +275,25 @@ impl ConformanceTestRunner {
             return TestResult::Skipped(reason);
         }
 
+        // Skip tests whose bindings contain unsupported proto object types
+        const SUPPORTED_OBJECT_URLS: &[&str] = &[
+            "type.googleapis.com/google.protobuf.Duration",
+            "type.googleapis.com/google.protobuf.Timestamp",
+        ];
+        for expr_value in test.bindings.values() {
+            if let Some(super::proto_gen::cel::expr::expr_value::Kind::Value(v)) = &expr_value.kind
+            {
+                if let Some(super::proto_gen::cel::expr::value::Kind::ObjectValue(any)) = &v.kind {
+                    if !SUPPORTED_OBJECT_URLS.contains(&any.type_url.as_str()) {
+                        return TestResult::Skipped(format!(
+                            "Binding uses unsupported proto type: {}",
+                            any.type_url
+                        ));
+                    }
+                }
+            }
+        }
+
         // Execute the test
         match self.execute_cel_expression(test) {
             Ok(actual_value) => {

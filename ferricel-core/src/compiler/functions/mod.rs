@@ -37,6 +37,42 @@ pub fn compile_named_function(
         {
             ext::bind::compile_cel_bind(call_expr, body, env, ctx, module)
         }
+        // cel.block(bindings, body) — common subexpression elimination construct.
+        "block"
+            if matches!(
+                &call_expr.target,
+                Some(t) if matches!(&t.expr, cel::common::ast::Expr::Ident(name) if name == "cel")
+            ) =>
+        {
+            ext::block::compile_cel_block(call_expr, body, env, ctx, module)
+        }
+        // cel.index(N) — reference slot N of the enclosing cel.block.
+        "index"
+            if matches!(
+                &call_expr.target,
+                Some(t) if matches!(&t.expr, cel::common::ast::Expr::Ident(name) if name == "cel")
+            ) =>
+        {
+            ext::block::compile_cel_index(call_expr, body, env, ctx, module)
+        }
+        // cel.iterVar(N, M) — reference comprehension iteration variable at depth N, scope M.
+        "iterVar"
+            if matches!(
+                &call_expr.target,
+                Some(t) if matches!(&t.expr, cel::common::ast::Expr::Ident(name) if name == "cel")
+            ) =>
+        {
+            ext::block::compile_cel_iter_var(call_expr, body, env, ctx, module)
+        }
+        // cel.accuVar(N, M) — reference comprehension accumulator variable at depth N, scope M.
+        "accuVar"
+            if matches!(
+                &call_expr.target,
+                Some(t) if matches!(&t.expr, cel::common::ast::Expr::Ident(name) if name == "cel")
+            ) =>
+        {
+            ext::block::compile_cel_accu_var(call_expr, body, env, ctx, module)
+        }
         // Two-variable comprehension macros — exists/all/existsOne with 3 args.
         // The CEL parser (v0.13.0) does NOT expand these as Comprehension nodes, so they
         // arrive here as regular Call nodes. Must come BEFORE the unguarded "exists" etc.

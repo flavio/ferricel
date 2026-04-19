@@ -131,6 +131,14 @@ fn conformance_bindings_ext_tests() {
 }
 
 #[test]
+fn conformance_block_ext_tests() {
+    let runner = ConformanceTestRunner::new();
+    let test_file = Path::new("../cel-spec/tests/simple/testdata/block_ext.textproto");
+
+    runner.run_test_file(test_file);
+}
+
+#[test]
 fn conformance_namespace_tests() {
     let runner = ConformanceTestRunner::new();
     let test_file = Path::new("../cel-spec/tests/simple/testdata/namespace.textproto");

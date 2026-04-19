@@ -1,3 +1,4 @@
+mod block;
 mod comprehensions;
 mod encoders;
 mod lists;

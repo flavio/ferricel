@@ -97,6 +97,24 @@ These are not bugs but features not yet implemented in ferricel:
 
 ---
 
+## `cel.iterVar`/`cel.accuVar` as comprehension iteration variables blocked by `cel` crate parser
+
+The `block_ext` CSE constructs use `cel.iterVar(N, M)` and `cel.accuVar(N, M)` to refer to
+comprehension iteration and accumulator variables by nesting depth. When these appear as the
+*iteration variable* argument to macros like `map`, `filter`, `exists` (the first positional arg),
+the `cel` crate parser rejects them with `"argument must be a simple name"` because its
+`extract_ident` helper requires a bare `Ident` node.
+
+`cel.iterVar`/`cel.accuVar` work correctly when used *inside* comprehension bodies.
+
+**Affected conformance tests (`block_ext` suite):**
+- `basic/multiple_macros_1` through `multiple_macros_3`
+- `basic/nested_macros_1`, `nested_macros_2`
+- `basic/adjacent_macros`
+- `basic/macro_shadowed_variable_1`, `macro_shadowed_variable_2`
+
+---
+
 ## Leading-dot identifier resolution blocked by `cel` crate parser
 
 The CEL spec allows a leading dot on identifiers (`.y`, `.y.z`) to force resolution in
