@@ -1,4 +1,6 @@
 use crate::common::*;
+use ferricel_core::runtime::CelEngine;
+use ferricel_types::LogLevel;
 use rstest::rstest;
 
 // ---------------------------------------------------------------------------
@@ -36,23 +38,34 @@ fn test_cel_block(#[case] expr: &str) {
 
 #[test]
 fn test_cel_block_with_variable() {
-    let result = compile_and_execute_with_container(
-        "cel.block([x + 1], cel.index(0)) == 6",
-        None,
-        serde_json::json!({ "x": 5 }),
+    let wasm = compile_with_container("cel.block([x + 1], cel.index(0)) == 6", None, None).unwrap();
+    let bindings = serde_json::to_string(&serde_json::json!({ "x": 5 })).unwrap();
+    let result: serde_json::Value = serde_json::from_str(
+        &CelEngine::new(create_test_logger())
+            .with_log_level(LogLevel::Info)
+            .execute(&wasm, Some(&bindings))
+            .unwrap(),
     )
-    .expect("should succeed");
+    .unwrap();
     assert_eq!(result, serde_json::Value::Bool(true));
 }
 
 #[test]
 fn test_cel_block_two_variables() {
-    let result = compile_and_execute_with_container(
+    let wasm = compile_with_container(
         "cel.block([x, y], cel.index(0) + cel.index(1)) == 3",
         None,
-        serde_json::json!({ "x": 1, "y": 2 }),
+        None,
     )
-    .expect("should succeed");
+    .unwrap();
+    let bindings = serde_json::to_string(&serde_json::json!({ "x": 1, "y": 2 })).unwrap();
+    let result: serde_json::Value = serde_json::from_str(
+        &CelEngine::new(create_test_logger())
+            .with_log_level(LogLevel::Info)
+            .execute(&wasm, Some(&bindings))
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(result, serde_json::Value::Bool(true));
 }
 
@@ -63,12 +76,20 @@ fn test_cel_block_two_variables() {
 #[test]
 fn test_cel_block_slot_reuse() {
     // Slot 0 is computed once; body uses it twice. Should produce same value both times.
-    let result = compile_and_execute_with_container(
+    let wasm = compile_with_container(
         "cel.block([x + 1], cel.index(0) + cel.index(0))",
         None,
-        serde_json::json!({ "x": 3 }),
+        None,
     )
-    .expect("should succeed");
+    .unwrap();
+    let bindings = serde_json::to_string(&serde_json::json!({ "x": 3 })).unwrap();
+    let result: serde_json::Value = serde_json::from_str(
+        &CelEngine::new(create_test_logger())
+            .with_log_level(LogLevel::Info)
+            .execute(&wasm, Some(&bindings))
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(result, serde_json::json!(8));
 }
 
