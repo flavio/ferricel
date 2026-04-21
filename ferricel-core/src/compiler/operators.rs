@@ -294,33 +294,19 @@ fn compile_opt_select(
     let receiver_local = module.locals.add(ValType::I32);
     body.local_set(receiver_local);
 
-    // Write field name into WASM memory.
-    let field_bytes = field_name.as_bytes();
-    let field_len = field_bytes.len() as i32;
-    let field_ptr_local = module.locals.add(ValType::I32);
+    // Write field name into WASM memory, leaving (ptr, len) on the stack.
     let memory_id = helpers::get_memory_id(module)?;
-
-    body.i32_const(field_len)
-        .call(env.get(RuntimeFunction::Malloc))
-        .local_set(field_ptr_local);
-
-    for (offset, &byte) in field_bytes.iter().enumerate() {
-        body.local_get(field_ptr_local);
-        body.i32_const(byte as i32);
-        body.store(
-            memory_id,
-            walrus::ir::StoreKind::I32_8 { atomic: false },
-            walrus::ir::MemArg {
-                align: 1,
-                offset: offset as u64,
-            },
-        );
-    }
+    let field_ptr_local = module.locals.add(ValType::I32);
+    helpers::emit_string_const(&field_name, body, env, memory_id, module);
+    // emit_string_const leaves (ptr: i32, len: i32) on stack; store ptr for the call.
+    let field_len_local = module.locals.add(ValType::I32);
+    body.local_set(field_len_local);
+    body.local_set(field_ptr_local);
 
     // Call cel_optional_select(receiver, field_ptr, field_len) → *mut CelValue
     body.local_get(receiver_local);
     body.local_get(field_ptr_local);
-    body.i32_const(field_len);
+    body.local_get(field_len_local);
     body.call(env.get(RuntimeFunction::OptionalSelect));
 
     Ok(())
