@@ -183,27 +183,15 @@ impl CelEngine {
     }
 }
 
-/// Internal implementation: execute a compiled WASM module with variable bindings
-/// and optional extension implementations.
-fn execute_wasm_inner(
-    wasm_bytes: &[u8],
-    bindings_json: Option<&str>,
-    log_level: LogLevel,
-    logger: slog::Logger,
-    extensions: std::collections::HashMap<ExtensionKey, ExtensionFn>,
-) -> Result<String, anyhow::Error> {
-    // Create a Wasmtime engine and store with host state
-    let engine = Engine::default();
-    let host_state = HostState { logger, extensions };
-    let mut store = Store::new(&engine, host_state);
+/// Register all host functions into the linker.
+fn add_to_linker(linker: &mut Linker<HostState>) -> Result<(), anyhow::Error> {
+    register_cel_log(linker)?;
+    register_cel_abort(linker)?;
+    register_cel_call_extension(linker)?;
+    Ok(())
+}
 
-    // Load and compile the WASM module from bytes
-    let module = Module::from_binary(&engine, wasm_bytes)?;
-
-    // Create a linker and add the cel_log host function
-    let mut linker = Linker::new(&engine);
-
-    // Add cel_log host function for structured logging
+fn register_cel_log(linker: &mut Linker<HostState>) -> Result<(), anyhow::Error> {
     linker.func_wrap(
         "env",
         "cel_log",
@@ -257,8 +245,10 @@ fn execute_wasm_inner(
             Ok(())
         },
     )?;
+    Ok(())
+}
 
-    // Add cel_abort host function for error handling
+fn register_cel_abort(linker: &mut Linker<HostState>) -> Result<(), anyhow::Error> {
     // The guest runtime calls this when a runtime error occurs (divide by zero, overflow, etc.)
     // The packed parameter contains: upper 32 bits = address, lower 32 bits = length
     linker.func_wrap(
@@ -291,8 +281,10 @@ fn execute_wasm_inner(
             )))
         },
     )?;
+    Ok(())
+}
 
-    // Add cel_call_extension host function for extension function dispatch.
+fn register_cel_call_extension(linker: &mut Linker<HostState>) -> Result<(), anyhow::Error> {
     // The guest calls this to invoke a host-provided extension function.
     // packed: low 32 bits = ptr to request JSON, high 32 bits = len
     // returns: low 32 bits = ptr to response JSON, high 32 bits = len
@@ -371,6 +363,29 @@ fn execute_wasm_inner(
             Ok(encoded)
         },
     )?;
+    Ok(())
+}
+
+/// Internal implementation: execute a compiled WASM module with variable bindings
+/// and optional extension implementations.
+fn execute_wasm_inner(
+    wasm_bytes: &[u8],
+    bindings_json: Option<&str>,
+    log_level: LogLevel,
+    logger: slog::Logger,
+    extensions: std::collections::HashMap<ExtensionKey, ExtensionFn>,
+) -> Result<String, anyhow::Error> {
+    // Create a Wasmtime engine and store with host state
+    let engine = Engine::default();
+    let host_state = HostState { logger, extensions };
+    let mut store = Store::new(&engine, host_state);
+
+    // Load and compile the WASM module from bytes
+    let module = Module::from_binary(&engine, wasm_bytes)?;
+
+    // Create a linker and register all host functions
+    let mut linker = Linker::new(&engine);
+    add_to_linker(&mut linker)?;
 
     // Create an instance using the linker
     let instance = linker.instantiate(&mut store, &module)?;
@@ -454,149 +469,7 @@ fn execute_wasm_proto_inner(
 
     let module = Module::from_binary(&engine, wasm_bytes)?;
     let mut linker = Linker::new(&engine);
-
-    // cel_log — same as execute_wasm_inner
-    linker.func_wrap(
-        "env",
-        "cel_log",
-        |mut caller: Caller<'_, HostState>, ptr: i32, len: i32| -> Result<(), wasmtime::Error> {
-            let memory = caller
-                .get_export("memory")
-                .and_then(|e| e.into_memory())
-                .ok_or_else(|| wasmtime::Error::msg("Failed to get WASM memory"))?;
-
-            let mut buffer = vec![0u8; len as usize];
-            memory.read(&caller, ptr as usize, &mut buffer)?;
-
-            let event: ferricel_types::LogEvent = serde_json::from_slice(&buffer).map_err(|e| {
-                wasmtime::error::format_err!("Failed to deserialize log event: {}", e)
-            })?;
-
-            let extra_json =
-                serde_json::to_string(&event.extra).unwrap_or_else(|_| "{}".to_string());
-
-            let logger = &caller.data().logger;
-            let child_logger = logger.new(slog::o!(
-                "file" => event.file,
-                "line" => event.line,
-                "column" => event.column,
-                "extra" => extra_json
-            ));
-
-            match event.level {
-                ferricel_types::LogLevel::Error => {
-                    slog::error!(child_logger, "{}", event.message)
-                }
-                ferricel_types::LogLevel::Warn => {
-                    slog::warn!(child_logger, "{}", event.message)
-                }
-                ferricel_types::LogLevel::Info => {
-                    slog::info!(child_logger, "{}", event.message)
-                }
-                ferricel_types::LogLevel::Debug => {
-                    slog::debug!(child_logger, "{}", event.message)
-                }
-            }
-
-            Ok(())
-        },
-    )?;
-
-    // cel_abort — same as execute_wasm_inner
-    linker.func_wrap(
-        "env",
-        "cel_abort",
-        |mut caller: Caller<'_, HostState>, packed: i64| -> Result<(), wasmtime::Error> {
-            let address = ((packed as u64) >> 32) as u32;
-            let length = packed as u32;
-
-            let memory = caller
-                .get_export("memory")
-                .and_then(|e| e.into_memory())
-                .ok_or_else(|| wasmtime::Error::msg("Failed to get WASM memory for error"))?;
-
-            let mut buffer = vec![0u8; length as usize];
-            memory.read(&caller, address as usize, &mut buffer)?;
-
-            let error_message = std::str::from_utf8(&buffer).map_err(|e| {
-                wasmtime::Error::msg(format!("Invalid UTF-8 in error message: {}", e))
-            })?;
-
-            Err(wasmtime::Error::msg(format!(
-                "CEL runtime error: {}",
-                error_message
-            )))
-        },
-    )?;
-
-    // cel_call_extension — same as execute_wasm_inner
-    linker.func_wrap(
-        "env",
-        "cel_call_extension",
-        |mut caller: Caller<'_, HostState>, packed: i64| -> Result<i64, wasmtime::Error> {
-            let req_ptr = (packed & 0xFFFFFFFF) as u32 as usize;
-            let req_len = (packed >> 32) as u32 as usize;
-
-            let memory = caller
-                .get_export("memory")
-                .and_then(|e| e.into_memory())
-                .ok_or_else(|| wasmtime::Error::msg("Failed to get WASM memory"))?;
-
-            let mut req_buf = vec![0u8; req_len];
-            memory.read(&caller, req_ptr, &mut req_buf)?;
-
-            let payload: ExtensionCallPayload = serde_json::from_slice(&req_buf).map_err(|e| {
-                wasmtime::Error::msg(format!("Failed to deserialize extension payload: {}", e))
-            })?;
-
-            let key = ExtensionKey::new(payload.namespace.clone(), payload.function.clone());
-            let result_value = {
-                let ext_fn = caller.data().extensions.get(&key);
-                match ext_fn {
-                    Some(f) => f(payload.args.clone()),
-                    None => {
-                        let full_name = match &payload.namespace {
-                            Some(ns) => format!("{}.{}", ns, payload.function),
-                            None => payload.function.clone(),
-                        };
-                        Err(format!("Extension not found: {}", full_name))
-                    }
-                }
-            };
-
-            let resp_json = match result_value {
-                Ok(v) => serde_json::to_vec(&v).unwrap_or_else(|e| {
-                    format!(
-                        r#"{{"error":"Failed to serialize extension result: {}"}}"#,
-                        e
-                    )
-                    .into_bytes()
-                }),
-                Err(msg) => {
-                    let escaped = msg.replace('"', "\\\"");
-                    format!(r#"{{"error":"{}"}}"#, escaped).into_bytes()
-                }
-            };
-
-            let resp_len = resp_json.len() as i32;
-            let cel_malloc = caller
-                .get_export("cel_malloc")
-                .and_then(|e| e.into_func())
-                .ok_or_else(|| wasmtime::Error::msg("Failed to get cel_malloc export"))?
-                .typed::<i32, i32>(&caller)?;
-
-            let resp_ptr = cel_malloc.call(&mut caller, resp_len)?;
-
-            let memory = caller
-                .get_export("memory")
-                .and_then(|e| e.into_memory())
-                .ok_or_else(|| wasmtime::Error::msg("Failed to get WASM memory"))?;
-            memory.write(&mut caller, resp_ptr as usize, &resp_json)?;
-
-            let encoded = (resp_ptr as i64) | ((resp_len as i64) << 32);
-            Ok(encoded)
-        },
-    )?;
+    add_to_linker(&mut linker)?;
 
     let instance = linker.instantiate(&mut store, &module)?;
 
