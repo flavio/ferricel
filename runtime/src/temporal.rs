@@ -143,7 +143,7 @@ pub unsafe extern "C" fn cel_timestamp_diff(
 
     // Validate the resulting duration is within range
     let seconds = duration.num_seconds();
-    let nanos = duration.subsec_nanos() as i32;
+    let nanos = duration.subsec_nanos();
     validate_duration(seconds, nanos);
 
     Box::into_raw(Box::new(CelValue::Duration(duration)))

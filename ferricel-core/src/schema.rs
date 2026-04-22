@@ -257,17 +257,14 @@ impl ProtoSchema {
                         }
                         // Distinguish map fields (repeated MapEntry) from plain lists
                         let kind_str = match &field.kind {
-                            FieldKind::Message(type_name) => {
+                            FieldKind::Message(type_name)
                                 if self
                                     .messages
                                     .get(type_name.as_str())
                                     .map(|m| m.is_map_entry)
-                                    .unwrap_or(false)
-                                {
-                                    "map"
-                                } else {
-                                    "list"
-                                }
+                                    .unwrap_or(false) =>
+                            {
+                                "map"
                             }
                             _ => "list",
                         };
