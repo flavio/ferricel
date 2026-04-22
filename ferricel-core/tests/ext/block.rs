@@ -8,20 +8,21 @@ use rstest::rstest;
 // ---------------------------------------------------------------------------
 
 #[rstest]
-// Single slot, body references it
-#[case("cel.block([1 + 1], cel.index(0)) == 2")]
-// Multiple independent slots
-#[case("cel.block([1, 2, 3], cel.index(0) + cel.index(1) + cel.index(2)) == 6")]
-// Later slot references earlier slot
-#[case("cel.block([1, cel.index(0) + 1, cel.index(1) + 1], cel.index(2)) == 3")]
-// Body can reference same slot multiple times
-#[case("cel.block([5], cel.index(0) * cel.index(0)) == 25")]
-// String slots
-#[case("cel.block(['hello', ' world'], cel.index(0) + cel.index(1)) == 'hello world'")]
-// Boolean slot
-#[case("cel.block([1 == 1], cel.index(0)) == true")]
-// Null slot
-#[case("cel.block([null], cel.index(0) == null)")]
+#[case::single_slot_body_references_it("cel.block([1 + 1], cel.index(0)) == 2")]
+#[case::multiple_independent_slots(
+    "cel.block([1, 2, 3], cel.index(0) + cel.index(1) + cel.index(2)) == 6"
+)]
+#[case::later_slot_references_earlier_slot(
+    "cel.block([1, cel.index(0) + 1, cel.index(1) + 1], cel.index(2)) == 3"
+)]
+#[case::body_can_reference_same_slot_multiple_times(
+    "cel.block([5], cel.index(0) * cel.index(0)) == 25"
+)]
+#[case::string_slots(
+    "cel.block(['hello', ' world'], cel.index(0) + cel.index(1)) == 'hello world'"
+)]
+#[case::boolean_slot("cel.block([1 == 1], cel.index(0)) == true")]
+#[case::null_slot("cel.block([null], cel.index(0) == null)")]
 fn test_cel_block(#[case] expr: &str) {
     let result = compile_and_execute_json(expr).expect("Failed to compile and execute");
     assert_eq!(
