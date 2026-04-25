@@ -32,22 +32,9 @@ pub use types::CelValue;
 // Re-export all WASM-callable functions
 pub use memory::{cel_free, cel_malloc};
 
-pub use arithmetic::{
-    cel_double_add, cel_double_div, cel_double_mul, cel_double_sub, cel_int_div, cel_int_mod,
-    cel_int_mul, cel_int_sub, cel_uint_add, cel_uint_div, cel_uint_mod, cel_uint_mul, cel_uint_sub,
-};
-
-pub use comparison::{
-    cel_double_eq, cel_double_gt, cel_double_gte, cel_double_lt, cel_double_lte, cel_double_ne,
-    cel_duration_gt, cel_duration_gte, cel_duration_lt, cel_duration_lte, cel_int_eq, cel_int_gt,
-    cel_int_gte, cel_int_lt, cel_int_lte, cel_int_ne, cel_timestamp_gt, cel_timestamp_gte,
-    cel_timestamp_lt, cel_timestamp_lte, cel_uint_eq, cel_uint_gt, cel_uint_gte, cel_uint_lt,
-    cel_uint_lte, cel_uint_ne,
-};
-
 pub use logical::{
-    cel_bool_and, cel_bool_not, cel_bool_or, cel_conditional, cel_is_bool_or_error, cel_is_error,
-    cel_is_strictly_false, cel_is_strictly_true, cel_not_strictly_false,
+    cel_bool_and, cel_bool_not, cel_bool_or, cel_is_error, cel_is_strictly_false,
+    cel_is_strictly_true, cel_not_strictly_false,
 };
 
 pub use serialization::{cel_serialize_bool, cel_serialize_int, cel_serialize_value};
@@ -58,14 +45,14 @@ pub use globals::{cel_get_variable, cel_init_bindings, cel_reset_globals};
 
 pub use conversion::{
     cel_bool, cel_bytes, cel_double, cel_duration, cel_int, cel_string, cel_timestamp, cel_type,
-    cel_uint, cel_value_to_bool, cel_value_to_i64, cel_value_to_u64,
+    cel_uint, cel_value_to_bool,
 };
 
 pub use field_access::{cel_get_field, cel_has_field};
 
 pub use array::{cel_array_get, cel_array_len, cel_array_push, cel_create_array};
 
-pub use map::{cel_create_map, cel_map_get, cel_map_insert, cel_map_insert_entry, cel_map_keys};
+pub use map::{cel_create_map, cel_map_insert, cel_map_insert_entry};
 
 pub use iter::{cel_cond_inc, cel_iter_prepare, cel_iter_var1, cel_iter_var2};
 
@@ -103,11 +90,11 @@ pub use ext::regex::{
 
 // Re-export CEL extended string library functions
 pub use ext::strings::{
-    cel_string_char_at, cel_string_format, cel_string_index_of, cel_string_index_of_offset,
-    cel_string_last_index_of, cel_string_last_index_of_offset, cel_string_lower_ascii,
-    cel_string_replace, cel_string_replace_n, cel_string_reverse, cel_string_split,
-    cel_string_split_n, cel_string_substring, cel_string_substring_range, cel_string_trim,
-    cel_string_upper_ascii, cel_strings_quote,
+    cel_string_char_at, cel_string_format, cel_string_index_of_offset,
+    cel_string_last_index_of_offset, cel_string_lower_ascii, cel_string_replace,
+    cel_string_replace_n, cel_string_reverse, cel_string_split, cel_string_split_n,
+    cel_string_substring, cel_string_substring_range, cel_string_trim, cel_string_upper_ascii,
+    cel_strings_quote,
 };
 
 // Re-export CEL extended list library functions
@@ -234,8 +221,7 @@ pub use kubernetes::semver::{
 // Re-export Kubernetes quantity extension functions
 pub use kubernetes::quantity::{
     cel_k8s_is_quantity, cel_k8s_quantity_add, cel_k8s_quantity_add_int,
-    cel_k8s_quantity_as_approx_float, cel_k8s_quantity_as_integer, cel_k8s_quantity_compare_to,
-    cel_k8s_quantity_is_greater_than, cel_k8s_quantity_is_integer, cel_k8s_quantity_is_less_than,
+    cel_k8s_quantity_as_approx_float, cel_k8s_quantity_as_integer, cel_k8s_quantity_is_integer,
     cel_k8s_quantity_parse, cel_k8s_quantity_sign, cel_k8s_quantity_sub, cel_k8s_quantity_sub_int,
 };
 

@@ -222,7 +222,7 @@ pub unsafe extern "C" fn cel_cond_inc(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{make_int, make_str, make_val, read_val};
+    use crate::test_helpers::{make_int, make_val, read_val};
     use rstest::rstest;
 
     // Helper: build a map CelValue pointer with given string→int entries

@@ -7,92 +7,6 @@ use crate::helpers::{cel_create_double, cel_create_duration, cel_create_int, cel
 use crate::types::CelValue;
 use slog::{debug, error};
 
-/// Extract i64 from a CelValue pointer.
-///
-/// # Parameters
-/// - `ptr`: Pointer to a CelValue (must be Int variant)
-///
-/// # Returns
-/// - The i64 value
-///
-/// # Panics
-/// - If ptr is null
-/// - If CelValue is not Int variant
-///
-/// # Safety
-/// - `ptr` must be a valid pointer to a CelValue
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_value_to_i64(ptr: *mut CelValue) -> i64 {
-    let log = crate::logging::get_logger();
-
-    if ptr.is_null() {
-        error!(log, "Attempted to convert null CelValue pointer to i64";
-            "function" => "cel_value_to_i64");
-        abort_with_error("no such overload");
-    }
-
-    // SAFETY: Caller guarantees ptr is valid
-    let value = unsafe { &*ptr };
-
-    match value {
-        CelValue::Int(n) => {
-            debug!(log, "Converting CelValue to i64"; "value" => *n);
-            *n
-        }
-        other => {
-            error!(log, "Type mismatch in conversion";
-            "function" => "cel_value_to_i64",
-            "expected" => "Int",
-            "actual" => format!("{:?}", other));
-            abort_with_error("no such overload")
-        }
-    }
-}
-
-/// Extract u64 from a CelValue pointer.
-///
-/// # Parameters
-/// - `ptr`: Pointer to a CelValue (must be UInt variant)
-///
-/// # Returns
-/// - The u64 value
-///
-/// # Panics
-/// - If ptr is null
-/// - If CelValue is not UInt variant
-///
-/// # Safety
-/// - `ptr` must be a valid pointer to a CelValue
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_value_to_u64(ptr: *mut CelValue) -> u64 {
-    let log = crate::logging::get_logger();
-
-    if ptr.is_null() {
-        error!(log, "Attempted to convert null CelValue pointer to u64";
-            "function" => "cel_value_to_u64");
-        abort_with_error("no such overload");
-    }
-
-    // SAFETY: Caller guarantees ptr is valid
-    let value = unsafe { &*ptr };
-
-    match value {
-        CelValue::UInt(n) => {
-            debug!(log, "Converting CelValue to u64"; "value" => *n);
-            *n
-        }
-        other => {
-            error!(log, "Type mismatch in conversion";
-            "function" => "cel_value_to_u64",
-            "expected" => "UInt",
-            "actual" => format!("{:?}", other));
-            abort_with_error("no such overload")
-        }
-    }
-}
-
 /// Extract bool from a CelValue pointer, returned as i64 (0 or 1).
 ///
 /// # Parameters
@@ -701,48 +615,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_value_to_i64_positive() {
-        let value = Box::new(CelValue::Int(42));
-        let ptr = Box::into_raw(value);
-
-        unsafe {
-            let result = cel_value_to_i64(ptr);
-            assert_eq!(result, 42);
-
-            // Cleanup
-            let _boxed = Box::from_raw(ptr);
-        }
-    }
-
-    #[test]
-    fn test_value_to_i64_negative() {
-        let value = Box::new(CelValue::Int(-100));
-        let ptr = Box::into_raw(value);
-
-        unsafe {
-            let result = cel_value_to_i64(ptr);
-            assert_eq!(result, -100);
-
-            // Cleanup
-            let _boxed = Box::from_raw(ptr);
-        }
-    }
-
-    #[test]
-    fn test_value_to_i64_zero() {
-        let value = Box::new(CelValue::Int(0));
-        let ptr = Box::into_raw(value);
-
-        unsafe {
-            let result = cel_value_to_i64(ptr);
-            assert_eq!(result, 0);
-
-            // Cleanup
-            let _boxed = Box::from_raw(ptr);
-        }
-    }
-
-    #[test]
     fn test_value_to_bool_true() {
         let value = Box::new(CelValue::Bool(true));
         let ptr = Box::into_raw(value);
@@ -763,48 +635,6 @@ mod tests {
 
         unsafe {
             let result = cel_value_to_bool(ptr);
-            assert_eq!(result, 0);
-
-            // Cleanup
-            let _boxed = Box::from_raw(ptr);
-        }
-    }
-
-    #[test]
-    fn test_value_to_u64_basic() {
-        let value = Box::new(CelValue::UInt(12345));
-        let ptr = Box::into_raw(value);
-
-        unsafe {
-            let result = cel_value_to_u64(ptr);
-            assert_eq!(result, 12345);
-
-            // Cleanup
-            let _boxed = Box::from_raw(ptr);
-        }
-    }
-
-    #[test]
-    fn test_value_to_u64_max() {
-        let value = Box::new(CelValue::UInt(u64::MAX));
-        let ptr = Box::into_raw(value);
-
-        unsafe {
-            let result = cel_value_to_u64(ptr);
-            assert_eq!(result, u64::MAX);
-
-            // Cleanup
-            let _boxed = Box::from_raw(ptr);
-        }
-    }
-
-    #[test]
-    fn test_value_to_u64_zero() {
-        let value = Box::new(CelValue::UInt(0));
-        let ptr = Box::into_raw(value);
-
-        unsafe {
-            let result = cel_value_to_u64(ptr);
             assert_eq!(result, 0);
 
             // Cleanup

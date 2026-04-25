@@ -173,74 +173,22 @@ pub unsafe extern "C" fn cel_create_error(
     }
 }
 
-/// Internal helper: Extracts i64 from CelValue or panics with type error.
-/// This is not exported - it's used by arithmetic and comparison operations.
-pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
-    let log = crate::logging::get_logger();
-    extract_int_with_log(ptr, &log)
-}
-
-/// Internal helper with logger: Extracts i64 from CelValue or aborts with structured error.
-pub(crate) fn extract_int_with_log(ptr: *mut CelValue, log: &slog::Logger) -> i64 {
-    unsafe {
-        if ptr.is_null() {
-            error!(log, "Null pointer in extract operation";
-                "function" => "extract_int",
-                "pointer" => "null");
-            abort_with_error("no such overload");
-        }
-        match &*ptr {
-            CelValue::Int(i) => *i,
-            CelValue::Error(_) => {
-                // Propagate errors by aborting
-                // This allows errors to bubble up through the expression tree
-                abort_with_error("no such overload");
-            }
-            other => {
-                error!(log, "Type mismatch in extraction";
-                    "function" => "extract_int",
-                    "expected" => "Int",
-                    "actual" => format!("{:?}", other));
-                abort_with_error("no such overload");
-            }
-        }
-    }
-}
-
-/// Internal helper: Extracts u64 from CelValue or panics with type error.
-/// This is not exported - it's used by arithmetic and comparison operations.
-pub(crate) fn extract_uint(ptr: *mut CelValue) -> u64 {
-    let log = crate::logging::get_logger();
-    extract_uint_with_log(ptr, &log)
-}
-
-/// Internal helper with logger: Extracts u64 from CelValue or aborts with structured error.
-pub(crate) fn extract_uint_with_log(ptr: *mut CelValue, log: &slog::Logger) -> u64 {
-    unsafe {
-        if ptr.is_null() {
-            error!(log, "Null pointer in extract operation";
-                "function" => "extract_uint",
-                "pointer" => "null");
-            abort_with_error("no such overload");
-        }
-        match &*ptr {
-            CelValue::UInt(u) => *u,
-            other => {
-                error!(log, "Type mismatch in extraction";
-                    "function" => "extract_uint",
-                    "expected" => "UInt",
-                    "actual" => format!("{:?}", other));
-                abort_with_error("no such overload");
-            }
-        }
-    }
-}
-
 /// Internal helper: Extracts bool from CelValue or panics with type error.
 /// This is not exported - it's used by logical operations.
 pub(crate) fn extract_bool(ptr: *mut CelValue) -> bool {
     let log = crate::logging::get_logger();
     extract_bool_with_log(ptr, &log)
+}
+
+/// Test-only helper: Extracts i64 from a CelValue::Int pointer, or aborts.
+#[cfg(test)]
+pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
+    unsafe {
+        match &*ptr {
+            CelValue::Int(i) => *i,
+            other => crate::error::abort_with_error(&format!("expected Int, got {:?}", other)),
+        }
+    }
 }
 
 /// Internal helper with logger: Extracts bool from CelValue or aborts with structured error.
@@ -258,35 +206,6 @@ pub(crate) fn extract_bool_with_log(ptr: *mut CelValue, log: &slog::Logger) -> b
                 error!(log, "Type mismatch in extraction";
                     "function" => "extract_bool",
                     "expected" => "Bool",
-                    "actual" => format!("{:?}", other));
-                abort_with_error("no such overload");
-            }
-        }
-    }
-}
-
-/// Internal helper: Extracts f64 from CelValue or panics with type error.
-/// This is not exported - it's used by arithmetic and comparison operations.
-pub(crate) fn extract_double(ptr: *mut CelValue) -> f64 {
-    let log = crate::logging::get_logger();
-    extract_double_with_log(ptr, &log)
-}
-
-/// Internal helper with logger: Extracts f64 from CelValue or aborts with structured error.
-pub(crate) fn extract_double_with_log(ptr: *mut CelValue, log: &slog::Logger) -> f64 {
-    unsafe {
-        if ptr.is_null() {
-            error!(log, "Null pointer in extract operation";
-                "function" => "extract_double",
-                "pointer" => "null");
-            abort_with_error("no such overload");
-        }
-        match &*ptr {
-            CelValue::Double(d) => *d,
-            other => {
-                error!(log, "Type mismatch in extraction";
-                    "function" => "extract_double",
-                    "expected" => "Double",
                     "actual" => format!("{:?}", other));
                 abort_with_error("no such overload");
             }
@@ -409,38 +328,6 @@ pub(crate) fn extract_duration_chrono_with_log(
                 error!(log, "Type mismatch in extraction";
                     "function" => "extract_duration_chrono",
                     "expected" => "Duration",
-                    "actual" => format!("{:?}", other));
-                abort_with_error("no such overload");
-            }
-        }
-    }
-}
-
-/// Internal helper: Extracts chrono::DateTime from CelValue::Timestamp.
-/// This is not exported - it's used by temporal comparison operations.
-pub(crate) fn extract_timestamp(ptr: *mut CelValue) -> chrono::DateTime<chrono::FixedOffset> {
-    let log = crate::logging::get_logger();
-    extract_timestamp_with_log(ptr, &log)
-}
-
-/// Internal helper with logger: Extracts chrono::DateTime from CelValue::Timestamp.
-pub(crate) fn extract_timestamp_with_log(
-    ptr: *mut CelValue,
-    log: &slog::Logger,
-) -> chrono::DateTime<chrono::FixedOffset> {
-    unsafe {
-        if ptr.is_null() {
-            error!(log, "Null pointer in extract operation";
-                "function" => "extract_timestamp",
-                "pointer" => "null");
-            abort_with_error("no such overload");
-        }
-        match &*ptr {
-            CelValue::Timestamp(dt) => *dt,
-            other => {
-                error!(log, "Type mismatch in extraction";
-                    "function" => "extract_timestamp",
-                    "expected" => "Timestamp",
                     "actual" => format!("{:?}", other));
                 abort_with_error("no such overload");
             }
@@ -1815,15 +1702,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_extract_int() {
-        unsafe {
-            let ptr = cel_create_int(123);
-            let value = extract_int(ptr);
-            assert_eq!(value, 123);
-            let _ = Box::from_raw(ptr);
-        }
-    }
+    // Integration tests for cel_value_add dispatcher
 
     #[test]
     fn test_extract_bool_true() {
@@ -1859,16 +1738,6 @@ mod tests {
         unsafe {
             let ptr = cel_create_double(-2.5);
             assert_eq!(*ptr, CelValue::Double(-2.5));
-            let _ = Box::from_raw(ptr);
-        }
-    }
-
-    #[test]
-    fn test_extract_double() {
-        unsafe {
-            let ptr = cel_create_double(123.456);
-            let value = extract_double(ptr);
-            assert_eq!(value, 123.456);
             let _ = Box::from_raw(ptr);
         }
     }
@@ -1950,16 +1819,6 @@ mod tests {
         unsafe {
             let ptr = cel_create_uint(u64::MAX);
             assert_eq!(*ptr, CelValue::UInt(u64::MAX));
-            let _ = Box::from_raw(ptr);
-        }
-    }
-
-    #[test]
-    fn test_extract_uint() {
-        unsafe {
-            let ptr = cel_create_uint(12345);
-            let value = extract_uint(ptr);
-            assert_eq!(value, 12345);
             let _ = Box::from_raw(ptr);
         }
     }

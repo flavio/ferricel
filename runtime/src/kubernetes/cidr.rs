@@ -357,20 +357,6 @@ pub unsafe extern "C" fn cel_k8s_cidr_contains_ip_obj(
     Box::into_raw(Box::new(CelValue::Bool(result)))
 }
 
-/// Alias for `cel_k8s_cidr_contains_ip_obj` — accepts string argument.
-/// Both overloads share the same implementation via runtime type dispatch.
-///
-/// # Safety
-/// `cidr_ptr` and `str_ptr` must be valid, non-null pointers to their respective `CelValue`s.
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_k8s_cidr_contains_ip_str(
-    cidr_ptr: *mut CelValue,
-    str_ptr: *mut CelValue,
-) -> *mut CelValue {
-    unsafe { cel_k8s_cidr_contains_ip_obj(cidr_ptr, str_ptr) }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // cidr.containsCIDR(CIDR object or string)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -422,20 +408,6 @@ pub unsafe extern "C" fn cel_k8s_cidr_contains_cidr_obj(
     let other_network = apply_mask(other_addr, other_prefix);
     let result = cidr_contains_cidr(network, prefix_len, other_network, other_prefix);
     Box::into_raw(Box::new(CelValue::Bool(result)))
-}
-
-/// Alias for `cel_k8s_cidr_contains_cidr_obj` — accepts string argument.
-/// Both overloads share the same implementation via runtime type dispatch.
-///
-/// # Safety
-/// `cidr_ptr` and `str_ptr` must be valid, non-null pointers to their respective `CelValue`s.
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_k8s_cidr_contains_cidr_str(
-    cidr_ptr: *mut CelValue,
-    str_ptr: *mut CelValue,
-) -> *mut CelValue {
-    unsafe { cel_k8s_cidr_contains_cidr_obj(cidr_ptr, str_ptr) }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -610,25 +582,6 @@ mod tests {
         assert_eq!(result, CelValue::Bool(false));
     }
 
-    // ── cidr.containsIP(string) ───────────────────────────────────────────────
-
-    #[rstest]
-    #[case("192.168.0.0/24", "192.168.0.1", true)]
-    #[case("192.168.0.0/24", "192.168.1.1", false)]
-    fn test_contains_ip_str(#[case] cidr_str: &str, #[case] ip_str: &str, #[case] expected: bool) {
-        let cidr_ptr = unsafe { make_cidr(cidr_str) };
-        let str_ptr = unsafe { make_str(ip_str) };
-        let result = unsafe { read_val(cel_k8s_cidr_contains_ip_str(cidr_ptr, str_ptr)) };
-        assert_eq!(
-            result,
-            CelValue::Bool(expected),
-            "containsIP({:?}, {:?})",
-            cidr_str,
-            ip_str
-        );
-        unsafe { drop(Box::from_raw(str_ptr)) };
-    }
-
     // ── cidr.containsCIDR(CIDR object) ───────────────────────────────────────
 
     #[rstest]
@@ -651,29 +604,6 @@ mod tests {
             cidr_str,
             other_str
         );
-    }
-
-    // ── cidr.containsCIDR(string) ─────────────────────────────────────────────
-
-    #[rstest]
-    #[case("192.168.0.0/24", "192.168.0.0/25", true)]
-    #[case("192.168.0.0/24", "192.168.0.0/23", false)]
-    fn test_contains_cidr_str(
-        #[case] cidr_str: &str,
-        #[case] other_str: &str,
-        #[case] expected: bool,
-    ) {
-        let cidr_ptr = unsafe { make_cidr(cidr_str) };
-        let str_ptr = unsafe { make_str(other_str) };
-        let result = unsafe { read_val(cel_k8s_cidr_contains_cidr_str(cidr_ptr, str_ptr)) };
-        assert_eq!(
-            result,
-            CelValue::Bool(expected),
-            "containsCIDR({:?}, {:?})",
-            cidr_str,
-            other_str
-        );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     // ── parse_k8s_cidr (private helper) ──────────────────────────────────────

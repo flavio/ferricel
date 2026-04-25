@@ -182,37 +182,6 @@ pub unsafe extern "C" fn cel_not_strictly_false(ptr: *mut CelValue) -> *mut CelV
     }
 }
 
-/// Ternary/conditional operator: condition ? true_value : false_value
-/// If condition is true, returns true_value, otherwise returns false_value.
-/// If condition is an error, returns the error.
-/// The condition is evaluated as a boolean using extract_bool.
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - All pointer arguments are valid and properly aligned
-/// - All pointers point to initialized CelValue instances
-/// - The returned pointer (one of the input pointers) must not be freed prematurely
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_conditional(
-    cond_ptr: *mut CelValue,
-    true_ptr: *mut CelValue,
-    false_ptr: *mut CelValue,
-) -> *mut CelValue {
-    // Check if condition is an error and propagate it
-    unsafe {
-        if !cond_ptr.is_null()
-            && let CelValue::Error(_) = &*cond_ptr
-        {
-            return cond_ptr;
-        }
-    }
-
-    let cond = extract_bool(cond_ptr);
-    if cond { true_ptr } else { false_ptr }
-}
-
 /// Check if a CelValue is strictly false.
 /// Returns 1 if value is CelValue::Bool(false), 0 otherwise.
 /// Used for conditional short-circuit evaluation of && operator.
@@ -278,62 +247,6 @@ pub unsafe extern "C" fn cel_is_error(ptr: *mut CelValue) -> i32 {
         match &*ptr {
             CelValue::Error(_) => 1,
             _ => 0,
-        }
-    }
-}
-
-/// Check if a CelValue is a boolean or error.
-/// Returns 1 if value is CelValue::Bool or CelValue::Error, 0 otherwise.
-/// Used for type checking in logical operators.
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned (if not null)
-/// - If not null, the pointer points to an initialized CelValue instance
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_is_bool_or_error(ptr: *mut CelValue) -> i32 {
-    unsafe {
-        if ptr.is_null() {
-            return 0;
-        }
-        match &*ptr {
-            CelValue::Bool(_) | CelValue::Error(_) => 1,
-            _ => 0,
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_conditional_true() {
-        unsafe {
-            let cond = cel_create_bool(1);
-            let true_val = cel_create_bool(1);
-            let false_val = cel_create_bool(0);
-            let result = cel_conditional(cond, true_val, false_val);
-            assert_eq!(
-                result, true_val,
-                "Should return true value when condition is true"
-            );
-        }
-    }
-
-    #[test]
-    fn test_conditional_false() {
-        unsafe {
-            let cond = cel_create_bool(0);
-            let true_val = cel_create_bool(1);
-            let false_val = cel_create_bool(0);
-            let result = cel_conditional(cond, true_val, false_val);
-            assert_eq!(
-                result, false_val,
-                "Should return false value when condition is false"
-            );
         }
     }
 }

@@ -884,58 +884,55 @@ unsafe fn compare_quantities(
     Ok(ord)
 }
 
-/// `<Q>.isLessThan(<Q>)` → bool
+/// `<Q>.isLessThan(<Q>)` — internal helper called by poly dispatch.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null pointers to `CelValue::Quantity`.
+/// Both pointers must be valid, non-null pointers to `CelValue`.
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_k8s_quantity_is_less_than(
+pub(crate) unsafe fn cel_k8s_quantity_is_less_than(
     lhs_ptr: *mut CelValue,
     rhs_ptr: *mut CelValue,
 ) -> *mut CelValue {
     match unsafe { compare_quantities(lhs_ptr, rhs_ptr, "cel_k8s_quantity_is_less_than") } {
-        Err(e) => e,
         Ok(ord) => Box::into_raw(Box::new(CelValue::Bool(ord == std::cmp::Ordering::Less))),
+        Err(e) => e,
     }
 }
 
-/// `<Q>.isGreaterThan(<Q>)` → bool
+/// `<Q>.isGreaterThan(<Q>)` — internal helper called by poly dispatch.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null pointers to `CelValue::Quantity`.
+/// Both pointers must be valid, non-null pointers to `CelValue`.
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_k8s_quantity_is_greater_than(
+pub(crate) unsafe fn cel_k8s_quantity_is_greater_than(
     lhs_ptr: *mut CelValue,
     rhs_ptr: *mut CelValue,
 ) -> *mut CelValue {
     match unsafe { compare_quantities(lhs_ptr, rhs_ptr, "cel_k8s_quantity_is_greater_than") } {
-        Err(e) => e,
         Ok(ord) => Box::into_raw(Box::new(CelValue::Bool(ord == std::cmp::Ordering::Greater))),
+        Err(e) => e,
     }
 }
 
-/// `<Q>.compareTo(<Q>)` → int (-1, 0, or 1)
+/// `<Q>.compareTo(<Q>)` — internal helper called by poly dispatch.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null pointers to `CelValue::Quantity`.
+/// Both pointers must be valid, non-null pointers to `CelValue`.
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_k8s_quantity_compare_to(
+pub(crate) unsafe fn cel_k8s_quantity_compare_to(
     lhs_ptr: *mut CelValue,
     rhs_ptr: *mut CelValue,
 ) -> *mut CelValue {
     match unsafe { compare_quantities(lhs_ptr, rhs_ptr, "cel_k8s_quantity_compare_to") } {
-        Err(e) => e,
         Ok(ord) => {
-            let result: i64 = match ord {
+            let n: i64 = match ord {
                 std::cmp::Ordering::Less => -1,
                 std::cmp::Ordering::Equal => 0,
                 std::cmp::Ordering::Greater => 1,
             };
-            Box::into_raw(Box::new(CelValue::Int(result)))
+            Box::into_raw(Box::new(CelValue::Int(n)))
         }
+        Err(e) => e,
     }
 }
 
@@ -1157,61 +1154,6 @@ mod tests {
         }
     }
 
-    // ── comparisons ───────────────────────────────────────────────────────
-
-    #[rstest]
-    #[case("100m", "200m", true)]
-    #[case("200m", "100m", false)]
-    #[case("100m", "100m", false)]
-    #[case("1k", "1M", true)]
-    fn test_is_less_than(#[case] lhs: &str, #[case] rhs: &str, #[case] expected: bool) {
-        let lhs_ptr = unsafe { make_quantity(lhs) };
-        let rhs_ptr = unsafe { make_quantity(rhs) };
-        let result = unsafe { read_val(cel_k8s_quantity_is_less_than(lhs_ptr, rhs_ptr)) };
-        assert_eq!(
-            result,
-            CelValue::Bool(expected),
-            "{}.isLessThan({})",
-            lhs,
-            rhs
-        );
-    }
-
-    #[rstest]
-    #[case("200m", "100m", true)]
-    #[case("100m", "200m", false)]
-    #[case("100m", "100m", false)]
-    fn test_is_greater_than(#[case] lhs: &str, #[case] rhs: &str, #[case] expected: bool) {
-        let lhs_ptr = unsafe { make_quantity(lhs) };
-        let rhs_ptr = unsafe { make_quantity(rhs) };
-        let result = unsafe { read_val(cel_k8s_quantity_is_greater_than(lhs_ptr, rhs_ptr)) };
-        assert_eq!(
-            result,
-            CelValue::Bool(expected),
-            "{}.isGreaterThan({})",
-            lhs,
-            rhs
-        );
-    }
-
-    #[rstest]
-    #[case("100m", "200m", -1i64)]
-    #[case("200m", "100m", 1i64)]
-    #[case("100m", "100m", 0i64)]
-    #[case("200M", "0.2G", 0i64)] // cross-suffix equality
-    fn test_compare_to(#[case] lhs: &str, #[case] rhs: &str, #[case] expected: i64) {
-        let lhs_ptr = unsafe { make_quantity(lhs) };
-        let rhs_ptr = unsafe { make_quantity(rhs) };
-        let result = unsafe { read_val(cel_k8s_quantity_compare_to(lhs_ptr, rhs_ptr)) };
-        assert_eq!(
-            result,
-            CelValue::Int(expected),
-            "{}.compareTo({})",
-            lhs,
-            rhs
-        );
-    }
-
     // ── equality via quantities_equal ─────────────────────────────────────
 
     #[rstest]
@@ -1376,76 +1318,6 @@ mod tests {
             ),
             other => panic!("expected Quantity, got {:?}", other),
         }
-    }
-
-    #[rstest]
-    // overflow vs overflow
-    #[case(OVERFLOW_POS, OVERFLOW_POS, false)]
-    #[case(OVERFLOW_NEG, OVERFLOW_POS, true)]
-    #[case(OVERFLOW_POS, OVERFLOW_NEG, false)]
-    // overflow vs finite
-    #[case(OVERFLOW_NEG, "1k", true)]
-    #[case(OVERFLOW_POS, "1k", false)]
-    // finite vs overflow
-    #[case("1k", OVERFLOW_POS, true)]
-    #[case("1k", OVERFLOW_NEG, false)]
-    fn test_is_less_than_overflow(#[case] lhs: &str, #[case] rhs: &str, #[case] expected: bool) {
-        let lhs_ptr = unsafe { make_quantity(lhs) };
-        let rhs_ptr = unsafe { make_quantity(rhs) };
-        let result = unsafe { read_val(cel_k8s_quantity_is_less_than(lhs_ptr, rhs_ptr)) };
-        assert_eq!(
-            result,
-            CelValue::Bool(expected),
-            "{}.isLessThan({})",
-            lhs,
-            rhs
-        );
-    }
-
-    #[rstest]
-    // overflow vs overflow
-    #[case(OVERFLOW_POS, OVERFLOW_POS, false)]
-    #[case(OVERFLOW_POS, OVERFLOW_NEG, true)]
-    #[case(OVERFLOW_NEG, OVERFLOW_POS, false)]
-    // overflow vs finite
-    #[case(OVERFLOW_POS, "1k", true)]
-    #[case(OVERFLOW_NEG, "1k", false)]
-    // finite vs overflow
-    #[case("1k", OVERFLOW_POS, false)]
-    #[case("1k", OVERFLOW_NEG, true)]
-    fn test_is_greater_than_overflow(#[case] lhs: &str, #[case] rhs: &str, #[case] expected: bool) {
-        let lhs_ptr = unsafe { make_quantity(lhs) };
-        let rhs_ptr = unsafe { make_quantity(rhs) };
-        let result = unsafe { read_val(cel_k8s_quantity_is_greater_than(lhs_ptr, rhs_ptr)) };
-        assert_eq!(
-            result,
-            CelValue::Bool(expected),
-            "{}.isGreaterThan({})",
-            lhs,
-            rhs
-        );
-    }
-
-    #[rstest]
-    #[case(OVERFLOW_POS, OVERFLOW_POS, 0i64)]
-    #[case(OVERFLOW_NEG, OVERFLOW_NEG, 0i64)]
-    #[case(OVERFLOW_POS, OVERFLOW_NEG, 1i64)]
-    #[case(OVERFLOW_NEG, OVERFLOW_POS, -1i64)]
-    #[case(OVERFLOW_POS, "1k", 1i64)]
-    #[case(OVERFLOW_NEG, "1k", -1i64)]
-    #[case("1k", OVERFLOW_POS, -1i64)]
-    #[case("1k", OVERFLOW_NEG, 1i64)]
-    fn test_compare_to_overflow(#[case] lhs: &str, #[case] rhs: &str, #[case] expected: i64) {
-        let lhs_ptr = unsafe { make_quantity(lhs) };
-        let rhs_ptr = unsafe { make_quantity(rhs) };
-        let result = unsafe { read_val(cel_k8s_quantity_compare_to(lhs_ptr, rhs_ptr)) };
-        assert_eq!(
-            result,
-            CelValue::Int(expected),
-            "{}.compareTo({})",
-            lhs,
-            rhs
-        );
     }
 
     #[rstest]

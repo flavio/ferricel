@@ -17,21 +17,6 @@ pub enum RuntimeFunction {
     ValueMod,
     ValueNegate,
 
-    // Arithmetic (Type-specific)
-    DoubleAdd,
-    DoubleSub,
-    DoubleMul,
-    DoubleDiv,
-    IntDiv,
-    IntMod,
-    IntMul,
-    IntSub,
-    UintAdd,
-    UintDiv,
-    UintMod,
-    UintMul,
-    UintSub,
-
     // Comparison (Polymorphic)
     ValueEq,
     ValueNe,
@@ -40,48 +25,14 @@ pub enum RuntimeFunction {
     ValueGte,
     ValueLte,
 
-    // Comparison (Type-specific)
-    DoubleEq,
-    DoubleGt,
-    DoubleGte,
-    DoubleLt,
-    DoubleLte,
-    DoubleNe,
-    IntEq,
-    IntGt,
-    IntGte,
-    IntLt,
-    IntLte,
-    IntNe,
-    UintEq,
-    UintGt,
-    UintGte,
-    UintLt,
-    UintLte,
-    UintNe,
-
-    // Duration Comparison
-    DurationGt,
-    DurationGte,
-    DurationLt,
-    DurationLte,
-
-    // Timestamp Comparison
-    TimestampGt,
-    TimestampGte,
-    TimestampLt,
-    TimestampLte,
-
     // Logical
     BoolAnd,
     BoolOr,
     BoolNot,
     NotStrictlyFalse,
-    Conditional,
     IsStrictlyFalse,
     IsStrictlyTrue,
     IsError,
-    IsBoolOrError,
 
     // Serialization
     SerializeValue,
@@ -107,10 +58,6 @@ pub enum RuntimeFunction {
     // Map
     CreateMap,
     MapInsert,
-    /// Returns the keys of a map as an array.
-    MapKeys,
-    /// Gets a value from a map by key.
-    MapGet,
     /// Inserts all entries from a single-entry (or multi-entry) map into the accumulator map.
     /// Returns the accumulator on success, or a CelValue::Error if a duplicate key is found.
     MapInsertEntry,
@@ -145,9 +92,7 @@ pub enum RuntimeFunction {
     StringContains,
     StringMatches,
     StringCharAt,
-    StringIndexOf,
     StringIndexOfOffset,
-    StringLastIndexOf,
     StringLastIndexOfOffset,
     /// Polymorphic indexOf: dispatches on receiver type (string → substring search, list → element search)
     IndexOfPoly,
@@ -223,8 +168,6 @@ pub enum RuntimeFunction {
 
     // Conversions
     ValueToBool,
-    ValueToI64,
-    ValueToU64,
 
     // Type conversions / Constructor functions
     String,
@@ -284,9 +227,7 @@ pub enum RuntimeFunction {
     K8sCidrMasked,
     K8sCidrPrefixLength,
     K8sCidrContainsIpObj,
-    K8sCidrContainsIpStr,
     K8sCidrContainsCidrObj,
-    K8sCidrContainsCidrStr,
 
     // Kubernetes Semver Extensions
     K8sSemverIsSemver,
@@ -311,9 +252,6 @@ pub enum RuntimeFunction {
     K8sQuantityAddInt,
     K8sQuantitySub,
     K8sQuantitySubInt,
-    K8sQuantityIsLessThan,
-    K8sQuantityIsGreaterThan,
-    K8sQuantityCompareTo,
 
     // Kubernetes Polymorphic Comparisons (shared between Semver and Quantity)
     K8sPolyIsLessThan,
@@ -386,22 +324,6 @@ impl RuntimeFunction {
             Self::ValueMod => "cel_value_mod",
             Self::ValueNegate => "cel_value_negate",
 
-            Self::DoubleAdd => "cel_double_add",
-            Self::DoubleSub => "cel_double_sub",
-            Self::DoubleMul => "cel_double_mul",
-            Self::DoubleDiv => "cel_double_div",
-
-            Self::IntDiv => "cel_int_div",
-            Self::IntMod => "cel_int_mod",
-            Self::IntMul => "cel_int_mul",
-            Self::IntSub => "cel_int_sub",
-
-            Self::UintAdd => "cel_uint_add",
-            Self::UintDiv => "cel_uint_div",
-            Self::UintMod => "cel_uint_mod",
-            Self::UintMul => "cel_uint_mul",
-            Self::UintSub => "cel_uint_sub",
-
             Self::ValueEq => "cel_value_eq",
             Self::ValueNe => "cel_value_ne",
             Self::ValueGt => "cel_value_gt",
@@ -409,46 +331,13 @@ impl RuntimeFunction {
             Self::ValueGte => "cel_value_gte",
             Self::ValueLte => "cel_value_lte",
 
-            Self::DoubleEq => "cel_double_eq",
-            Self::DoubleGt => "cel_double_gt",
-            Self::DoubleGte => "cel_double_gte",
-            Self::DoubleLt => "cel_double_lt",
-            Self::DoubleLte => "cel_double_lte",
-            Self::DoubleNe => "cel_double_ne",
-
-            Self::IntEq => "cel_int_eq",
-            Self::IntGt => "cel_int_gt",
-            Self::IntGte => "cel_int_gte",
-            Self::IntLt => "cel_int_lt",
-            Self::IntLte => "cel_int_lte",
-            Self::IntNe => "cel_int_ne",
-
-            Self::UintEq => "cel_uint_eq",
-            Self::UintGt => "cel_uint_gt",
-            Self::UintGte => "cel_uint_gte",
-            Self::UintLt => "cel_uint_lt",
-            Self::UintLte => "cel_uint_lte",
-            Self::UintNe => "cel_uint_ne",
-
-            Self::DurationGt => "cel_duration_gt",
-            Self::DurationGte => "cel_duration_gte",
-            Self::DurationLt => "cel_duration_lt",
-            Self::DurationLte => "cel_duration_lte",
-
-            Self::TimestampGt => "cel_timestamp_gt",
-            Self::TimestampGte => "cel_timestamp_gte",
-            Self::TimestampLt => "cel_timestamp_lt",
-            Self::TimestampLte => "cel_timestamp_lte",
-
             Self::BoolAnd => "cel_bool_and",
             Self::BoolOr => "cel_bool_or",
             Self::BoolNot => "cel_bool_not",
             Self::NotStrictlyFalse => "cel_not_strictly_false",
-            Self::Conditional => "cel_conditional",
             Self::IsStrictlyFalse => "cel_is_strictly_false",
             Self::IsStrictlyTrue => "cel_is_strictly_true",
             Self::IsError => "cel_is_error",
-            Self::IsBoolOrError => "cel_is_bool_or_error",
 
             Self::SerializeValue => "cel_serialize_value",
 
@@ -468,8 +357,6 @@ impl RuntimeFunction {
 
             Self::CreateMap => "cel_create_map",
             Self::MapInsert => "cel_map_insert",
-            Self::MapKeys => "cel_map_keys",
-            Self::MapGet => "cel_map_get",
             Self::MapInsertEntry => "cel_map_insert_entry",
 
             Self::IterPrepare => "cel_iter_prepare",
@@ -494,9 +381,7 @@ impl RuntimeFunction {
             Self::StringContains => "cel_string_contains",
             Self::StringMatches => "cel_string_matches",
             Self::StringCharAt => "cel_string_char_at",
-            Self::StringIndexOf => "cel_string_index_of",
             Self::StringIndexOfOffset => "cel_string_index_of_offset",
-            Self::StringLastIndexOf => "cel_string_last_index_of",
             Self::StringLastIndexOfOffset => "cel_string_last_index_of_offset",
             Self::IndexOfPoly => "cel_index_of_poly",
             Self::LastIndexOfPoly => "cel_last_index_of_poly",
@@ -562,8 +447,6 @@ impl RuntimeFunction {
             Self::ValueIndex => "cel_value_index",
 
             Self::ValueToBool => "cel_value_to_bool",
-            Self::ValueToI64 => "cel_value_to_i64",
-            Self::ValueToU64 => "cel_value_to_u64",
 
             Self::String => "cel_string",
             Self::Int => "cel_int",
@@ -616,9 +499,7 @@ impl RuntimeFunction {
             Self::K8sCidrMasked => "cel_k8s_cidr_masked",
             Self::K8sCidrPrefixLength => "cel_k8s_cidr_prefix_length",
             Self::K8sCidrContainsIpObj => "cel_k8s_cidr_contains_ip_obj",
-            Self::K8sCidrContainsIpStr => "cel_k8s_cidr_contains_ip_str",
             Self::K8sCidrContainsCidrObj => "cel_k8s_cidr_contains_cidr_obj",
-            Self::K8sCidrContainsCidrStr => "cel_k8s_cidr_contains_cidr_str",
 
             Self::K8sSemverIsSemver => "cel_k8s_is_semver",
             Self::K8sSemverIsSemverNormalize => "cel_k8s_is_semver_normalize",
@@ -641,9 +522,6 @@ impl RuntimeFunction {
             Self::K8sQuantityAddInt => "cel_k8s_quantity_add_int",
             Self::K8sQuantitySub => "cel_k8s_quantity_sub",
             Self::K8sQuantitySubInt => "cel_k8s_quantity_sub_int",
-            Self::K8sQuantityIsLessThan => "cel_k8s_quantity_is_less_than",
-            Self::K8sQuantityIsGreaterThan => "cel_k8s_quantity_is_greater_than",
-            Self::K8sQuantityCompareTo => "cel_k8s_quantity_compare_to",
 
             Self::K8sPolyIsLessThan => "cel_k8s_poly_is_less_than",
             Self::K8sPolyIsGreaterThan => "cel_k8s_poly_is_greater_than",

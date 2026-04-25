@@ -432,38 +432,6 @@ pub unsafe extern "C" fn cel_string_char_at(
     }
 }
 
-/// Returns the first codepoint index of `sub` in `s`, or -1 if not found.
-///
-/// # Safety
-///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_string_index_of(
-    string_ptr: *const CelValue,
-    sub_ptr: *const CelValue,
-) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
-        _ => {
-            return Box::into_raw(Box::new(CelValue::Error(
-                "indexOf: receiver is not a string".to_string(),
-            )));
-        }
-    };
-    let sub = match unsafe { &*sub_ptr } {
-        CelValue::String(s) => s.clone(),
-        _ => {
-            return Box::into_raw(Box::new(CelValue::Error(
-                "indexOf: argument is not a string".to_string(),
-            )));
-        }
-    };
-    let result = find_index_of(&s, &sub, 0);
-    Box::into_raw(Box::new(CelValue::Int(result)))
-}
-
 /// Returns the first codepoint index of `sub` in `s` starting from codepoint offset, or -1.
 ///
 /// # Safety
@@ -514,39 +482,6 @@ pub unsafe extern "C" fn cel_string_index_of_offset(
         ))));
     }
     let result = find_index_of(&s, &sub, offset as usize);
-    Box::into_raw(Box::new(CelValue::Int(result)))
-}
-
-/// Returns the last codepoint index of `sub` in `s`, or -1 if not found.
-///
-/// # Safety
-///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_string_last_index_of(
-    string_ptr: *const CelValue,
-    sub_ptr: *const CelValue,
-) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
-        _ => {
-            return Box::into_raw(Box::new(CelValue::Error(
-                "lastIndexOf: receiver is not a string".to_string(),
-            )));
-        }
-    };
-    let sub = match unsafe { &*sub_ptr } {
-        CelValue::String(s) => s.clone(),
-        _ => {
-            return Box::into_raw(Box::new(CelValue::Error(
-                "lastIndexOf: argument is not a string".to_string(),
-            )));
-        }
-    };
-    let cp_len = s.chars().count() as i64;
-    let result = find_last_index_of(&s, &sub, cp_len);
     Box::into_raw(Box::new(CelValue::Int(result)))
 }
 
@@ -1161,22 +1096,6 @@ mod tests {
     // ── indexOf ───────────────────────────────────────────────────────────────
 
     #[rstest]
-    #[case::basic("tacocat", "ac", 1)]
-    #[case::not_found("tacocat", "none", -1)]
-    #[case::empty_needle("tacocat", "", 0)]
-    #[case::unicode("ta©o©αT", "©", 2)]
-    fn test_index_of(#[case] s: &str, #[case] sub: &str, #[case] expected: i64) {
-        let string_val = CelValue::String(s.to_string());
-        let sub_val = CelValue::String(sub.to_string());
-        unsafe {
-            let result_ptr =
-                cel_string_index_of(&string_val as *const CelValue, &sub_val as *const CelValue);
-            assert_eq!(&*result_ptr, &CelValue::Int(expected));
-            cel_free_value(result_ptr);
-        }
-    }
-
-    #[rstest]
     #[case::with_offset("tacocat", "a", 3, 5)]
     #[case::offset_zero("tacocat", "a", 0, 1)]
     fn test_index_of_offset(
@@ -1232,23 +1151,6 @@ mod tests {
     }
 
     // ── lastIndexOf ───────────────────────────────────────────────────────────
-
-    #[rstest]
-    #[case::basic("tacocat", "at", 5)]
-    #[case::not_found("tacocat", "none", -1)]
-    #[case::empty_needle("tacocat", "", 7)]
-    fn test_last_index_of(#[case] s: &str, #[case] sub: &str, #[case] expected: i64) {
-        let string_val = CelValue::String(s.to_string());
-        let sub_val = CelValue::String(sub.to_string());
-        unsafe {
-            let result_ptr = cel_string_last_index_of(
-                &string_val as *const CelValue,
-                &sub_val as *const CelValue,
-            );
-            assert_eq!(&*result_ptr, &CelValue::Int(expected));
-            cel_free_value(result_ptr);
-        }
-    }
 
     #[rstest]
     #[case::with_offset("tacocat", "a", 3, 1)]
