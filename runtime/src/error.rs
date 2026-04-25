@@ -1,10 +1,50 @@
 //! Error handling for CEL runtime.
 //!
+//! `CelError` is the standard error type for all internal (Layer 2) runtime
+//! functions. The ABI boundary (Layer 1, `extern "C"`) converts it to a
+//! `CelValue::Error` heap allocation before returning to WASM callers.
+//!
 //! When a runtime error occurs (divide by zero, overflow, out of bounds, etc.),
 //! the guest runtime calls cel_abort which terminates execution and returns
 //! the error to the host.
 
-// External function provided by WASM host for error handling.
+/// The error type returned by all internal (Layer 2) runtime functions.
+///
+/// At the ABI boundary the wrapper converts this to `CelValue::Error(msg)`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CelError(pub String);
+
+impl CelError {
+    pub fn new(msg: impl Into<String>) -> Self {
+        CelError(msg.into())
+    }
+
+    /// Convert to a heap-allocated `CelValue::Error`, consuming `self`.
+    pub fn into_cel_value(self) -> crate::types::CelValue {
+        crate::types::CelValue::Error(self.0)
+    }
+}
+
+impl std::fmt::Display for CelError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// Convenience alias for `Result<T, CelError>`.
+pub type CelResult<T> = Result<T, CelError>;
+
+/// Consume a `CelResult<CelValue>` and box it into a raw pointer for the ABI.
+///
+/// On `Ok(v)` → `Box::into_raw(Box::new(v))`
+/// On `Err(e)` → `Box::into_raw(Box::new(CelValue::Error(e.0)))`
+pub fn into_raw_result(r: CelResult<crate::types::CelValue>) -> *mut crate::types::CelValue {
+    Box::into_raw(Box::new(match r {
+        Ok(v) => v,
+        Err(e) => e.into_cel_value(),
+    }))
+}
+
 // This function never returns - it terminates WASM execution.
 //
 // Arguments:

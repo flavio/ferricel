@@ -8,8 +8,8 @@
 
 use crate::error::abort_with_error;
 use crate::helpers::{
-    cel_create_duration, cel_create_int, extract_datetime, extract_duration,
-    extract_duration_chrono, extract_string,
+    cel_create_duration, extract_datetime, extract_duration, extract_duration_chrono,
+    extract_string,
 };
 use crate::types::CelValue;
 use chrono::{Datelike, Timelike, Utc};
@@ -233,7 +233,7 @@ pub unsafe fn cel_duration_get_hours(dur_ptr: *mut CelValue) -> *mut CelValue {
     let (secs, _nanos) = extract_duration(dur_ptr);
     // Convert seconds to hours, truncating fractional part
     let hours = secs / 3600;
-    cel_create_int(hours)
+    Box::into_raw(Box::new(CelValue::Int(hours)))
 }
 
 /// duration.getMinutes() -> int
@@ -251,7 +251,7 @@ pub unsafe fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mut CelValue 
     let (secs, _nanos) = extract_duration(dur_ptr);
     // Convert seconds to minutes, truncating fractional part
     let minutes = secs / 60;
-    cel_create_int(minutes)
+    Box::into_raw(Box::new(CelValue::Int(minutes)))
 }
 
 /// duration.getSeconds() -> int
@@ -267,7 +267,7 @@ pub unsafe fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mut CelValue 
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mut CelValue {
     let (secs, _nanos) = extract_duration(dur_ptr);
-    cel_create_int(secs)
+    Box::into_raw(Box::new(CelValue::Int(secs)))
 }
 
 /// duration.getMilliseconds() -> int
@@ -287,7 +287,7 @@ pub unsafe fn cel_duration_get_milliseconds(dur_ptr: *mut CelValue) -> *mut CelV
     let (_secs, nanos) = extract_duration(dur_ptr);
     // Return the millisecond component of the nanoseconds field only.
     let millis = nanos as i64 / 1_000_000;
-    cel_create_int(millis)
+    Box::into_raw(Box::new(CelValue::Int(millis)))
 }
 
 /// Validates that a DateTime is within the valid CEL range.
@@ -334,7 +334,7 @@ fn validate_duration(seconds: i64, _nanos: i32) {
 pub unsafe extern "C" fn cel_timestamp_get_full_year(ts_ptr: *mut CelValue) -> *mut CelValue {
     let dt = extract_datetime(ts_ptr);
     let utc_dt = dt.with_timezone(&Utc);
-    cel_create_int(utc_dt.year() as i64)
+    Box::into_raw(Box::new(CelValue::Int(utc_dt.year() as i64)))
 }
 
 /// timestamp.getFullYear(timezone) -> int
@@ -364,7 +364,7 @@ pub unsafe extern "C" fn cel_timestamp_get_full_year_tz(
         crate::chrono_helpers::Timezone::Fixed(offset) => dt.with_timezone(&offset).year(),
     };
 
-    cel_create_int(year as i64)
+    Box::into_raw(Box::new(CelValue::Int(year as i64)))
 }
 
 /// timestamp.getMonth() -> int
@@ -381,7 +381,7 @@ pub unsafe extern "C" fn cel_timestamp_get_full_year_tz(
 pub unsafe extern "C" fn cel_timestamp_get_month(ts_ptr: *mut CelValue) -> *mut CelValue {
     let dt = extract_datetime(ts_ptr);
     let utc_dt = dt.with_timezone(&Utc);
-    cel_create_int((utc_dt.month() - 1) as i64) // chrono returns 1-12, convert to 0-11
+    Box::into_raw(Box::new(CelValue::Int((utc_dt.month() - 1) as i64))) // chrono returns 1-12, convert to 0-11
 }
 
 /// timestamp.getMonth(timezone) -> int
@@ -411,7 +411,7 @@ pub unsafe extern "C" fn cel_timestamp_get_month_tz(
         crate::chrono_helpers::Timezone::Fixed(offset) => dt.with_timezone(&offset).month(),
     };
 
-    cel_create_int((month - 1) as i64) // Convert to 0-based
+    Box::into_raw(Box::new(CelValue::Int((month - 1) as i64))) // Convert to 0-based
 }
 
 /// timestamp.getDate() -> int
@@ -428,7 +428,7 @@ pub unsafe extern "C" fn cel_timestamp_get_month_tz(
 pub unsafe extern "C" fn cel_timestamp_get_date(ts_ptr: *mut CelValue) -> *mut CelValue {
     let dt = extract_datetime(ts_ptr);
     let utc_dt = dt.with_timezone(&Utc);
-    cel_create_int(utc_dt.day() as i64)
+    Box::into_raw(Box::new(CelValue::Int(utc_dt.day() as i64)))
 }
 
 /// timestamp.getDate(timezone) -> int
@@ -458,7 +458,7 @@ pub unsafe extern "C" fn cel_timestamp_get_date_tz(
         crate::chrono_helpers::Timezone::Fixed(offset) => dt.with_timezone(&offset).day(),
     };
 
-    cel_create_int(day as i64)
+    Box::into_raw(Box::new(CelValue::Int(day as i64)))
 }
 
 /// timestamp.getDayOfMonth() -> int
@@ -475,7 +475,7 @@ pub unsafe extern "C" fn cel_timestamp_get_date_tz(
 pub unsafe extern "C" fn cel_timestamp_get_day_of_month(ts_ptr: *mut CelValue) -> *mut CelValue {
     let dt = extract_datetime(ts_ptr);
     let utc_dt = dt.with_timezone(&Utc);
-    cel_create_int((utc_dt.day() - 1) as i64) // Convert to 0-based
+    Box::into_raw(Box::new(CelValue::Int((utc_dt.day() - 1) as i64))) // Convert to 0-based
 }
 
 /// timestamp.getDayOfMonth(timezone) -> int
@@ -505,7 +505,7 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_month_tz(
         crate::chrono_helpers::Timezone::Fixed(offset) => dt.with_timezone(&offset).day(),
     };
 
-    cel_create_int((day - 1) as i64) // Convert to 0-based
+    Box::into_raw(Box::new(CelValue::Int((day - 1) as i64))) // Convert to 0-based
 }
 
 /// timestamp.getDayOfWeek() -> int
@@ -523,7 +523,7 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_week(ts_ptr: *mut CelValue) ->
     let dt = extract_datetime(ts_ptr);
     let utc_dt = dt.with_timezone(&Utc);
     let dow = utc_dt.weekday().num_days_from_sunday();
-    cel_create_int(dow as i64)
+    Box::into_raw(Box::new(CelValue::Int(dow as i64)))
 }
 
 /// timestamp.getDayOfWeek(timezone) -> int
@@ -557,7 +557,7 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_week_tz(
         }
     };
 
-    cel_create_int(dow as i64)
+    Box::into_raw(Box::new(CelValue::Int(dow as i64)))
 }
 
 /// timestamp.getDayOfYear() -> int
@@ -574,7 +574,7 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_year(ts_ptr: *mut CelValue) ->
     let dt = extract_datetime(ts_ptr);
     let utc_dt = dt.with_timezone(&Utc);
     let doy = utc_dt.ordinal() - 1; // chrono returns 1-366, convert to 0-365
-    cel_create_int(doy as i64)
+    Box::into_raw(Box::new(CelValue::Int(doy as i64)))
 }
 
 /// timestamp.getDayOfYear(timezone) -> int
@@ -603,7 +603,7 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_year_tz(
         crate::chrono_helpers::Timezone::Fixed(offset) => dt.with_timezone(&offset).ordinal(),
     };
 
-    cel_create_int((doy - 1) as i64) // Convert to 0-based
+    Box::into_raw(Box::new(CelValue::Int((doy - 1) as i64))) // Convert to 0-based
 }
 
 /// getHours() method - works on both timestamps and durations
@@ -623,7 +623,7 @@ pub unsafe extern "C" fn cel_timestamp_get_hours(value_ptr: *mut CelValue) -> *m
         CelValue::Timestamp(_) => {
             let dt = extract_datetime(value_ptr);
             let utc_dt = dt.with_timezone(&Utc);
-            cel_create_int(utc_dt.hour() as i64)
+            Box::into_raw(Box::new(CelValue::Int(utc_dt.hour() as i64)))
         }
         CelValue::Duration(_) => cel_duration_get_hours(value_ptr),
         _ => abort_with_error("getHours() must be called on a timestamp or duration"),
@@ -656,7 +656,7 @@ pub unsafe extern "C" fn cel_timestamp_get_hours_tz(
         crate::chrono_helpers::Timezone::Fixed(offset) => dt.with_timezone(&offset).hour(),
     };
 
-    cel_create_int(hour as i64)
+    Box::into_raw(Box::new(CelValue::Int(hour as i64)))
 }
 
 /// getMinutes() method - works on both timestamps and durations
@@ -676,7 +676,7 @@ pub unsafe extern "C" fn cel_timestamp_get_minutes(value_ptr: *mut CelValue) -> 
         CelValue::Timestamp(_) => {
             let dt = extract_datetime(value_ptr);
             let utc_dt = dt.with_timezone(&Utc);
-            cel_create_int(utc_dt.minute() as i64)
+            Box::into_raw(Box::new(CelValue::Int(utc_dt.minute() as i64)))
         }
         CelValue::Duration(_) => cel_duration_get_minutes(value_ptr),
         _ => abort_with_error("getMinutes() must be called on a timestamp or duration"),
@@ -709,7 +709,7 @@ pub unsafe extern "C" fn cel_timestamp_get_minutes_tz(
         crate::chrono_helpers::Timezone::Fixed(offset) => dt.with_timezone(&offset).minute(),
     };
 
-    cel_create_int(minute as i64)
+    Box::into_raw(Box::new(CelValue::Int(minute as i64)))
 }
 
 /// getSeconds() method - works on both timestamps and durations
@@ -729,7 +729,7 @@ pub unsafe extern "C" fn cel_timestamp_get_seconds(value_ptr: *mut CelValue) -> 
         CelValue::Timestamp(_) => {
             let dt = extract_datetime(value_ptr);
             let utc_dt = dt.with_timezone(&Utc);
-            cel_create_int(utc_dt.second() as i64)
+            Box::into_raw(Box::new(CelValue::Int(utc_dt.second() as i64)))
         }
         CelValue::Duration(_) => cel_duration_get_seconds(value_ptr),
         _ => abort_with_error("getSeconds() must be called on a timestamp or duration"),
@@ -762,7 +762,7 @@ pub unsafe extern "C" fn cel_timestamp_get_seconds_tz(
         crate::chrono_helpers::Timezone::Fixed(offset) => dt.with_timezone(&offset).second(),
     };
 
-    cel_create_int(second as i64)
+    Box::into_raw(Box::new(CelValue::Int(second as i64)))
 }
 
 /// getMilliseconds() method - works on both timestamps and durations
@@ -786,7 +786,7 @@ pub unsafe extern "C" fn cel_timestamp_get_milliseconds(value_ptr: *mut CelValue
             let dt = extract_datetime(value_ptr);
             let utc_dt = dt.with_timezone(&Utc);
             let millis = utc_dt.timestamp_subsec_millis();
-            cel_create_int(millis as i64)
+            Box::into_raw(Box::new(CelValue::Int(millis as i64)))
         }
         CelValue::Duration(_) => cel_duration_get_milliseconds(value_ptr),
         CelValue::Object(map) => {
@@ -799,7 +799,7 @@ pub unsafe extern "C" fn cel_timestamp_get_milliseconds(value_ptr: *mut CelValue
             {
                 let nanos_key = CelMapKey::String("nanos".into());
                 if let Some(CelValue::Int(nanos)) = map.get(&nanos_key) {
-                    return cel_create_int(*nanos / 1_000_000);
+                    return Box::into_raw(Box::new(CelValue::Int(*nanos / 1_000_000)));
                 }
             }
             abort_with_error("getMilliseconds() must be called on a timestamp or duration")
@@ -838,7 +838,7 @@ pub unsafe extern "C" fn cel_timestamp_get_milliseconds_tz(
         }
     };
 
-    cel_create_int(millis as i64)
+    Box::into_raw(Box::new(CelValue::Int(millis as i64)))
 }
 
 #[cfg(test)]

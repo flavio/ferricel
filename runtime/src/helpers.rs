@@ -388,7 +388,7 @@ pub unsafe extern "C" fn cel_value_add(
             (CelValue::Int(a), CelValue::Int(b)) => {
                 debug!(log, "Performing Int addition"; "left" => *a, "right" => *b);
                 match a.checked_add(*b) {
-                    Some(result) => cel_create_int(result),
+                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
                     None => {
                         error!(log, "Integer overflow in addition";
                             "operation" => "cel_value_add",
@@ -402,7 +402,7 @@ pub unsafe extern "C" fn cel_value_add(
             (CelValue::UInt(a), CelValue::UInt(b)) => {
                 debug!(log, "Performing UInt addition"; "left" => *a, "right" => *b);
                 match a.checked_add(*b) {
-                    Some(result) => cel_create_uint(result),
+                    Some(result) => Box::into_raw(Box::new(CelValue::UInt(result))),
                     None => {
                         error!(log, "Unsigned integer overflow in addition";
                             "operation" => "cel_value_add",
@@ -416,7 +416,7 @@ pub unsafe extern "C" fn cel_value_add(
             (CelValue::Double(a), CelValue::Double(b)) => {
                 debug!(log, "Performing Double addition"; "left" => *a, "right" => *b);
                 let result = arithmetic::double_add(*a, *b);
-                cel_create_double(result)
+                Box::into_raw(Box::new(CelValue::Double(result)))
             }
             (CelValue::String(a_str), CelValue::String(b_str)) => {
                 debug!(log, "Performing String concatenation"; 
@@ -499,7 +499,7 @@ pub unsafe extern "C" fn cel_value_sub(
             (CelValue::Int(a), CelValue::Int(b)) => {
                 debug!(log, "Performing Int subtraction"; "left" => *a, "right" => *b);
                 match a.checked_sub(*b) {
-                    Some(result) => cel_create_int(result),
+                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
                     None => {
                         error!(log, "Integer overflow in subtraction";
                             "operation" => "cel_value_sub",
@@ -513,7 +513,7 @@ pub unsafe extern "C" fn cel_value_sub(
             (CelValue::UInt(a), CelValue::UInt(b)) => {
                 debug!(log, "Performing UInt subtraction"; "left" => *a, "right" => *b);
                 match a.checked_sub(*b) {
-                    Some(result) => cel_create_uint(result),
+                    Some(result) => Box::into_raw(Box::new(CelValue::UInt(result))),
                     None => {
                         error!(log, "Unsigned integer underflow in subtraction";
                             "operation" => "cel_value_sub",
@@ -527,7 +527,7 @@ pub unsafe extern "C" fn cel_value_sub(
             (CelValue::Double(a), CelValue::Double(b)) => {
                 debug!(log, "Performing Double subtraction"; "left" => *a, "right" => *b);
                 let result = arithmetic::double_sub(*a, *b);
-                cel_create_double(result)
+                Box::into_raw(Box::new(CelValue::Double(result)))
             }
             (CelValue::Timestamp(_), CelValue::Duration(_)) => {
                 debug!(log, "Performing Timestamp - Duration");
@@ -589,7 +589,7 @@ pub unsafe extern "C" fn cel_value_mul(
             (CelValue::Int(a), CelValue::Int(b)) => {
                 debug!(log, "Performing Int multiplication"; "left" => *a, "right" => *b);
                 match a.checked_mul(*b) {
-                    Some(result) => cel_create_int(result),
+                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
                     None => {
                         error!(log, "Integer overflow in multiplication";
                             "operation" => "cel_value_mul",
@@ -603,7 +603,7 @@ pub unsafe extern "C" fn cel_value_mul(
             (CelValue::UInt(a), CelValue::UInt(b)) => {
                 debug!(log, "Performing UInt multiplication"; "left" => *a, "right" => *b);
                 match a.checked_mul(*b) {
-                    Some(result) => cel_create_uint(result),
+                    Some(result) => Box::into_raw(Box::new(CelValue::UInt(result))),
                     None => {
                         error!(log, "Unsigned integer overflow in multiplication";
                             "operation" => "cel_value_mul",
@@ -617,7 +617,7 @@ pub unsafe extern "C" fn cel_value_mul(
             (CelValue::Double(a), CelValue::Double(b)) => {
                 debug!(log, "Performing Double multiplication"; "left" => *a, "right" => *b);
                 let result = arithmetic::double_mul(*a, *b);
-                cel_create_double(result)
+                Box::into_raw(Box::new(CelValue::Double(result)))
             }
             _ => {
                 error!(log, "Cannot multiply incompatible types";
@@ -675,7 +675,7 @@ pub unsafe extern "C" fn cel_value_div(
                     return crate::error::create_error_value("divide by zero");
                 }
                 match a.checked_div(*b) {
-                    Some(result) => cel_create_int(result),
+                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
                     None => {
                         error!(log, "Integer overflow in division";
                             "operation" => "cel_value_div",
@@ -695,12 +695,12 @@ pub unsafe extern "C" fn cel_value_div(
                         "divisor" => *b);
                     return crate::error::create_error_value("divide by zero");
                 }
-                cel_create_uint(a / b)
+                Box::into_raw(Box::new(CelValue::UInt(a / b)))
             }
             (CelValue::Double(a), CelValue::Double(b)) => {
                 debug!(log, "Performing Double division"; "dividend" => *a, "divisor" => *b);
                 let result = arithmetic::double_div(*a, *b);
-                cel_create_double(result)
+                Box::into_raw(Box::new(CelValue::Double(result)))
             }
             _ => {
                 error!(log, "Cannot divide incompatible types";
@@ -759,7 +759,7 @@ pub unsafe extern "C" fn cel_value_mod(
                     return crate::error::create_error_value("modulus by zero");
                 }
                 match a.checked_rem(*b) {
-                    Some(result) => cel_create_int(result),
+                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
                     None => crate::error::create_error_value("return error for overflow"),
                 }
             }
@@ -773,7 +773,7 @@ pub unsafe extern "C" fn cel_value_mod(
                         "divisor" => *b);
                     return crate::error::create_error_value("modulus by zero");
                 }
-                cel_create_uint(a % b)
+                Box::into_raw(Box::new(CelValue::UInt(a % b)))
             }
             _ => {
                 error!(log, "Modulo is only defined for int and uint";
@@ -1051,7 +1051,7 @@ pub unsafe extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue
         let b_val = &*b_ptr;
 
         let result = cel_equals(a_val, b_val);
-        cel_create_bool(if result { 1 } else { 0 })
+        Box::into_raw(Box::new(CelValue::Bool(result)))
     }
 }
 
@@ -1087,7 +1087,7 @@ pub unsafe extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue
         let b_val = &*b_ptr;
 
         let result = !cel_equals(a_val, b_val);
-        cel_create_bool(if result { 1 } else { 0 })
+        Box::into_raw(Box::new(CelValue::Bool(result)))
     }
 }
 
@@ -1160,7 +1160,7 @@ pub unsafe extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue
                 return crate::error::create_error_value("no such overload");
             }
         };
-        cel_create_bool(if result { 1 } else { 0 })
+        Box::into_raw(Box::new(CelValue::Bool(result)))
     }
 }
 
@@ -1240,7 +1240,7 @@ pub unsafe extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue
         let b_val = &*b_ptr;
 
         match cel_value_less_than(a_val, b_val) {
-            Ok(result) => cel_create_bool(if result { 1 } else { 0 }),
+            Ok(result) => Box::into_raw(Box::new(CelValue::Bool(result))),
             Err(_) => {
                 error!(log, "Cannot compare incompatible types for less-than";
                     "operation" => "cel_value_lt",
@@ -1325,7 +1325,7 @@ pub unsafe extern "C" fn cel_value_gte(
                 return crate::error::create_error_value("no such overload");
             }
         };
-        cel_create_bool(if result { 1 } else { 0 })
+        Box::into_raw(Box::new(CelValue::Bool(result)))
     }
 }
 
@@ -1402,7 +1402,7 @@ pub unsafe extern "C" fn cel_value_lte(
                 return crate::error::create_error_value("no such overload");
             }
         };
-        cel_create_bool(if result { 1 } else { 0 })
+        Box::into_raw(Box::new(CelValue::Bool(result)))
     }
 }
 
@@ -1497,13 +1497,13 @@ pub unsafe extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
             CelValue::Int(i) => {
                 debug!(log, "Performing Int negation"; "value" => *i);
                 match i.checked_neg() {
-                    Some(result) => cel_create_int(result),
+                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
                     None => crate::error::create_error_value("return error for overflow"),
                 }
             }
             CelValue::Double(d) => {
                 debug!(log, "Performing Double negation"; "value" => *d);
-                cel_create_double(-d)
+                Box::into_raw(Box::new(CelValue::Double(-d)))
             }
             CelValue::Duration(_) => {
                 debug!(log, "Performing Duration negation");
@@ -1666,7 +1666,7 @@ mod tests {
     #[test]
     fn test_create_int() {
         unsafe {
-            let ptr = cel_create_int(42);
+            let ptr = Box::into_raw(Box::new(CelValue::Int(42)));
             assert_eq!(*ptr, CelValue::Int(42));
             // Clean up
             let _ = Box::from_raw(ptr);
@@ -1725,7 +1725,7 @@ mod tests {
     #[test]
     fn test_create_double() {
         unsafe {
-            let ptr = cel_create_double(3.15);
+            let ptr = Box::into_raw(Box::new(CelValue::Double(3.15)));
             assert_eq!(*ptr, CelValue::Double(3.15));
             let _ = Box::from_raw(ptr);
         }
@@ -1734,7 +1734,7 @@ mod tests {
     #[test]
     fn test_create_double_negative() {
         unsafe {
-            let ptr = cel_create_double(-2.5);
+            let ptr = Box::into_raw(Box::new(CelValue::Double(-2.5)));
             assert_eq!(*ptr, CelValue::Double(-2.5));
             let _ = Box::from_raw(ptr);
         }
@@ -1806,7 +1806,7 @@ mod tests {
     #[test]
     fn test_create_uint() {
         unsafe {
-            let ptr = cel_create_uint(123);
+            let ptr = Box::into_raw(Box::new(CelValue::UInt(123)));
             assert_eq!(*ptr, CelValue::UInt(123));
             let _ = Box::from_raw(ptr);
         }
@@ -1815,7 +1815,7 @@ mod tests {
     #[test]
     fn test_create_uint_max() {
         unsafe {
-            let ptr = cel_create_uint(u64::MAX);
+            let ptr = Box::into_raw(Box::new(CelValue::UInt(u64::MAX)));
             assert_eq!(*ptr, CelValue::UInt(u64::MAX));
             let _ = Box::from_raw(ptr);
         }
