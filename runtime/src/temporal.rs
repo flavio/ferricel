@@ -73,8 +73,7 @@ fn normalize_duration(mut seconds: i64, mut nanos: i32) -> (i64, i32) {
 /// # Panics
 /// - If result is outside valid timestamp range
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_timestamp_add_duration(
+pub unsafe fn cel_timestamp_add_duration(
     ts_ptr: *mut CelValue,
     dur_ptr: *mut CelValue,
 ) -> *mut CelValue {
@@ -103,8 +102,7 @@ pub unsafe extern "C" fn cel_timestamp_add_duration(
 /// - `dur_ptr` points to an initialized CelValue::Duration instance
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_timestamp_sub_duration(
+pub unsafe fn cel_timestamp_sub_duration(
     ts_ptr: *mut CelValue,
     dur_ptr: *mut CelValue,
 ) -> *mut CelValue {
@@ -130,11 +128,7 @@ pub unsafe extern "C" fn cel_timestamp_sub_duration(
 /// - Both pointers point to initialized CelValue::Timestamp instances
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_timestamp_diff(
-    ts1_ptr: *mut CelValue,
-    ts2_ptr: *mut CelValue,
-) -> *mut CelValue {
+pub unsafe fn cel_timestamp_diff(ts1_ptr: *mut CelValue, ts2_ptr: *mut CelValue) -> *mut CelValue {
     let dt1 = extract_datetime(ts1_ptr);
     let dt2 = extract_datetime(ts2_ptr);
 
@@ -163,11 +157,7 @@ pub unsafe extern "C" fn cel_timestamp_diff(
 /// - Both pointers point to initialized CelValue::Duration instances
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_add(
-    dur1_ptr: *mut CelValue,
-    dur2_ptr: *mut CelValue,
-) -> *mut CelValue {
+pub unsafe fn cel_duration_add(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue) -> *mut CelValue {
     let (secs1, nanos1) = extract_duration(dur1_ptr);
     let (secs2, nanos2) = extract_duration(dur2_ptr);
 
@@ -189,11 +179,7 @@ pub unsafe extern "C" fn cel_duration_add(
 /// - Both pointers point to initialized CelValue::Duration instances
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_sub(
-    dur1_ptr: *mut CelValue,
-    dur2_ptr: *mut CelValue,
-) -> *mut CelValue {
+pub unsafe fn cel_duration_sub(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue) -> *mut CelValue {
     let (secs1, nanos1) = extract_duration(dur1_ptr);
     let (secs2, nanos2) = extract_duration(dur2_ptr);
 
@@ -215,8 +201,7 @@ pub unsafe extern "C" fn cel_duration_sub(
 /// - The pointer points to an initialized CelValue::Duration instance
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut CelValue {
     let (secs, nanos) = extract_duration(dur_ptr);
 
     let neg_secs = secs.checked_neg().expect("duration negation overflow");
@@ -244,8 +229,7 @@ pub unsafe extern "C" fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut Cel
 /// - The pointer points to an initialized CelValue::Duration instance
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_get_hours(dur_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe fn cel_duration_get_hours(dur_ptr: *mut CelValue) -> *mut CelValue {
     let (secs, _nanos) = extract_duration(dur_ptr);
     // Convert seconds to hours, truncating fractional part
     let hours = secs / 3600;
@@ -263,8 +247,7 @@ pub unsafe extern "C" fn cel_duration_get_hours(dur_ptr: *mut CelValue) -> *mut 
 /// - The pointer points to an initialized CelValue::Duration instance
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mut CelValue {
     let (secs, _nanos) = extract_duration(dur_ptr);
     // Convert seconds to minutes, truncating fractional part
     let minutes = secs / 60;
@@ -282,8 +265,7 @@ pub unsafe extern "C" fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mu
 /// - The pointer points to an initialized CelValue::Duration instance
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mut CelValue {
     let (secs, _nanos) = extract_duration(dur_ptr);
     cel_create_int(secs)
 }
@@ -301,8 +283,7 @@ pub unsafe extern "C" fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mu
 /// - The pointer points to an initialized CelValue::Duration instance
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_duration_get_milliseconds(dur_ptr: *mut CelValue) -> *mut CelValue {
+pub unsafe fn cel_duration_get_milliseconds(dur_ptr: *mut CelValue) -> *mut CelValue {
     let (_secs, nanos) = extract_duration(dur_ptr);
     // Return the millisecond component of the nanoseconds field only.
     let millis = nanos as i64 / 1_000_000;

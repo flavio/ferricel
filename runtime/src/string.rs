@@ -69,8 +69,7 @@ pub unsafe extern "C" fn cel_create_string(data_ptr: *const u8, len: usize) -> *
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
 /// - `string_ptr` is a valid pointer to an initialized CelValue instance
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_string_size(string_ptr: *const CelValue) -> i64 {
+pub unsafe fn cel_string_size(string_ptr: *const CelValue) -> i64 {
     // SAFETY: Caller guarantees string_ptr is valid
     let value = unsafe { &*string_ptr };
 

@@ -83,8 +83,7 @@ pub unsafe extern "C" fn cel_get_variable(name_ptr: *const u8, name_len: i32) ->
 /// - Safe to call at any time
 /// - Does not free the pointed-to values (caller must handle cleanup)
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_reset_globals() {
+pub unsafe fn cel_reset_globals() {
     unsafe {
         BINDINGS = ptr::null_mut();
     }

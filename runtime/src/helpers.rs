@@ -67,8 +67,7 @@ pub unsafe extern "C" fn cel_create_double(value: f64) -> *mut CelValue {
 /// This function is unsafe because it returns a raw pointer. The caller must ensure:
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_create_timestamp(seconds: i64, nanos: i64) -> *mut CelValue {
+pub unsafe fn cel_create_timestamp(seconds: i64, nanos: i64) -> *mut CelValue {
     let dt = crate::chrono_helpers::parts_to_datetime(seconds, nanos);
     Box::into_raw(Box::new(CelValue::Timestamp(dt)))
 }
@@ -84,8 +83,7 @@ pub unsafe extern "C" fn cel_create_timestamp(seconds: i64, nanos: i64) -> *mut 
 /// This function is unsafe because it returns a raw pointer. The caller must ensure:
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_create_duration(seconds: i64, nanos: i64) -> *mut CelValue {
+pub unsafe fn cel_create_duration(seconds: i64, nanos: i64) -> *mut CelValue {
     let duration = crate::chrono_helpers::parts_to_duration(seconds, nanos);
     Box::into_raw(Box::new(CelValue::Duration(duration)))
 }

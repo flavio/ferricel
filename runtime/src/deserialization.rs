@@ -256,8 +256,7 @@ fn decode_any_to_cel_value(any: &prost_types::Any) -> CelValue {
 /// - `ptr` must not be used after calling this function
 /// - Calling with null pointer is safe (no-op)
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_free_value(ptr: *mut CelValue) {
+pub unsafe fn cel_free_value(ptr: *mut CelValue) {
     if !ptr.is_null() {
         // Reconstruct the Box and let it drop
         // SAFETY: ptr is valid and was created by cel_deserialize_json

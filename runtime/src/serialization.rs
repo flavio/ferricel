@@ -38,8 +38,7 @@ fn serialize_to_json(value: &CelValue) -> i64 {
 /// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64. The caller must ensure:
 /// - The returned pointer (decoded from low 32 bits) must be freed using `cel_free` with the length (decoded from high 32 bits)
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_serialize_int(value: i64) -> i64 {
+pub unsafe fn cel_serialize_int(value: i64) -> i64 {
     let cel_value = CelValue::Int(value);
     serialize_to_json(&cel_value)
 }
@@ -52,8 +51,7 @@ pub unsafe extern "C" fn cel_serialize_int(value: i64) -> i64 {
 /// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64. The caller must ensure:
 /// - The returned pointer (decoded from low 32 bits) must be freed using `cel_free` with the length (decoded from high 32 bits)
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_serialize_bool(value: i64) -> i64 {
+pub unsafe fn cel_serialize_bool(value: i64) -> i64 {
     let cel_value = CelValue::Bool(value != 0);
     serialize_to_json(&cel_value)
 }

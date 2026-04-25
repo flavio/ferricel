@@ -65,8 +65,7 @@ pub unsafe extern "C" fn cel_create_bytes(data_ptr: *const u8, len: usize) -> *m
 /// # Returns
 /// The number of bytes in the sequence
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_bytes_size(bytes_ptr: *const CelValue) -> i64 {
+pub unsafe fn cel_bytes_size(bytes_ptr: *const CelValue) -> i64 {
     let log = crate::logging::get_logger();
 
     // Check for null bytes pointer
@@ -110,8 +109,7 @@ pub unsafe extern "C" fn cel_bytes_size(bytes_ptr: *const CelValue) -> i64 {
 /// # Returns
 /// Pointer to a new CelValue::Bytes containing the concatenation
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_bytes_concat(
+pub unsafe fn cel_bytes_concat(
     left_ptr: *const CelValue,
     right_ptr: *const CelValue,
 ) -> *mut CelValue {
@@ -164,11 +162,7 @@ pub unsafe extern "C" fn cel_bytes_concat(
 /// # Returns
 /// Pointer to CelValue::Bool(true) if bytes are equal, false otherwise
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_bytes_eq(
-    left_ptr: *const CelValue,
-    right_ptr: *const CelValue,
-) -> *mut CelValue {
+pub unsafe fn cel_bytes_eq(left_ptr: *const CelValue, right_ptr: *const CelValue) -> *mut CelValue {
     // SAFETY: Caller guarantees both pointers are valid
     let left_val = unsafe { &*left_ptr };
     let right_val = unsafe { &*right_ptr };
@@ -193,11 +187,7 @@ pub unsafe extern "C" fn cel_bytes_eq(
 /// # Returns
 /// Pointer to CelValue::Bool(true) if bytes are not equal, false otherwise
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_bytes_ne(
-    left_ptr: *const CelValue,
-    right_ptr: *const CelValue,
-) -> *mut CelValue {
+pub unsafe fn cel_bytes_ne(left_ptr: *const CelValue, right_ptr: *const CelValue) -> *mut CelValue {
     // SAFETY: Caller guarantees both pointers are valid
     let left_val = unsafe { &*left_ptr };
     let right_val = unsafe { &*right_ptr };
@@ -222,11 +212,7 @@ pub unsafe extern "C" fn cel_bytes_ne(
 /// # Returns
 /// Pointer to CelValue::Bool(true) if left < right, false otherwise
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_bytes_lt(
-    left_ptr: *const CelValue,
-    right_ptr: *const CelValue,
-) -> *mut CelValue {
+pub unsafe fn cel_bytes_lt(left_ptr: *const CelValue, right_ptr: *const CelValue) -> *mut CelValue {
     // SAFETY: Caller guarantees both pointers are valid
     let left_val = unsafe { &*left_ptr };
     let right_val = unsafe { &*right_ptr };
@@ -251,8 +237,7 @@ pub unsafe extern "C" fn cel_bytes_lt(
 /// # Returns
 /// Pointer to CelValue::Bool(true) if left <= right, false otherwise
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_bytes_lte(
+pub unsafe fn cel_bytes_lte(
     left_ptr: *const CelValue,
     right_ptr: *const CelValue,
 ) -> *mut CelValue {
@@ -280,11 +265,7 @@ pub unsafe extern "C" fn cel_bytes_lte(
 /// # Returns
 /// Pointer to CelValue::Bool(true) if left > right, false otherwise
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_bytes_gt(
-    left_ptr: *const CelValue,
-    right_ptr: *const CelValue,
-) -> *mut CelValue {
+pub unsafe fn cel_bytes_gt(left_ptr: *const CelValue, right_ptr: *const CelValue) -> *mut CelValue {
     // SAFETY: Caller guarantees both pointers are valid
     let left_val = unsafe { &*left_ptr };
     let right_val = unsafe { &*right_ptr };
@@ -309,8 +290,7 @@ pub unsafe extern "C" fn cel_bytes_gt(
 /// # Returns
 /// Pointer to CelValue::Bool(true) if left >= right, false otherwise
 #[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_bytes_gte(
+pub unsafe fn cel_bytes_gte(
     left_ptr: *const CelValue,
     right_ptr: *const CelValue,
 ) -> *mut CelValue {

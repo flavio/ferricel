@@ -34,8 +34,7 @@ pub fn get_logger() -> Logger {
 
 /// Set minimum log level (exposed to WASM host)
 /// 0=Debug, 1=Info, 2=Warn, 3=Error
-#[unsafe(no_mangle)]
-pub extern "C" fn cel_set_log_level(level: i32) {
+pub fn cel_set_log_level(level: i32) {
     let level = level.clamp(0, 3) as u8;
     LOG_LEVEL.store(level, Ordering::Relaxed);
 }
