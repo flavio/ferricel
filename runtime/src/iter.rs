@@ -17,7 +17,6 @@
 //! ```
 
 use crate::error::abort_with_error;
-use crate::helpers::cel_create_int;
 use crate::types::{CelMapKey, CelValue};
 use slog::error;
 
@@ -103,7 +102,7 @@ pub unsafe extern "C" fn cel_iter_var1(
     match range {
         CelValue::Array(_) => {
             // For lists, var1 = Int(index)
-            unsafe { cel_create_int(index as i64) }
+            Box::into_raw(Box::new(CelValue::Int(index as i64)))
         }
         CelValue::Object(_) => {
             // For maps, var1 = key at position `index` in prepared keys array

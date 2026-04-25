@@ -3,7 +3,7 @@
 //! Also provides CEL type conversion functions (uint(), int(), double(), string(), timestamp(), duration()).
 
 use crate::error::abort_with_error;
-use crate::helpers::{cel_create_double, cel_create_duration, cel_create_int, cel_create_uint};
+use crate::helpers::cel_create_duration;
 use crate::types::CelValue;
 use slog::{debug, error};
 
@@ -78,7 +78,7 @@ pub unsafe extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
         }
 
         match &*ptr {
-            CelValue::UInt(u) => cel_create_uint(*u),
+            CelValue::UInt(u) => Box::into_raw(Box::new(CelValue::UInt(*u))),
             CelValue::Int(i) => {
                 if *i < 0 {
                     error!(log, "Cannot convert negative value to uint";
@@ -87,7 +87,7 @@ pub unsafe extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
                         "value" => *i);
                     abort_with_error("no such overload");
                 }
-                cel_create_uint(*i as u64)
+                Box::into_raw(Box::new(CelValue::UInt(*i as u64)))
             }
             CelValue::Double(d) => {
                 if d.is_nan() || d.is_infinite() {
@@ -114,10 +114,10 @@ pub unsafe extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
                         "max" => u64::MAX);
                     abort_with_error("no such overload");
                 }
-                cel_create_uint(d.trunc() as u64)
+                Box::into_raw(Box::new(CelValue::UInt(d.trunc() as u64)))
             }
             CelValue::String(s) => match s.parse::<u64>() {
-                Ok(u) => cel_create_uint(u),
+                Ok(u) => Box::into_raw(Box::new(CelValue::UInt(u))),
                 Err(_) => {
                     error!(log, "Cannot parse string as uint";
                     "function" => "cel_uint",
@@ -160,7 +160,7 @@ pub unsafe extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
         }
 
         match &*ptr {
-            CelValue::Int(i) => cel_create_int(*i),
+            CelValue::Int(i) => Box::into_raw(Box::new(CelValue::Int(*i))),
             CelValue::UInt(u) => {
                 if *u > i64::MAX as u64 {
                     error!(log, "Value too large for int";
@@ -170,7 +170,7 @@ pub unsafe extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
                         "max" => i64::MAX);
                     abort_with_error("no such overload");
                 }
-                cel_create_int(*u as i64)
+                Box::into_raw(Box::new(CelValue::Int(*u as i64)))
             }
             CelValue::Double(d) => {
                 if d.is_nan() || d.is_infinite() {
@@ -197,10 +197,10 @@ pub unsafe extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
                         "max" => i64::MAX);
                     abort_with_error("no such overload");
                 }
-                cel_create_int(d.trunc() as i64)
+                Box::into_raw(Box::new(CelValue::Int(d.trunc() as i64)))
             }
             CelValue::String(s) => match s.parse::<i64>() {
-                Ok(i) => cel_create_int(i),
+                Ok(i) => Box::into_raw(Box::new(CelValue::Int(i))),
                 Err(_) => {
                     error!(log, "Cannot parse string as int";
                     "function" => "cel_int",
@@ -211,7 +211,7 @@ pub unsafe extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
             CelValue::Timestamp(ts) => {
                 // Convert timestamp to Unix seconds (int)
                 debug!(log, "Converting Timestamp to int (Unix seconds)"; "timestamp" => format!("{:?}", ts));
-                cel_create_int(ts.timestamp())
+                Box::into_raw(Box::new(CelValue::Int(ts.timestamp())))
             }
             other => {
                 error!(log, "Cannot convert type to int";
@@ -248,11 +248,11 @@ pub unsafe extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
         }
 
         match &*ptr {
-            CelValue::Double(d) => cel_create_double(*d),
-            CelValue::Int(i) => cel_create_double(*i as f64),
-            CelValue::UInt(u) => cel_create_double(*u as f64),
+            CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Double(*d))),
+            CelValue::Int(i) => Box::into_raw(Box::new(CelValue::Double(*i as f64))),
+            CelValue::UInt(u) => Box::into_raw(Box::new(CelValue::Double(*u as f64))),
             CelValue::String(s) => match s.parse::<f64>() {
-                Ok(d) => cel_create_double(d),
+                Ok(d) => Box::into_raw(Box::new(CelValue::Double(d))),
                 Err(_) => {
                     error!(log, "Cannot parse string as double";
                     "function" => "cel_double",

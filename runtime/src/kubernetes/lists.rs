@@ -11,7 +11,7 @@
 //! Reference: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-list-library>
 
 use crate::error::create_error_value;
-use crate::helpers::{cel_create_bool, cel_create_int, cel_equals, cel_value_less_than};
+use crate::helpers::{cel_equals, cel_value_less_than};
 use crate::types::CelValue;
 use slog::error;
 
@@ -43,7 +43,7 @@ pub unsafe extern "C" fn cel_k8s_list_is_sorted(array_ptr: *mut CelValue) -> *mu
         CelValue::Array(vec) => {
             // A list of 0 or 1 elements is trivially sorted.
             if vec.len() < 2 {
-                return cel_create_bool(1);
+                return Box::into_raw(Box::new(CelValue::Bool(true)));
             }
 
             for window in vec.windows(2) {
@@ -53,7 +53,7 @@ pub unsafe extern "C" fn cel_k8s_list_is_sorted(array_ptr: *mut CelValue) -> *mu
                 match cel_value_less_than(b, a) {
                     Ok(b_lt_a) => {
                         if b_lt_a {
-                            return cel_create_bool(0);
+                            return Box::into_raw(Box::new(CelValue::Bool(false)));
                         }
                     }
                     Err(_) => {
@@ -65,7 +65,7 @@ pub unsafe extern "C" fn cel_k8s_list_is_sorted(array_ptr: *mut CelValue) -> *mu
                     }
                 }
             }
-            cel_create_bool(1)
+            Box::into_raw(Box::new(CelValue::Bool(true)))
         }
         other => {
             error!(log, "expected Array";
@@ -103,7 +103,7 @@ pub unsafe extern "C" fn cel_k8s_list_sum(array_ptr: *mut CelValue) -> *mut CelV
         CelValue::Array(vec) => {
             if vec.is_empty() {
                 // Spec: [].sum() returns 0
-                return cel_create_int(0);
+                return Box::into_raw(Box::new(CelValue::Int(0)));
             }
 
             // Determine the accumulator type from the first element and sum.
@@ -129,7 +129,7 @@ pub unsafe extern "C" fn cel_k8s_list_sum(array_ptr: *mut CelValue) -> *mut CelV
                             }
                         }
                     }
-                    cel_create_int(acc)
+                    Box::into_raw(Box::new(CelValue::Int(acc)))
                 }
                 CelValue::UInt(_) => {
                     let mut acc: u64 = 0;
@@ -350,10 +350,10 @@ pub unsafe extern "C" fn cel_k8s_list_index_of(
         CelValue::Array(vec) => {
             for (i, elem) in vec.iter().enumerate() {
                 if cel_equals(elem, needle) {
-                    return cel_create_int(i as i64);
+                    return Box::into_raw(Box::new(CelValue::Int(i as i64)));
                 }
             }
-            cel_create_int(-1)
+            Box::into_raw(Box::new(CelValue::Int(-1)))
         }
         other => {
             error!(log, "expected Array";
@@ -393,10 +393,10 @@ pub unsafe extern "C" fn cel_k8s_list_last_index_of(
         CelValue::Array(vec) => {
             for (i, elem) in vec.iter().enumerate().rev() {
                 if cel_equals(elem, needle) {
-                    return cel_create_int(i as i64);
+                    return Box::into_raw(Box::new(CelValue::Int(i as i64)));
                 }
             }
-            cel_create_int(-1)
+            Box::into_raw(Box::new(CelValue::Int(-1)))
         }
         other => {
             error!(log, "expected Array";

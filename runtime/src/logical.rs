@@ -1,7 +1,7 @@
 //! Boolean logic operations on CelValue::Bool pointers.
 
 use crate::error::create_error_value;
-use crate::helpers::{cel_create_bool, extract_bool};
+use crate::helpers::extract_bool;
 use crate::types::CelValue;
 
 /// Boolean AND operator with short-circuit semantics.
@@ -68,7 +68,7 @@ pub unsafe extern "C" fn cel_bool_and(a_ptr: *mut CelValue, b_ptr: *mut CelValue
         // Both are true, return true
         let a = extract_bool(a_ptr);
         let b = extract_bool(b_ptr);
-        cel_create_bool(if a && b { 1 } else { 0 })
+        Box::into_raw(Box::new(CelValue::Bool(a && b)))
     }
 }
 
@@ -136,7 +136,7 @@ pub unsafe extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue)
         // Both are false, return false
         let a = extract_bool(a_ptr);
         let b = extract_bool(b_ptr);
-        cel_create_bool(if a || b { 1 } else { 0 })
+        Box::into_raw(Box::new(CelValue::Bool(a || b)))
     }
 }
 
@@ -152,7 +152,7 @@ pub unsafe extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bool_not(a_ptr: *mut CelValue) -> *mut CelValue {
     let a = extract_bool(a_ptr);
-    cel_create_bool(if !a { 1 } else { 0 })
+    Box::into_raw(Box::new(CelValue::Bool(!a)))
 }
 
 /// Check if a CelValue is NOT strictly false.
@@ -172,12 +172,12 @@ pub unsafe extern "C" fn cel_not_strictly_false(ptr: *mut CelValue) -> *mut CelV
     unsafe {
         if ptr.is_null() {
             // Null is not strictly false
-            return cel_create_bool(1);
+            return Box::into_raw(Box::new(CelValue::Bool(true)));
         }
 
         match &*ptr {
-            CelValue::Bool(false) => cel_create_bool(0), // Strictly false
-            _ => cel_create_bool(1),                     // Anything else is not strictly false
+            CelValue::Bool(false) => Box::into_raw(Box::new(CelValue::Bool(false))), // Strictly false
+            _ => Box::into_raw(Box::new(CelValue::Bool(true))), // Anything else is not strictly false
         }
     }
 }

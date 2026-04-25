@@ -9,7 +9,7 @@
 //! - Time cost for maps: O(1) expected (implementation may vary)
 
 use crate::error::abort_with_error;
-use crate::helpers::{cel_create_bool, cel_equals};
+use crate::helpers::cel_equals;
 use crate::types::CelValue;
 use slog::{debug, error, info};
 
@@ -59,7 +59,7 @@ pub unsafe extern "C" fn cel_value_in(
             // Linear search through array using CEL equality (supports cross-type numeric equality)
             let found = arr.iter().any(|item| cel_equals(item, element));
             info!(log, "List membership check complete"; "found" => found);
-            cel_create_bool(if found { 1 } else { 0 })
+            Box::into_raw(Box::new(CelValue::Bool(found)))
         }
 
         // Map key membership: A in map(A, B)
@@ -74,7 +74,7 @@ pub unsafe extern "C" fn cel_value_in(
                         "map_size" => map.len());
                     let found = map.contains_key(&key);
                     info!(log, "Map membership check complete"; "found" => found);
-                    cel_create_bool(if found { 1 } else { 0 })
+                    Box::into_raw(Box::new(CelValue::Bool(found)))
                 }
                 None => {
                     error!(log, "Maps require bool, int, uint, or string keys for membership test";
