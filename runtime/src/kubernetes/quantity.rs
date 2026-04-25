@@ -525,17 +525,17 @@ pub unsafe extern "C" fn cel_k8s_quantity_parse(str_ptr: *mut CelValue) -> *mut 
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(s) => s,
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_quantity_parse", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    match parse_quantity_full(s) {
-        Ok(_) => Box::into_raw(Box::new(CelValue::Quantity(s.to_string()))),
+    match parse_quantity_full(&s) {
+        Ok(_) => Box::into_raw(Box::new(CelValue::Quantity(s))),
         Err(msg) => {
             error!(log, "invalid quantity"; "function" => "cel_k8s_quantity_parse", "error" => &msg);
             create_error_value(&msg)
@@ -557,20 +557,21 @@ pub unsafe extern "C" fn cel_k8s_is_quantity(str_ptr: *mut CelValue) -> *mut Cel
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(s) => s,
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_is_quantity", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    let ok = parse_quantity_full(s).is_ok();
+    let ok = parse_quantity_full(&s).is_ok();
     Box::into_raw(Box::new(CelValue::Bool(ok)))
 }
 
 /// Helper to parse a Quantity CelValue into a QuantityAmount, returning an error CelValue on failure.
+/// Consumes (takes ownership of) the pointed-to value.
 unsafe fn parse_quantity_cel(
     ptr: *mut CelValue,
     fn_name: &str,
@@ -580,9 +581,9 @@ unsafe fn parse_quantity_cel(
         error!(log, "null pointer"; "function" => fn_name);
         return Err(create_error_value("no such overload"));
     }
-    let val = unsafe { &*ptr };
+    let val = unsafe { *Box::from_raw(ptr) };
     match val {
-        CelValue::Quantity(s) => parse_quantity_full(s.as_str()).map_err(|e| {
+        CelValue::Quantity(s) => parse_quantity_full(&s).map_err(|e| {
             error!(log, "invalid quantity"; "function" => fn_name, "error" => &e);
             create_error_value(&e)
         }),
@@ -752,9 +753,9 @@ pub unsafe extern "C" fn cel_k8s_quantity_add_int(
         error!(log, "null pointer"; "function" => "cel_k8s_quantity_add_int");
         return create_error_value("no such overload");
     }
-    let int_val = unsafe { &*int_ptr };
+    let int_val = unsafe { *Box::from_raw(int_ptr) };
     let n = match int_val {
-        CelValue::Int(n) => *n,
+        CelValue::Int(n) => n,
         other => {
             error!(log, "expected Int"; "function" => "cel_k8s_quantity_add_int", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
@@ -831,9 +832,9 @@ pub unsafe extern "C" fn cel_k8s_quantity_sub_int(
         error!(log, "null pointer"; "function" => "cel_k8s_quantity_sub_int");
         return create_error_value("no such overload");
     }
-    let int_val = unsafe { &*int_ptr };
+    let int_val = unsafe { *Box::from_raw(int_ptr) };
     let n = match int_val {
-        CelValue::Int(n) => *n,
+        CelValue::Int(n) => n,
         other => {
             error!(log, "expected Int"; "function" => "cel_k8s_quantity_sub_int", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
@@ -1007,7 +1008,6 @@ mod tests {
         let str_ptr = unsafe { make_str(input) };
         let result = unsafe { read_val(cel_k8s_is_quantity(str_ptr)) };
         assert_eq!(result, CelValue::Bool(expected), "isQuantity({:?})", input);
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     // ── sign ──────────────────────────────────────────────────────────────

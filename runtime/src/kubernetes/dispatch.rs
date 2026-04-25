@@ -9,6 +9,24 @@
 
 use crate::{error::create_error_value, types::CelValue};
 
+enum ReceiverKind {
+    Quantity,
+    Semver,
+    Other,
+}
+
+/// Inspect the receiver type without consuming the pointer.
+///
+/// # Safety
+/// `ptr` must be a valid, non-null pointer to a `CelValue`.
+unsafe fn receiver_kind(ptr: *mut CelValue) -> ReceiverKind {
+    match unsafe { &*ptr } {
+        CelValue::Quantity(_) => ReceiverKind::Quantity,
+        CelValue::Semver(_) => ReceiverKind::Semver,
+        _ => ReceiverKind::Other,
+    }
+}
+
 /// `<receiver>.isLessThan(<rhs>)` — dispatches to `Quantity` or `Semver`.
 ///
 /// # Safety
@@ -22,15 +40,15 @@ pub unsafe extern "C" fn cel_k8s_poly_is_less_than(
     if lhs_ptr.is_null() {
         return create_error_value("no such overload");
     }
-    let lhs_val = unsafe { &*lhs_ptr };
-    match lhs_val {
-        CelValue::Quantity(_) => unsafe {
+    let kind = unsafe { receiver_kind(lhs_ptr) };
+    match kind {
+        ReceiverKind::Quantity => unsafe {
             crate::kubernetes::quantity::cel_k8s_quantity_is_less_than(lhs_ptr, rhs_ptr)
         },
-        CelValue::Semver(_) => unsafe {
+        ReceiverKind::Semver => unsafe {
             crate::kubernetes::semver::cel_k8s_semver_is_less_than(lhs_ptr, rhs_ptr)
         },
-        _ => create_error_value("no such overload"),
+        ReceiverKind::Other => create_error_value("no such overload"),
     }
 }
 
@@ -47,15 +65,15 @@ pub unsafe extern "C" fn cel_k8s_poly_is_greater_than(
     if lhs_ptr.is_null() {
         return create_error_value("no such overload");
     }
-    let lhs_val = unsafe { &*lhs_ptr };
-    match lhs_val {
-        CelValue::Quantity(_) => unsafe {
+    let kind = unsafe { receiver_kind(lhs_ptr) };
+    match kind {
+        ReceiverKind::Quantity => unsafe {
             crate::kubernetes::quantity::cel_k8s_quantity_is_greater_than(lhs_ptr, rhs_ptr)
         },
-        CelValue::Semver(_) => unsafe {
+        ReceiverKind::Semver => unsafe {
             crate::kubernetes::semver::cel_k8s_semver_is_greater_than(lhs_ptr, rhs_ptr)
         },
-        _ => create_error_value("no such overload"),
+        ReceiverKind::Other => create_error_value("no such overload"),
     }
 }
 
@@ -72,14 +90,14 @@ pub unsafe extern "C" fn cel_k8s_poly_compare_to(
     if lhs_ptr.is_null() {
         return create_error_value("no such overload");
     }
-    let lhs_val = unsafe { &*lhs_ptr };
-    match lhs_val {
-        CelValue::Quantity(_) => unsafe {
+    let kind = unsafe { receiver_kind(lhs_ptr) };
+    match kind {
+        ReceiverKind::Quantity => unsafe {
             crate::kubernetes::quantity::cel_k8s_quantity_compare_to(lhs_ptr, rhs_ptr)
         },
-        CelValue::Semver(_) => unsafe {
+        ReceiverKind::Semver => unsafe {
             crate::kubernetes::semver::cel_k8s_semver_compare_to(lhs_ptr, rhs_ptr)
         },
-        _ => create_error_value("no such overload"),
+        ReceiverKind::Other => create_error_value("no such overload"),
     }
 }

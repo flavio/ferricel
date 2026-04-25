@@ -38,11 +38,11 @@ pub unsafe extern "C" fn cel_k8s_regex_find(
         return create_error_value("no such overload");
     }
 
-    let string_val = unsafe { &*string_ptr };
-    let pattern_val = unsafe { &*pattern_ptr };
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let pattern_val = unsafe { *Box::from_raw(pattern_ptr) };
 
-    let (s, pattern) = match (string_val, pattern_val) {
-        (CelValue::String(s), CelValue::String(p)) => (s.as_str(), p.as_str()),
+    let (s, pattern) = match (&string_val, &pattern_val) {
+        (CelValue::String(s), CelValue::String(p)) => (s.clone(), p.clone()),
         _ => {
             error!(log, "expected String arguments";
                 "function" => "cel_k8s_regex_find",
@@ -52,18 +52,18 @@ pub unsafe extern "C" fn cel_k8s_regex_find(
         }
     };
 
-    let re = match Regex::new(pattern) {
+    let re = match Regex::new(&pattern) {
         Ok(r) => r,
         Err(e) => {
             error!(log, "invalid regex";
                 "function" => "cel_k8s_regex_find",
-                "pattern" => pattern,
+                "pattern" => &pattern,
                 "error" => format!("{}", e));
             return create_error_value("invalid regex");
         }
     };
 
-    let result = re.find(s).map(|m| m.as_str()).unwrap_or("").to_string();
+    let result = re.find(&s).map(|m| m.as_str()).unwrap_or("").to_string();
     Box::into_raw(Box::new(CelValue::String(result)))
 }
 
@@ -97,12 +97,12 @@ pub unsafe extern "C" fn cel_k8s_regex_find_all_n(
         return create_error_value("no such overload");
     }
 
-    let string_val = unsafe { &*string_ptr };
-    let pattern_val = unsafe { &*pattern_ptr };
-    let limit_val = unsafe { &*limit_ptr };
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let pattern_val = unsafe { *Box::from_raw(pattern_ptr) };
+    let limit_val = unsafe { *Box::from_raw(limit_ptr) };
 
-    let (s, pattern) = match (string_val, pattern_val) {
-        (CelValue::String(s), CelValue::String(p)) => (s.as_str(), p.as_str()),
+    let (s, pattern) = match (&string_val, &pattern_val) {
+        (CelValue::String(s), CelValue::String(p)) => (s.clone(), p.clone()),
         _ => {
             error!(log, "expected String arguments";
                 "function" => "cel_k8s_regex_find_all_n",
@@ -113,7 +113,7 @@ pub unsafe extern "C" fn cel_k8s_regex_find_all_n(
     };
 
     let limit: i64 = match limit_val {
-        CelValue::Int(n) => *n,
+        CelValue::Int(n) => n,
         other => {
             error!(log, "expected Int limit";
                 "function" => "cel_k8s_regex_find_all_n",
@@ -122,12 +122,12 @@ pub unsafe extern "C" fn cel_k8s_regex_find_all_n(
         }
     };
 
-    let re = match Regex::new(pattern) {
+    let re = match Regex::new(&pattern) {
         Ok(r) => r,
         Err(e) => {
             error!(log, "invalid regex";
                 "function" => "cel_k8s_regex_find_all_n",
-                "pattern" => pattern,
+                "pattern" => &pattern,
                 "error" => format!("{}", e));
             return create_error_value("invalid regex");
         }
@@ -135,11 +135,11 @@ pub unsafe extern "C" fn cel_k8s_regex_find_all_n(
 
     let matches: Vec<CelValue> = if limit < 0 {
         // Negative limit → return all matches
-        re.find_iter(s)
+        re.find_iter(&s)
             .map(|m| CelValue::String(m.as_str().to_string()))
             .collect()
     } else {
-        re.find_iter(s)
+        re.find_iter(&s)
             .take(limit as usize)
             .map(|m| CelValue::String(m.as_str().to_string()))
             .collect()
@@ -179,10 +179,6 @@ mod tests {
             s,
             pattern
         );
-        unsafe {
-            drop(Box::from_raw(s_ptr));
-            drop(Box::from_raw(p_ptr));
-        }
     }
 
     #[test]
@@ -194,10 +190,6 @@ mod tests {
             matches!(result, CelValue::Error(_)),
             "expected error for invalid regex"
         );
-        unsafe {
-            drop(Box::from_raw(s_ptr));
-            drop(Box::from_raw(p_ptr));
-        }
     }
 
     // ── findAll (no limit — delegates to findAll_n with -1) ─────────────────
@@ -235,11 +227,6 @@ mod tests {
                 .collect(),
         );
         assert_eq!(result, expected_val, "findAll({:?}, {:?})", s, pattern);
-        unsafe {
-            drop(Box::from_raw(s_ptr));
-            drop(Box::from_raw(p_ptr));
-            drop(Box::from_raw(l_ptr));
-        }
     }
 
     // ── findAll with limit ───────────────────────────────────────────────────
@@ -271,11 +258,6 @@ mod tests {
             "findAll({:?}, {:?}, {})",
             s, pattern, limit
         );
-        unsafe {
-            drop(Box::from_raw(s_ptr));
-            drop(Box::from_raw(p_ptr));
-            drop(Box::from_raw(l_ptr));
-        }
     }
 
     #[test]
@@ -288,10 +270,5 @@ mod tests {
             matches!(result, CelValue::Error(_)),
             "expected error for invalid regex"
         );
-        unsafe {
-            drop(Box::from_raw(s_ptr));
-            drop(Box::from_raw(p_ptr));
-            drop(Box::from_raw(l_ptr));
-        }
     }
 }

@@ -20,15 +20,17 @@ use crate::types::CelValue;
 ///
 /// # Safety
 ///
-/// Both pointer arguments must point to valid, properly-aligned `CelValue` instances.
-/// The returned pointer must be freed with `cel_free` when no longer needed.
+/// Caller must transfer ownership of both pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_sets_contains(
-    list_ptr: *const CelValue,
-    sublist_ptr: *const CelValue,
+    list_ptr: *mut CelValue,
+    sublist_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let sublist_val = unsafe { *Box::from_raw(sublist_ptr) };
+    let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -36,7 +38,7 @@ pub unsafe extern "C" fn cel_sets_contains(
             )));
         }
     };
-    let sublist = match unsafe { &*sublist_ptr } {
+    let sublist = match sublist_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -45,7 +47,7 @@ pub unsafe extern "C" fn cel_sets_contains(
         }
     };
 
-    let result = sets_contains(list, sublist);
+    let result = sets_contains(&list, &sublist);
     Box::into_raw(Box::new(CelValue::Bool(result)))
 }
 
@@ -55,15 +57,17 @@ pub unsafe extern "C" fn cel_sets_contains(
 ///
 /// # Safety
 ///
-/// Both pointer arguments must point to valid, properly-aligned `CelValue` instances.
-/// The returned pointer must be freed with `cel_free` when no longer needed.
+/// Caller must transfer ownership of both pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_sets_intersects(
-    list_a_ptr: *const CelValue,
-    list_b_ptr: *const CelValue,
+    list_a_ptr: *mut CelValue,
+    list_b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_a = match unsafe { &*list_a_ptr } {
+    let list_a_val = unsafe { *Box::from_raw(list_a_ptr) };
+    let list_b_val = unsafe { *Box::from_raw(list_b_ptr) };
+    let list_a = match list_a_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -71,7 +75,7 @@ pub unsafe extern "C" fn cel_sets_intersects(
             )));
         }
     };
-    let list_b = match unsafe { &*list_b_ptr } {
+    let list_b = match list_b_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -93,15 +97,17 @@ pub unsafe extern "C" fn cel_sets_intersects(
 ///
 /// # Safety
 ///
-/// Both pointer arguments must point to valid, properly-aligned `CelValue` instances.
-/// The returned pointer must be freed with `cel_free` when no longer needed.
+/// Caller must transfer ownership of both pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_sets_equivalent(
-    list_a_ptr: *const CelValue,
-    list_b_ptr: *const CelValue,
+    list_a_ptr: *mut CelValue,
+    list_b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_a = match unsafe { &*list_a_ptr } {
+    let list_a_val = unsafe { *Box::from_raw(list_a_ptr) };
+    let list_b_val = unsafe { *Box::from_raw(list_b_ptr) };
+    let list_a = match list_a_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -109,7 +115,7 @@ pub unsafe extern "C" fn cel_sets_equivalent(
             )));
         }
     };
-    let list_b = match unsafe { &*list_b_ptr } {
+    let list_b = match list_b_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -118,7 +124,7 @@ pub unsafe extern "C" fn cel_sets_equivalent(
         }
     };
 
-    let result = sets_contains(list_a, list_b) && sets_contains(list_b, list_a);
+    let result = sets_contains(&list_a, &list_b) && sets_contains(&list_b, &list_a);
     Box::into_raw(Box::new(CelValue::Bool(result)))
 }
 
@@ -200,8 +206,6 @@ mod tests {
                 other => panic!("Expected Bool, got {:?}", other),
             };
             assert_eq!(result, expected);
-            let _ = Box::from_raw(list_ptr);
-            let _ = Box::from_raw(sublist_ptr);
             let _ = Box::from_raw(result_ptr);
         }
     }
@@ -260,8 +264,6 @@ mod tests {
                 other => panic!("Expected Bool, got {:?}", other),
             };
             assert_eq!(result, expected);
-            let _ = Box::from_raw(a_ptr);
-            let _ = Box::from_raw(b_ptr);
             let _ = Box::from_raw(result_ptr);
         }
     }
@@ -317,8 +319,6 @@ mod tests {
                 other => panic!("Expected Bool, got {:?}", other),
             };
             assert_eq!(result, expected);
-            let _ = Box::from_raw(a_ptr);
-            let _ = Box::from_raw(b_ptr);
             let _ = Box::from_raw(result_ptr);
         }
     }

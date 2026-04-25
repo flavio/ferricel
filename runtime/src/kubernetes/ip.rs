@@ -101,16 +101,16 @@ pub unsafe extern "C" fn cel_k8s_ip_parse(str_ptr: *mut CelValue) -> *mut CelVal
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_ip_parse", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    match parse_k8s_ip(s) {
+    match parse_k8s_ip(&s) {
         Ok(addr) => Box::into_raw(Box::new(CelValue::IpAddr(addr))),
         Err(msg) => {
             error!(log, "invalid IP address"; "function" => "cel_k8s_ip_parse", "error" => &msg);
@@ -137,16 +137,16 @@ pub unsafe extern "C" fn cel_k8s_is_ip(str_ptr: *mut CelValue) -> *mut CelValue 
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_is_ip", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    let ok = parse_k8s_ip(s).is_ok();
+    let ok = parse_k8s_ip(&s).is_ok();
     Box::into_raw(Box::new(CelValue::Bool(ok)))
 }
 
@@ -174,16 +174,16 @@ pub unsafe extern "C" fn cel_k8s_ip_is_canonical(str_ptr: *mut CelValue) -> *mut
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_ip_is_canonical", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    match parse_k8s_ip(s) {
+    match parse_k8s_ip(&s) {
         Ok(addr) => Box::into_raw(Box::new(CelValue::Bool(addr.to_string() == s))),
         Err(msg) => {
             error!(log, "invalid IP address"; "function" => "cel_k8s_ip_is_canonical", "error" => &msg);
@@ -210,7 +210,7 @@ pub unsafe extern "C" fn cel_k8s_ip_family(ip_ptr: *mut CelValue) -> *mut CelVal
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*ip_ptr };
+    let val = unsafe { *Box::from_raw(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => {
             let family: i64 = if addr.is_ipv4() { 4 } else { 6 };
@@ -242,7 +242,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_unspecified(ip_ptr: *mut CelValue) -> *mu
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*ip_ptr };
+    let val = unsafe { *Box::from_raw(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => Box::into_raw(Box::new(CelValue::Bool(addr.is_unspecified()))),
         other => {
@@ -271,7 +271,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_loopback(ip_ptr: *mut CelValue) -> *mut C
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*ip_ptr };
+    let val = unsafe { *Box::from_raw(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => Box::into_raw(Box::new(CelValue::Bool(addr.is_loopback()))),
         other => {
@@ -302,7 +302,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_link_local_multicast(
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*ip_ptr };
+    let val = unsafe { *Box::from_raw(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => {
             // IPv4 link-local multicast: 224.0.0.0/24 (i.e. 224.0.0.x)
@@ -343,7 +343,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_link_local_unicast(ip_ptr: *mut CelValue)
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*ip_ptr };
+    let val = unsafe { *Box::from_raw(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => {
             let result = match addr {
@@ -387,7 +387,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_global_unicast(ip_ptr: *mut CelValue) -> 
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*ip_ptr };
+    let val = unsafe { *Box::from_raw(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => {
             // Matches Go's net.IP.IsGlobalUnicast():
@@ -403,8 +403,8 @@ pub unsafe extern "C" fn cel_k8s_ip_is_global_unicast(ip_ptr: *mut CelValue) -> 
                 }
                 IpAddr::V6(v6) => {
                     let seg0 = v6.segments()[0];
-                    let is_loopback = *v6 == std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1);
-                    let is_unspecified = *v6 == std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+                    let is_loopback = v6 == std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1);
+                    let is_unspecified = v6 == std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
                     let is_link_local_unicast = (seg0 & 0xffc0) == 0xfe80;
                     let is_multicast = (seg0 & 0xff00) == 0xff00;
                     !is_loopback && !is_unspecified && !is_link_local_unicast && !is_multicast
@@ -453,7 +453,6 @@ mod tests {
             input,
             result
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     #[rstest]
@@ -472,7 +471,6 @@ mod tests {
             input,
             result
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     #[rstest]
@@ -487,7 +485,6 @@ mod tests {
         let str_ptr = unsafe { make_str(input) };
         let result = unsafe { read_val(cel_k8s_is_ip(str_ptr)) };
         assert_eq!(result, CelValue::Bool(expected), "isIP({:?})", input);
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     // ── ip.isCanonical() ─────────────────────────────────────────────────────
@@ -508,7 +505,6 @@ mod tests {
             "ip.isCanonical({:?})",
             input
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     #[test]
@@ -520,7 +516,6 @@ mod tests {
             "expected Error for invalid input, got {:?}",
             result
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     // ── family() ─────────────────────────────────────────────────────────────
@@ -679,7 +674,6 @@ mod tests {
         let val_ptr = unsafe { make_val(CelValue::Int(42)) };
         let result = unsafe { read_val(cel_k8s_ip_family(val_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe { drop(Box::from_raw(val_ptr)) };
     }
 
     #[test]
@@ -687,6 +681,5 @@ mod tests {
         let val_ptr = unsafe { make_val(CelValue::Bool(true)) };
         let result = unsafe { read_val(cel_k8s_ip_is_unspecified(val_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe { drop(Box::from_raw(val_ptr)) };
     }
 }

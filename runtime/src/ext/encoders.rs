@@ -10,12 +10,13 @@ use crate::types::CelValue;
 ///
 /// # Safety
 ///
-/// Caller must ensure the pointer argument points to a valid `CelValue` instance
-/// allocated by the WASM host.
+/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
+/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_base64_encode(bytes_ptr: *const CelValue) -> *mut CelValue {
-    let bytes = match unsafe { &*bytes_ptr } {
+pub unsafe extern "C" fn cel_base64_encode(bytes_ptr: *mut CelValue) -> *mut CelValue {
+    let bytes_val = unsafe { *Box::from_raw(bytes_ptr) };
+    let bytes = match bytes_val {
         CelValue::Bytes(b) => b,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -23,7 +24,7 @@ pub unsafe extern "C" fn cel_base64_encode(bytes_ptr: *const CelValue) -> *mut C
             )));
         }
     };
-    let encoded = general_purpose::STANDARD.encode(bytes);
+    let encoded = general_purpose::STANDARD.encode(&bytes);
     Box::into_raw(Box::new(CelValue::String(encoded)))
 }
 
@@ -34,12 +35,13 @@ pub unsafe extern "C" fn cel_base64_encode(bytes_ptr: *const CelValue) -> *mut C
 ///
 /// # Safety
 ///
-/// Caller must ensure the pointer argument points to a valid `CelValue` instance
-/// allocated by the WASM host.
+/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
+/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_base64_decode(string_ptr: *const CelValue) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
+pub unsafe extern "C" fn cel_base64_decode(string_ptr: *mut CelValue) -> *mut CelValue {
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let s = match string_val {
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(

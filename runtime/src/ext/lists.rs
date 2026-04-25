@@ -17,13 +17,14 @@ use crate::types::CelValue;
 ///
 /// # Safety
 ///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
+/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_list_join(list_ptr: *const CelValue) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
-        CelValue::Array(v) => v.clone(),
+pub unsafe extern "C" fn cel_list_join(list_ptr: *mut CelValue) -> *mut CelValue {
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list = match list_val {
+        CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "join: receiver is not a list".to_string(),
@@ -48,24 +49,26 @@ pub unsafe extern "C" fn cel_list_join(list_ptr: *const CelValue) -> *mut CelVal
 ///
 /// # Safety
 ///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_join_sep(
-    list_ptr: *const CelValue,
-    sep_ptr: *const CelValue,
+    list_ptr: *mut CelValue,
+    sep_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
-        CelValue::Array(v) => v.clone(),
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let sep_val = unsafe { *Box::from_raw(sep_ptr) };
+    let list = match list_val {
+        CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "join: receiver is not a list".to_string(),
             )));
         }
     };
-    let sep = match unsafe { &*sep_ptr } {
-        CelValue::String(s) => s.clone(),
+    let sep = match sep_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "join: separator is not a string".to_string(),
@@ -97,12 +100,13 @@ pub unsafe extern "C" fn cel_list_join_sep(
 ///
 /// # Safety
 ///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
+/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_list_distinct(list_ptr: *const CelValue) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
+pub unsafe extern "C" fn cel_list_distinct(list_ptr: *mut CelValue) -> *mut CelValue {
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -112,8 +116,8 @@ pub unsafe extern "C" fn cel_list_distinct(list_ptr: *const CelValue) -> *mut Ce
     };
     let mut unique: Vec<CelValue> = Vec::new();
     for val in list {
-        if !unique.iter().any(|u| cel_equals(u, val)) {
-            unique.push(val.clone());
+        if !unique.iter().any(|u| cel_equals(u, &val)) {
+            unique.push(val);
         }
     }
     Box::into_raw(Box::new(CelValue::Array(unique)))
@@ -125,12 +129,13 @@ pub unsafe extern "C" fn cel_list_distinct(list_ptr: *const CelValue) -> *mut Ce
 ///
 /// # Safety
 ///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
+/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_list_flatten(list_ptr: *const CelValue) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
+pub unsafe extern "C" fn cel_list_flatten(list_ptr: *mut CelValue) -> *mut CelValue {
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -138,7 +143,7 @@ pub unsafe extern "C" fn cel_list_flatten(list_ptr: *const CelValue) -> *mut Cel
             )));
         }
     };
-    let result = list_flatten_depth(list, 1);
+    let result = list_flatten_depth(&list, 1);
     Box::into_raw(Box::new(CelValue::Array(result)))
 }
 
@@ -146,15 +151,17 @@ pub unsafe extern "C" fn cel_list_flatten(list_ptr: *const CelValue) -> *mut Cel
 ///
 /// # Safety
 ///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_flatten_depth(
-    list_ptr: *const CelValue,
-    depth_ptr: *const CelValue,
+    list_ptr: *mut CelValue,
+    depth_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let depth_val = unsafe { *Box::from_raw(depth_ptr) };
+    let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -162,8 +169,8 @@ pub unsafe extern "C" fn cel_list_flatten_depth(
             )));
         }
     };
-    let depth = match unsafe { &*depth_ptr } {
-        CelValue::Int(n) => *n,
+    let depth = match depth_val {
+        CelValue::Int(n) => n,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "flatten: depth must be an int".to_string(),
@@ -175,7 +182,7 @@ pub unsafe extern "C" fn cel_list_flatten_depth(
             "level must be non-negative".to_string(),
         )));
     }
-    let result = list_flatten_depth(list, depth);
+    let result = list_flatten_depth(&list, depth);
     Box::into_raw(Box::new(CelValue::Array(result)))
 }
 
@@ -199,13 +206,14 @@ fn list_flatten_depth(list: &[CelValue], depth: i64) -> Vec<CelValue> {
 ///
 /// # Safety
 ///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
+/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_list_range(n_ptr: *const CelValue) -> *mut CelValue {
-    let n = match unsafe { &*n_ptr } {
-        CelValue::Int(n) => *n,
+pub unsafe extern "C" fn cel_list_range(n_ptr: *mut CelValue) -> *mut CelValue {
+    let n_val = unsafe { *Box::from_raw(n_ptr) };
+    let n = match n_val {
+        CelValue::Int(n) => n,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "lists.range: argument must be an int".to_string(),
@@ -216,26 +224,32 @@ pub unsafe extern "C" fn cel_list_range(n_ptr: *const CelValue) -> *mut CelValue
     Box::into_raw(Box::new(CelValue::Array(result)))
 }
 
+/// Pure Rust implementation of list reverse, used internally by `poly.rs`.
+pub(crate) fn list_reverse_impl(list: Vec<CelValue>) -> CelValue {
+    let mut reversed = list;
+    reversed.reverse();
+    CelValue::Array(reversed)
+}
+
 /// Returns the elements of a list in reverse order.
 ///
 /// # Safety
 ///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
+/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_list_reverse(list_ptr: *const CelValue) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
-        CelValue::Array(v) => v.clone(),
+pub unsafe extern "C" fn cel_list_reverse(list_ptr: *mut CelValue) -> *mut CelValue {
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list = match list_val {
+        CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "reverse: receiver is not a list".to_string(),
             )));
         }
     };
-    let mut reversed = list;
-    reversed.reverse();
-    Box::into_raw(Box::new(CelValue::Array(reversed)))
+    Box::into_raw(Box::new(list_reverse_impl(list)))
 }
 
 /// Returns a sub-list from `start` (inclusive) to `end` (exclusive).
@@ -247,16 +261,19 @@ pub unsafe extern "C" fn cel_list_reverse(list_ptr: *const CelValue) -> *mut Cel
 ///
 /// # Safety
 ///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_slice(
-    list_ptr: *const CelValue,
-    start_ptr: *const CelValue,
-    end_ptr: *const CelValue,
+    list_ptr: *mut CelValue,
+    start_ptr: *mut CelValue,
+    end_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let start_val = unsafe { *Box::from_raw(start_ptr) };
+    let end_val = unsafe { *Box::from_raw(end_ptr) };
+    let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -264,16 +281,16 @@ pub unsafe extern "C" fn cel_list_slice(
             )));
         }
     };
-    let start = match unsafe { &*start_ptr } {
-        CelValue::Int(n) => *n,
+    let start = match start_val {
+        CelValue::Int(n) => n,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "slice: start index must be an int".to_string(),
             )));
         }
     };
-    let end = match unsafe { &*end_ptr } {
-        CelValue::Int(n) => *n,
+    let end = match end_val {
+        CelValue::Int(n) => n,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "slice: end index must be an int".to_string(),
@@ -307,13 +324,14 @@ pub unsafe extern "C" fn cel_list_slice(
 ///
 /// # Safety
 ///
-/// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
+/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_list_sort(list_ptr: *const CelValue) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
-        CelValue::Array(v) => v.clone(),
+pub unsafe extern "C" fn cel_list_sort(list_ptr: *mut CelValue) -> *mut CelValue {
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list = match list_val {
+        CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "sort: receiver is not a list".to_string(),
@@ -363,23 +381,26 @@ pub unsafe extern "C" fn cel_list_sort(list_ptr: *const CelValue) -> *mut CelVal
 ///
 /// # Safety
 ///
-/// Caller must ensure both pointer arguments point to valid `CelValue` instances.
+/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
-    values_ptr: *const CelValue,
-    keys_ptr: *const CelValue,
+    values_ptr: *mut CelValue,
+    keys_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let values = match unsafe { &*values_ptr } {
-        CelValue::Array(v) => v.clone(),
+    let values_val = unsafe { *Box::from_raw(values_ptr) };
+    let keys_val = unsafe { *Box::from_raw(keys_ptr) };
+    let values = match values_val {
+        CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "sortByAssociatedKeys: values receiver is not a list".to_string(),
             )));
         }
     };
-    let keys = match unsafe { &*keys_ptr } {
-        CelValue::Array(k) => k.clone(),
+    let keys = match keys_val {
+        CelValue::Array(k) => k,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "sortByAssociatedKeys: keys argument is not a list".to_string(),
@@ -437,12 +458,13 @@ pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
 ///
 /// # Safety
 ///
-/// Caller must ensure the pointer argument points to a valid `CelValue` instance
-/// allocated by the WASM host.
+/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
+/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_list_first(list_ptr: *const CelValue) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
+pub unsafe extern "C" fn cel_list_first(list_ptr: *mut CelValue) -> *mut CelValue {
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -454,7 +476,7 @@ pub unsafe extern "C" fn cel_list_first(list_ptr: *const CelValue) -> *mut CelVa
         return Box::into_raw(Box::new(CelValue::Optional(None)));
     }
     Box::into_raw(Box::new(CelValue::Optional(Some(Box::new(
-        list[0].clone(),
+        list.into_iter().next().unwrap(),
     )))))
 }
 
@@ -462,12 +484,13 @@ pub unsafe extern "C" fn cel_list_first(list_ptr: *const CelValue) -> *mut CelVa
 ///
 /// # Safety
 ///
-/// Caller must ensure the pointer argument points to a valid `CelValue` instance
-/// allocated by the WASM host.
+/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
+/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_list_last(list_ptr: *const CelValue) -> *mut CelValue {
-    let list = match unsafe { &*list_ptr } {
+pub unsafe extern "C" fn cel_list_last(list_ptr: *mut CelValue) -> *mut CelValue {
+    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
@@ -478,9 +501,8 @@ pub unsafe extern "C" fn cel_list_last(list_ptr: *const CelValue) -> *mut CelVal
     if list.is_empty() {
         return Box::into_raw(Box::new(CelValue::Optional(None)));
     }
-    Box::into_raw(Box::new(CelValue::Optional(Some(Box::new(
-        list[list.len() - 1].clone(),
-    )))))
+    let last = list.into_iter().last().unwrap();
+    Box::into_raw(Box::new(CelValue::Optional(Some(Box::new(last)))))
 }
 
 #[cfg(test)]
@@ -503,7 +525,7 @@ mod tests {
                 .collect(),
         );
         unsafe {
-            let result_ptr = cel_list_join(&list_val as *const CelValue);
+            let result_ptr = cel_list_join(Box::into_raw(Box::new(list_val)));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
         }
@@ -516,7 +538,7 @@ mod tests {
             CelValue::Int(42),
         ]);
         unsafe {
-            let result_ptr = cel_list_join(&list_val as *const CelValue);
+            let result_ptr = cel_list_join(Box::into_raw(Box::new(list_val)));
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
         }
@@ -538,8 +560,10 @@ mod tests {
         );
         let sep_val = CelValue::String(sep.to_string());
         unsafe {
-            let result_ptr =
-                cel_list_join_sep(&list_val as *const CelValue, &sep_val as *const CelValue);
+            let result_ptr = cel_list_join_sep(
+                Box::into_raw(Box::new(list_val)),
+                Box::into_raw(Box::new(sep_val)),
+            );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
         }
@@ -553,8 +577,10 @@ mod tests {
         ]);
         let sep_val = CelValue::String("-".to_string());
         unsafe {
-            let result_ptr =
-                cel_list_join_sep(&list_val as *const CelValue, &sep_val as *const CelValue);
+            let result_ptr = cel_list_join_sep(
+                Box::into_raw(Box::new(list_val)),
+                Box::into_raw(Box::new(sep_val)),
+            );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
         }
@@ -580,7 +606,7 @@ mod tests {
     fn test_list_distinct(#[case] input: Vec<CelValue>, #[case] expected: Vec<CelValue>) {
         let list = CelValue::Array(input);
         unsafe {
-            let result_ptr = cel_list_distinct(&list as *const CelValue);
+            let result_ptr = cel_list_distinct(Box::into_raw(Box::new(list)));
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
             cel_free_value(result_ptr);
         }
@@ -619,8 +645,10 @@ mod tests {
         let list = CelValue::Array(input);
         let depth_val = CelValue::Int(depth);
         unsafe {
-            let result_ptr =
-                cel_list_flatten_depth(&list as *const CelValue, &depth_val as *const CelValue);
+            let result_ptr = cel_list_flatten_depth(
+                Box::into_raw(Box::new(list)),
+                Box::into_raw(Box::new(depth_val)),
+            );
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
             cel_free_value(result_ptr);
         }
@@ -636,7 +664,7 @@ mod tests {
             ]),
         ]);
         unsafe {
-            let result_ptr = cel_list_flatten(&list as *const CelValue);
+            let result_ptr = cel_list_flatten(Box::into_raw(Box::new(list)));
             assert_eq!(
                 &*result_ptr,
                 &CelValue::Array(vec![
@@ -654,8 +682,10 @@ mod tests {
         let list = CelValue::Array(vec![]);
         let depth_val = CelValue::Int(-1);
         unsafe {
-            let result_ptr =
-                cel_list_flatten_depth(&list as *const CelValue, &depth_val as *const CelValue);
+            let result_ptr = cel_list_flatten_depth(
+                Box::into_raw(Box::new(list)),
+                Box::into_raw(Box::new(depth_val)),
+            );
             assert!(matches!(&*result_ptr, CelValue::Error(e) if e.contains("non-negative")));
             cel_free_value(result_ptr);
         }
@@ -671,7 +701,7 @@ mod tests {
     fn test_list_range(#[case] n: i64, #[case] expected: Vec<CelValue>) {
         let n_val = CelValue::Int(n);
         unsafe {
-            let result_ptr = cel_list_range(&n_val as *const CelValue);
+            let result_ptr = cel_list_range(Box::into_raw(Box::new(n_val)));
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
             cel_free_value(result_ptr);
         }
@@ -693,7 +723,7 @@ mod tests {
     fn test_list_reverse(#[case] input: Vec<CelValue>, #[case] expected: Vec<CelValue>) {
         let list = CelValue::Array(input);
         unsafe {
-            let result_ptr = cel_list_reverse(&list as *const CelValue);
+            let result_ptr = cel_list_reverse(Box::into_raw(Box::new(list)));
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
             cel_free_value(result_ptr);
         }
@@ -719,9 +749,9 @@ mod tests {
         let end_val = CelValue::Int(end);
         unsafe {
             let result_ptr = cel_list_slice(
-                &list as *const CelValue,
-                &start_val as *const CelValue,
-                &end_val as *const CelValue,
+                Box::into_raw(Box::new(list)),
+                Box::into_raw(Box::new(start_val)),
+                Box::into_raw(Box::new(end_val)),
             );
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
             cel_free_value(result_ptr);
@@ -744,9 +774,9 @@ mod tests {
         let end_val = CelValue::Int(end);
         unsafe {
             let result_ptr = cel_list_slice(
-                &list as *const CelValue,
-                &start_val as *const CelValue,
-                &end_val as *const CelValue,
+                Box::into_raw(Box::new(list)),
+                Box::into_raw(Box::new(start_val)),
+                Box::into_raw(Box::new(end_val)),
             );
             assert!(
                 matches!(&*result_ptr, CelValue::Error(e) if e.contains(msg)),
@@ -778,7 +808,7 @@ mod tests {
     fn test_list_sort(#[case] input: Vec<CelValue>, #[case] expected: Vec<CelValue>) {
         let list = CelValue::Array(input);
         unsafe {
-            let result_ptr = cel_list_sort(&list as *const CelValue);
+            let result_ptr = cel_list_sort(Box::into_raw(Box::new(list)));
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
             cel_free_value(result_ptr);
         }
@@ -788,7 +818,7 @@ mod tests {
     fn test_list_sort_mixed_types_returns_error() {
         let list = CelValue::Array(vec![CelValue::String("d".into()), CelValue::Int(3)]);
         unsafe {
-            let result_ptr = cel_list_sort(&list as *const CelValue);
+            let result_ptr = cel_list_sort(Box::into_raw(Box::new(list)));
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
         }
@@ -818,7 +848,7 @@ mod tests {
     fn test_list_first(#[case] input: Vec<CelValue>, #[case] expected_inner: Option<CelValue>) {
         let list = CelValue::Array(input);
         unsafe {
-            let result_ptr = cel_list_first(&list as *const CelValue);
+            let result_ptr = cel_list_first(Box::into_raw(Box::new(list)));
             let expected = CelValue::Optional(expected_inner.map(Box::new));
             assert_eq!(&*result_ptr, &expected);
             cel_free_value(result_ptr);
@@ -829,7 +859,7 @@ mod tests {
     fn test_list_first_non_list_returns_error() {
         let val = CelValue::Int(42);
         unsafe {
-            let result_ptr = cel_list_first(&val as *const CelValue);
+            let result_ptr = cel_list_first(Box::into_raw(Box::new(val)));
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
         }
@@ -859,7 +889,7 @@ mod tests {
     fn test_list_last(#[case] input: Vec<CelValue>, #[case] expected_inner: Option<CelValue>) {
         let list = CelValue::Array(input);
         unsafe {
-            let result_ptr = cel_list_last(&list as *const CelValue);
+            let result_ptr = cel_list_last(Box::into_raw(Box::new(list)));
             let expected = CelValue::Optional(expected_inner.map(Box::new));
             assert_eq!(&*result_ptr, &expected);
             cel_free_value(result_ptr);
@@ -870,7 +900,7 @@ mod tests {
     fn test_list_last_non_list_returns_error() {
         let val = CelValue::Int(42);
         unsafe {
-            let result_ptr = cel_list_last(&val as *const CelValue);
+            let result_ptr = cel_list_last(Box::into_raw(Box::new(val)));
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
         }
@@ -908,8 +938,10 @@ mod tests {
         let vals = CelValue::Array(values);
         let ks = CelValue::Array(keys);
         unsafe {
-            let result_ptr =
-                cel_list_sort_by_associated_keys(&vals as *const CelValue, &ks as *const CelValue);
+            let result_ptr = cel_list_sort_by_associated_keys(
+                Box::into_raw(Box::new(vals)),
+                Box::into_raw(Box::new(ks)),
+            );
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
             cel_free_value(result_ptr);
         }
@@ -920,8 +952,10 @@ mod tests {
         let vals = CelValue::Array(vec![CelValue::Int(1), CelValue::Int(2)]);
         let ks = CelValue::Array(vec![CelValue::Int(1)]);
         unsafe {
-            let result_ptr =
-                cel_list_sort_by_associated_keys(&vals as *const CelValue, &ks as *const CelValue);
+            let result_ptr = cel_list_sort_by_associated_keys(
+                Box::into_raw(Box::new(vals)),
+                Box::into_raw(Box::new(ks)),
+            );
             assert!(
                 matches!(&*result_ptr, CelValue::Error(e) if e.contains("same size")),
                 "expected length-mismatch error, got {:?}",
@@ -936,8 +970,10 @@ mod tests {
         let vals = CelValue::Array(vec![CelValue::Int(1), CelValue::Int(2)]);
         let ks = CelValue::Array(vec![CelValue::Int(1), CelValue::String("x".into())]);
         unsafe {
-            let result_ptr =
-                cel_list_sort_by_associated_keys(&vals as *const CelValue, &ks as *const CelValue);
+            let result_ptr = cel_list_sort_by_associated_keys(
+                Box::into_raw(Box::new(vals)),
+                Box::into_raw(Box::new(ks)),
+            );
             assert!(
                 matches!(&*result_ptr, CelValue::Error(_)),
                 "expected error for mixed key types, got {:?}",

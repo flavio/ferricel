@@ -57,23 +57,22 @@ pub unsafe fn cel_serialize_bool(value: i64) -> i64 {
 }
 
 /// Serialize a CelValue pointer to JSON.
-/// Takes a *mut CelValue and serializes it to JSON.
-/// Returns encoded (ptr, len) as i64.
+/// Serializes the CelValue to JSON and returns encoded (ptr, len) as i64.
+/// Consumes the input pointer.
 ///
 /// # Safety
 ///
-/// This function is unsafe because it dereferences raw pointers and allocates memory. The caller must ensure:
-/// - `value_ptr` is a valid pointer to an initialized CelValue instance
-/// - The returned pointer (decoded from low 32 bits) must be freed using `cel_free` with the length (decoded from high 32 bits)
+/// `value_ptr` must be a valid, non-null, uniquely-owned CelValue pointer.
+/// The returned pointer (decoded from low 32 bits) must be freed using `cel_free` with
+/// the length (decoded from high 32 bits).
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_serialize_value(value_ptr: *mut CelValue) -> i64 {
-    unsafe {
-        if value_ptr.is_null() {
-            panic!("Null pointer passed to cel_serialize_value");
-        }
-        serialize_to_json(&*value_ptr)
+    if value_ptr.is_null() {
+        panic!("Null pointer passed to cel_serialize_value");
     }
+    let value = unsafe { *Box::from_raw(value_ptr) };
+    serialize_to_json(&value)
 }
 
 #[cfg(test)]

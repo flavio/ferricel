@@ -79,139 +79,117 @@ pub unsafe fn cel_string_size(string_ptr: *const CelValue) -> i64 {
     }
 }
 
+fn string_starts_with(s: CelValue, prefix: CelValue) -> CelValue {
+    match (s, prefix) {
+        (CelValue::String(s), CelValue::String(p)) => CelValue::Bool(s.starts_with(&p)),
+        _ => CelValue::Bool(false),
+    }
+}
+
 /// Tests whether a string starts with a given prefix.
 ///
+/// Takes ownership of both input pointers. The caller must not use them after this call.
+///
 /// # Arguments
-/// - `string_ptr`: Pointer to the string to test
-/// - `prefix_ptr`: Pointer to the prefix to check
+/// - `string_ptr`: Owned pointer to the string to test
+/// - `prefix_ptr`: Owned pointer to the prefix to check
 ///
 /// # Returns
-/// Pointer to CelValue::Bool(true) if string starts with prefix, false otherwise
+/// Pointer to a freshly heap-allocated CelValue::Bool
 ///
 /// # Safety
 ///
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue instances
+/// - Both pointer arguments are valid, heap-allocated CelValue instances
+/// - Ownership of both pointers is transferred to this function
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_starts_with(
-    string_ptr: *const CelValue,
-    prefix_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    prefix_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    // SAFETY: Caller guarantees both pointers are valid
-    let string_val = unsafe { &*string_ptr };
-    let prefix_val = unsafe { &*prefix_ptr };
+    let s = unsafe { *Box::from_raw(string_ptr) };
+    let p = unsafe { *Box::from_raw(prefix_ptr) };
+    Box::into_raw(Box::new(string_starts_with(s, p)))
+}
 
-    let result = match (string_val, prefix_val) {
-        (CelValue::String(s), CelValue::String(prefix)) => s.starts_with(prefix),
-        _ => false,
-    };
-
-    Box::into_raw(Box::new(CelValue::Bool(result)))
+fn string_ends_with(s: CelValue, suffix: CelValue) -> CelValue {
+    match (s, suffix) {
+        (CelValue::String(s), CelValue::String(p)) => CelValue::Bool(s.ends_with(&p)),
+        _ => CelValue::Bool(false),
+    }
 }
 
 /// Tests whether a string ends with a given suffix.
 ///
+/// Takes ownership of both input pointers. The caller must not use them after this call.
+///
 /// # Arguments
-/// - `string_ptr`: Pointer to the string to test
-/// - `suffix_ptr`: Pointer to the suffix to check
+/// - `string_ptr`: Owned pointer to the string to test
+/// - `suffix_ptr`: Owned pointer to the suffix to check
 ///
 /// # Returns
-/// Pointer to CelValue::Bool(true) if string ends with suffix, false otherwise
+/// Pointer to a freshly heap-allocated CelValue::Bool
 ///
 /// # Safety
 ///
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue instances
+/// - Both pointer arguments are valid, heap-allocated CelValue instances
+/// - Ownership of both pointers is transferred to this function
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_ends_with(
-    string_ptr: *const CelValue,
-    suffix_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    suffix_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    // SAFETY: Caller guarantees both pointers are valid
-    let string_val = unsafe { &*string_ptr };
-    let suffix_val = unsafe { &*suffix_ptr };
+    let s = unsafe { *Box::from_raw(string_ptr) };
+    let p = unsafe { *Box::from_raw(suffix_ptr) };
+    Box::into_raw(Box::new(string_ends_with(s, p)))
+}
 
-    let result = match (string_val, suffix_val) {
-        (CelValue::String(s), CelValue::String(suffix)) => s.ends_with(suffix),
-        _ => false,
-    };
-
-    Box::into_raw(Box::new(CelValue::Bool(result)))
+fn string_contains(s: CelValue, substring: CelValue) -> CelValue {
+    match (s, substring) {
+        (CelValue::String(s), CelValue::String(sub)) => CelValue::Bool(s.contains(sub.as_str())),
+        _ => CelValue::Bool(false),
+    }
 }
 
 /// Tests whether a string contains a given substring.
 ///
+/// Takes ownership of both input pointers. The caller must not use them after this call.
+///
 /// # Arguments
-/// - `string_ptr`: Pointer to the string to test
-/// - `substring_ptr`: Pointer to the substring to find
+/// - `string_ptr`: Owned pointer to the string to test
+/// - `substring_ptr`: Owned pointer to the substring to find
 ///
 /// # Returns
-/// Pointer to CelValue::Bool(true) if string contains substring, false otherwise
+/// Pointer to a freshly heap-allocated CelValue::Bool
 ///
 /// # Safety
 ///
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue instances
+/// - Both pointer arguments are valid, heap-allocated CelValue instances
+/// - Ownership of both pointers is transferred to this function
 /// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_contains(
-    string_ptr: *const CelValue,
-    substring_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    substring_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    // SAFETY: Caller guarantees both pointers are valid
-    let string_val = unsafe { &*string_ptr };
-    let substring_val = unsafe { &*substring_ptr };
-
-    let result = match (string_val, substring_val) {
-        (CelValue::String(s), CelValue::String(substring)) => s.contains(substring.as_str()),
-        _ => false,
-    };
-
-    Box::into_raw(Box::new(CelValue::Bool(result)))
+    let s = unsafe { *Box::from_raw(string_ptr) };
+    let sub = unsafe { *Box::from_raw(substring_ptr) };
+    Box::into_raw(Box::new(string_contains(s, sub)))
 }
 
-/// Tests whether a string matches a regex pattern (RE2-compatible syntax).
-///
-/// Matches succeed if the pattern matches ANY substring of the input string.
-/// Use anchors (^ and $) to force full-string matching.
-///
-/// # Arguments
-/// - `string_ptr`: Pointer to a CelValue containing the string to test
-/// - `pattern_ptr`: Pointer to a CelValue containing the regex pattern
-///
-/// # Returns
-/// Pointer to a heap-allocated CelValue::Bool
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue instances (must be String variants)
-/// - The returned pointer must be freed using the appropriate cleanup function
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_string_matches(
-    string_ptr: *const CelValue,
-    pattern_ptr: *const CelValue,
-) -> *mut CelValue {
-    // SAFETY: Caller guarantees both pointers are valid
-    let string_val = unsafe { &*string_ptr };
-    let pattern_val = unsafe { &*pattern_ptr };
-
-    match (string_val, pattern_val) {
+fn string_matches(s: CelValue, pattern: CelValue) -> CelValue {
+    match (s, pattern) {
         (CelValue::String(s), CelValue::String(pattern)) => {
             // Compile the regex pattern - panic on invalid patterns (CEL error)
-            let re = Regex::new(pattern).expect("invalid regex pattern");
-            let result = re.is_match(s);
-            Box::into_raw(Box::new(CelValue::Bool(result)))
+            let re = Regex::new(&pattern).expect("invalid regex pattern");
+            CelValue::Bool(re.is_match(&s))
         }
         (CelValue::Null, _) | (_, CelValue::Null) => {
             panic!("Cannot match null values");
@@ -221,6 +199,38 @@ pub unsafe extern "C" fn cel_string_matches(
         }
     }
 }
+
+/// Tests whether a string matches a regex pattern (RE2-compatible syntax).
+///
+/// Matches succeed if the pattern matches ANY substring of the input string.
+/// Use anchors (^ and $) to force full-string matching.
+///
+/// Takes ownership of both input pointers. The caller must not use them after this call.
+///
+/// # Arguments
+/// - `string_ptr`: Owned pointer to a CelValue containing the string to test
+/// - `pattern_ptr`: Owned pointer to a CelValue containing the regex pattern
+///
+/// # Returns
+/// Pointer to a freshly heap-allocated CelValue::Bool
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
+/// - Both pointer arguments are valid, heap-allocated CelValue instances (must be String variants)
+/// - Ownership of both pointers is transferred to this function
+/// - The returned pointer must be freed using the appropriate cleanup function
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_string_matches(
+    string_ptr: *mut CelValue,
+    pattern_ptr: *mut CelValue,
+) -> *mut CelValue {
+    let s = unsafe { *Box::from_raw(string_ptr) };
+    let p = unsafe { *Box::from_raw(pattern_ptr) };
+    Box::into_raw(Box::new(string_matches(s, p)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,14 +291,10 @@ mod tests {
     #[case::match_basic("hello world", "hello", true)]
     #[case::no_match("hello world", "world", false)]
     fn test_starts_with(#[case] string: &str, #[case] prefix: &str, #[case] expected: bool) {
-        let string_val = CelValue::String(string.to_string());
-        let prefix_val = CelValue::String(prefix.to_string());
-
         unsafe {
-            let result_ptr = cel_string_starts_with(
-                &string_val as *const CelValue,
-                &prefix_val as *const CelValue,
-            );
+            let string_ptr = Box::into_raw(Box::new(CelValue::String(string.to_string())));
+            let prefix_ptr = Box::into_raw(Box::new(CelValue::String(prefix.to_string())));
+            let result_ptr = cel_string_starts_with(string_ptr, prefix_ptr);
             let result = &*result_ptr;
 
             assert_eq!(result, &CelValue::Bool(expected));
@@ -300,14 +306,10 @@ mod tests {
     #[case::match_basic("hello world", "world", true)]
     #[case::no_match("hello world", "hello", false)]
     fn test_ends_with(#[case] string: &str, #[case] suffix: &str, #[case] expected: bool) {
-        let string_val = CelValue::String(string.to_string());
-        let suffix_val = CelValue::String(suffix.to_string());
-
         unsafe {
-            let result_ptr = cel_string_ends_with(
-                &string_val as *const CelValue,
-                &suffix_val as *const CelValue,
-            );
+            let string_ptr = Box::into_raw(Box::new(CelValue::String(string.to_string())));
+            let suffix_ptr = Box::into_raw(Box::new(CelValue::String(suffix.to_string())));
+            let result_ptr = cel_string_ends_with(string_ptr, suffix_ptr);
             let result = &*result_ptr;
 
             assert_eq!(result, &CelValue::Bool(expected));
@@ -319,14 +321,10 @@ mod tests {
     #[case::match_basic("hello world", "lo wo", true)]
     #[case::no_match("hello world", "xyz", false)]
     fn test_contains(#[case] string: &str, #[case] substring: &str, #[case] expected: bool) {
-        let string_val = CelValue::String(string.to_string());
-        let substring_val = CelValue::String(substring.to_string());
-
         unsafe {
-            let result_ptr = cel_string_contains(
-                &string_val as *const CelValue,
-                &substring_val as *const CelValue,
-            );
+            let string_ptr = Box::into_raw(Box::new(CelValue::String(string.to_string())));
+            let substring_ptr = Box::into_raw(Box::new(CelValue::String(substring.to_string())));
+            let result_ptr = cel_string_contains(string_ptr, substring_ptr);
             let result = &*result_ptr;
 
             assert_eq!(result, &CelValue::Bool(expected));
@@ -348,14 +346,10 @@ mod tests {
     #[case::case_sensitive("Hello", "hello", false)]
     #[case::insensitive("Hello", "(?i)hello", true)]
     fn test_matches(#[case] string: &str, #[case] pattern: &str, #[case] expected: bool) {
-        let string_val = CelValue::String(string.to_string());
-        let pattern_val = CelValue::String(pattern.to_string());
-
         unsafe {
-            let result_ptr = cel_string_matches(
-                &string_val as *const CelValue,
-                &pattern_val as *const CelValue,
-            );
+            let string_ptr = Box::into_raw(Box::new(CelValue::String(string.to_string())));
+            let pattern_ptr = Box::into_raw(Box::new(CelValue::String(pattern.to_string())));
+            let result_ptr = cel_string_matches(string_ptr, pattern_ptr);
             let result = &*result_ptr;
 
             assert_eq!(result, &CelValue::Bool(expected));

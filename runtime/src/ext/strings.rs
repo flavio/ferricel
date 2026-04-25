@@ -82,6 +82,12 @@ pub(crate) fn find_last_index_of(s: &str, sub: &str, end_offset: i64) -> i64 {
     }
 }
 
+/// Pure Rust implementation of string reverse, used internally by `poly.rs`.
+pub(crate) fn string_reverse_impl(s: String) -> CelValue {
+    let result: String = s.chars().rev().collect();
+    CelValue::String(result)
+}
+
 /// Returns true if a `CelValue::Object` represents a proto message (has a `__type__` key).
 fn is_proto_message(entries: &std::collections::HashMap<CelMapKey, CelValue>) -> bool {
     entries.contains_key(&CelMapKey::String("__type__".into()))
@@ -395,19 +401,21 @@ fn normalise_sci_exponent(s: &str) -> String {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_char_at(
-    string_ptr: *const CelValue,
-    index_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    index_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let index_val = unsafe { *Box::from_raw(index_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "charAt: receiver is not a string".to_string(),
             )));
         }
     };
-    let idx = match unsafe { &*index_ptr } {
-        CelValue::Int(i) => *i,
+    let idx = match index_val {
+        CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "charAt: index is not an int".to_string(),
@@ -441,28 +449,31 @@ pub unsafe extern "C" fn cel_string_char_at(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_index_of_offset(
-    string_ptr: *const CelValue,
-    sub_ptr: *const CelValue,
-    offset_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    sub_ptr: *mut CelValue,
+    offset_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let sub_val = unsafe { *Box::from_raw(sub_ptr) };
+    let offset_val = unsafe { *Box::from_raw(offset_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "indexOf: receiver is not a string".to_string(),
             )));
         }
     };
-    let sub = match unsafe { &*sub_ptr } {
-        CelValue::String(s) => s.clone(),
+    let sub = match sub_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "indexOf: argument is not a string".to_string(),
             )));
         }
     };
-    let offset = match unsafe { &*offset_ptr } {
-        CelValue::Int(i) => *i,
+    let offset = match offset_val {
+        CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "indexOf: offset is not an int".to_string(),
@@ -494,28 +505,31 @@ pub unsafe extern "C" fn cel_string_index_of_offset(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_last_index_of_offset(
-    string_ptr: *const CelValue,
-    sub_ptr: *const CelValue,
-    offset_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    sub_ptr: *mut CelValue,
+    offset_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let sub_val = unsafe { *Box::from_raw(sub_ptr) };
+    let offset_val = unsafe { *Box::from_raw(offset_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "lastIndexOf: receiver is not a string".to_string(),
             )));
         }
     };
-    let sub = match unsafe { &*sub_ptr } {
-        CelValue::String(s) => s.clone(),
+    let sub = match sub_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "lastIndexOf: argument is not a string".to_string(),
             )));
         }
     };
-    let offset = match unsafe { &*offset_ptr } {
-        CelValue::Int(i) => *i,
+    let offset = match offset_val {
+        CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "lastIndexOf: offset is not an int".to_string(),
@@ -546,9 +560,10 @@ pub unsafe extern "C" fn cel_string_last_index_of_offset(
 /// allocated by the WASM host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_string_lower_ascii(string_ptr: *const CelValue) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+pub unsafe extern "C" fn cel_string_lower_ascii(string_ptr: *mut CelValue) -> *mut CelValue {
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "lowerAscii: receiver is not a string".to_string(),
@@ -567,9 +582,10 @@ pub unsafe extern "C" fn cel_string_lower_ascii(string_ptr: *const CelValue) -> 
 /// allocated by the WASM host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_string_upper_ascii(string_ptr: *const CelValue) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+pub unsafe extern "C" fn cel_string_upper_ascii(string_ptr: *mut CelValue) -> *mut CelValue {
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "upperAscii: receiver is not a string".to_string(),
@@ -589,28 +605,31 @@ pub unsafe extern "C" fn cel_string_upper_ascii(string_ptr: *const CelValue) -> 
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_replace(
-    string_ptr: *const CelValue,
-    old_ptr: *const CelValue,
-    new_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    old_ptr: *mut CelValue,
+    new_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let old_val = unsafe { *Box::from_raw(old_ptr) };
+    let new_val = unsafe { *Box::from_raw(new_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "replace: receiver is not a string".to_string(),
             )));
         }
     };
-    let old = match unsafe { &*old_ptr } {
-        CelValue::String(s) => s.clone(),
+    let old = match old_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "replace: 'old' is not a string".to_string(),
             )));
         }
     };
-    let new = match unsafe { &*new_ptr } {
-        CelValue::String(s) => s.clone(),
+    let new = match new_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "replace: 'new' is not a string".to_string(),
@@ -631,37 +650,41 @@ pub unsafe extern "C" fn cel_string_replace(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_replace_n(
-    string_ptr: *const CelValue,
-    old_ptr: *const CelValue,
-    new_ptr: *const CelValue,
-    n_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    old_ptr: *mut CelValue,
+    new_ptr: *mut CelValue,
+    n_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let old_val = unsafe { *Box::from_raw(old_ptr) };
+    let new_val = unsafe { *Box::from_raw(new_ptr) };
+    let n_val = unsafe { *Box::from_raw(n_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "replace: receiver is not a string".to_string(),
             )));
         }
     };
-    let old = match unsafe { &*old_ptr } {
-        CelValue::String(s) => s.clone(),
+    let old = match old_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "replace: 'old' is not a string".to_string(),
             )));
         }
     };
-    let new = match unsafe { &*new_ptr } {
-        CelValue::String(s) => s.clone(),
+    let new = match new_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "replace: 'new' is not a string".to_string(),
             )));
         }
     };
-    let n = match unsafe { &*n_ptr } {
-        CelValue::Int(i) => *i,
+    let n = match n_val {
+        CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "replace: count is not an int".to_string(),
@@ -689,19 +712,21 @@ pub unsafe extern "C" fn cel_string_replace_n(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_split(
-    string_ptr: *const CelValue,
-    sep_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    sep_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let sep_val = unsafe { *Box::from_raw(sep_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "split: receiver is not a string".to_string(),
             )));
         }
     };
-    let sep = match unsafe { &*sep_ptr } {
-        CelValue::String(s) => s.clone(),
+    let sep = match sep_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "split: separator is not a string".to_string(),
@@ -724,28 +749,31 @@ pub unsafe extern "C" fn cel_string_split(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_split_n(
-    string_ptr: *const CelValue,
-    sep_ptr: *const CelValue,
-    n_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    sep_ptr: *mut CelValue,
+    n_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let sep_val = unsafe { *Box::from_raw(sep_ptr) };
+    let n_val = unsafe { *Box::from_raw(n_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "split: receiver is not a string".to_string(),
             )));
         }
     };
-    let sep = match unsafe { &*sep_ptr } {
-        CelValue::String(s) => s.clone(),
+    let sep = match sep_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "split: separator is not a string".to_string(),
             )));
         }
     };
-    let n = match unsafe { &*n_ptr } {
-        CelValue::Int(i) => *i,
+    let n = match n_val {
+        CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "split: limit is not an int".to_string(),
@@ -779,19 +807,21 @@ pub unsafe extern "C" fn cel_string_split_n(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_substring(
-    string_ptr: *const CelValue,
-    start_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    start_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let start_val = unsafe { *Box::from_raw(start_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "substring: receiver is not a string".to_string(),
             )));
         }
     };
-    let start = match unsafe { &*start_ptr } {
-        CelValue::Int(i) => *i,
+    let start = match start_val {
+        CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "substring: start is not an int".to_string(),
@@ -823,28 +853,31 @@ pub unsafe extern "C" fn cel_string_substring(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_substring_range(
-    string_ptr: *const CelValue,
-    start_ptr: *const CelValue,
-    end_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    start_ptr: *mut CelValue,
+    end_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let start_val = unsafe { *Box::from_raw(start_ptr) };
+    let end_val = unsafe { *Box::from_raw(end_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "substring: receiver is not a string".to_string(),
             )));
         }
     };
-    let start = match unsafe { &*start_ptr } {
-        CelValue::Int(i) => *i,
+    let start = match start_val {
+        CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "substring: start is not an int".to_string(),
             )));
         }
     };
-    let end = match unsafe { &*end_ptr } {
-        CelValue::Int(i) => *i,
+    let end = match end_val {
+        CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "substring: end is not an int".to_string(),
@@ -881,9 +914,10 @@ pub unsafe extern "C" fn cel_string_substring_range(
 /// allocated by the WASM host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_string_trim(string_ptr: *const CelValue) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+pub unsafe extern "C" fn cel_string_trim(string_ptr: *mut CelValue) -> *mut CelValue {
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "trim: receiver is not a string".to_string(),
@@ -901,17 +935,17 @@ pub unsafe extern "C" fn cel_string_trim(string_ptr: *const CelValue) -> *mut Ce
 /// allocated by the WASM host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_string_reverse(string_ptr: *const CelValue) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+pub unsafe extern "C" fn cel_string_reverse(string_ptr: *mut CelValue) -> *mut CelValue {
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "reverse: receiver is not a string".to_string(),
             )));
         }
     };
-    let result: String = s.chars().rev().collect();
-    Box::into_raw(Box::new(CelValue::String(result)))
+    Box::into_raw(Box::new(string_reverse_impl(s)))
 }
 
 /// `strings.quote(s)` — wraps the string in double quotes, escaping control
@@ -923,9 +957,10 @@ pub unsafe extern "C" fn cel_string_reverse(string_ptr: *const CelValue) -> *mut
 /// allocated by the WASM host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_strings_quote(string_ptr: *const CelValue) -> *mut CelValue {
-    let s = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+pub unsafe extern "C" fn cel_strings_quote(string_ptr: *mut CelValue) -> *mut CelValue {
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let s = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "strings.quote: argument is not a string".to_string(),
@@ -965,19 +1000,21 @@ pub unsafe extern "C" fn cel_strings_quote(string_ptr: *const CelValue) -> *mut 
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_format(
-    string_ptr: *const CelValue,
-    args_ptr: *const CelValue,
+    string_ptr: *mut CelValue,
+    args_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let fmt = match unsafe { &*string_ptr } {
-        CelValue::String(s) => s.clone(),
+    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let args_val = unsafe { *Box::from_raw(args_ptr) };
+    let fmt = match string_val {
+        CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "format: receiver is not a string".to_string(),
             )));
         }
     };
-    let args = match unsafe { &*args_ptr } {
-        CelValue::Array(v) => v.clone(),
+    let args = match args_val {
+        CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
                 "format: argument is not a list".to_string(),
@@ -1052,12 +1089,10 @@ mod tests {
     #[case::end_sentinel("hello", 5, "")]
     #[case::unicode("café", 3, "é")]
     fn test_char_at(#[case] s: &str, #[case] idx: i64, #[case] expected: &str) {
-        let string_val = CelValue::String(s.to_string());
-        let index_val = CelValue::Int(idx);
         unsafe {
             let result_ptr = cel_string_char_at(
-                &string_val as *const CelValue,
-                &index_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String(s.to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(idx))),
             );
             let result = &*result_ptr;
             assert_eq!(result, &CelValue::String(expected.to_string()));
@@ -1067,12 +1102,10 @@ mod tests {
 
     #[test]
     fn test_char_at_out_of_range_returns_error() {
-        let string_val = CelValue::String("hello".to_string());
-        let index_val = CelValue::Int(99);
         unsafe {
             let result_ptr = cel_string_char_at(
-                &string_val as *const CelValue,
-                &index_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String("hello".to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
@@ -1081,12 +1114,10 @@ mod tests {
 
     #[test]
     fn test_char_at_negative_index_returns_error() {
-        let string_val = CelValue::String("hello".to_string());
-        let index_val = CelValue::Int(-1);
         unsafe {
             let result_ptr = cel_string_char_at(
-                &string_val as *const CelValue,
-                &index_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String("hello".to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(-1))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
@@ -1104,14 +1135,11 @@ mod tests {
         #[case] offset: i64,
         #[case] expected: i64,
     ) {
-        let string_val = CelValue::String(s.to_string());
-        let sub_val = CelValue::String(sub.to_string());
-        let offset_val = CelValue::Int(offset);
         unsafe {
             let result_ptr = cel_string_index_of_offset(
-                &string_val as *const CelValue,
-                &sub_val as *const CelValue,
-                &offset_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String(s.to_string()))),
+                Box::into_raw(Box::new(CelValue::String(sub.to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(offset))),
             );
             assert_eq!(&*result_ptr, &CelValue::Int(expected));
             cel_free_value(result_ptr);
@@ -1120,14 +1148,11 @@ mod tests {
 
     #[test]
     fn test_index_of_offset_negative_returns_error() {
-        let string_val = CelValue::String("hello".to_string());
-        let sub_val = CelValue::String("l".to_string());
-        let offset_val = CelValue::Int(-1);
         unsafe {
             let result_ptr = cel_string_index_of_offset(
-                &string_val as *const CelValue,
-                &sub_val as *const CelValue,
-                &offset_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String("hello".to_string()))),
+                Box::into_raw(Box::new(CelValue::String("l".to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(-1))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
@@ -1136,14 +1161,11 @@ mod tests {
 
     #[test]
     fn test_index_of_offset_exceeds_length_returns_error() {
-        let string_val = CelValue::String("hello".to_string());
-        let sub_val = CelValue::String("l".to_string());
-        let offset_val = CelValue::Int(99);
         unsafe {
             let result_ptr = cel_string_index_of_offset(
-                &string_val as *const CelValue,
-                &sub_val as *const CelValue,
-                &offset_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String("hello".to_string()))),
+                Box::into_raw(Box::new(CelValue::String("l".to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
@@ -1161,14 +1183,11 @@ mod tests {
         #[case] offset: i64,
         #[case] expected: i64,
     ) {
-        let string_val = CelValue::String(s.to_string());
-        let sub_val = CelValue::String(sub.to_string());
-        let offset_val = CelValue::Int(offset);
         unsafe {
             let result_ptr = cel_string_last_index_of_offset(
-                &string_val as *const CelValue,
-                &sub_val as *const CelValue,
-                &offset_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String(s.to_string()))),
+                Box::into_raw(Box::new(CelValue::String(sub.to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(offset))),
             );
             assert_eq!(&*result_ptr, &CelValue::Int(expected));
             cel_free_value(result_ptr);
@@ -1177,14 +1196,11 @@ mod tests {
 
     #[test]
     fn test_last_index_of_offset_negative_returns_error() {
-        let string_val = CelValue::String("hello".to_string());
-        let sub_val = CelValue::String("l".to_string());
-        let offset_val = CelValue::Int(-1);
         unsafe {
             let result_ptr = cel_string_last_index_of_offset(
-                &string_val as *const CelValue,
-                &sub_val as *const CelValue,
-                &offset_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String("hello".to_string()))),
+                Box::into_raw(Box::new(CelValue::String("l".to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(-1))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
@@ -1193,14 +1209,11 @@ mod tests {
 
     #[test]
     fn test_last_index_of_offset_exceeds_length_returns_error() {
-        let string_val = CelValue::String("hello".to_string());
-        let sub_val = CelValue::String("l".to_string());
-        let offset_val = CelValue::Int(99);
         unsafe {
             let result_ptr = cel_string_last_index_of_offset(
-                &string_val as *const CelValue,
-                &sub_val as *const CelValue,
-                &offset_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String("hello".to_string()))),
+                Box::into_raw(Box::new(CelValue::String("l".to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
@@ -1215,9 +1228,9 @@ mod tests {
     #[case::empty("", "")]
     #[case::non_ascii_preserved("Héllo", "héllo")]
     fn test_lower_ascii(#[case] s: &str, #[case] expected: &str) {
-        let string_val = CelValue::String(s.to_string());
         unsafe {
-            let result_ptr = cel_string_lower_ascii(&string_val as *const CelValue);
+            let result_ptr =
+                cel_string_lower_ascii(Box::into_raw(Box::new(CelValue::String(s.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
         }
@@ -1229,9 +1242,9 @@ mod tests {
     #[case::empty("", "")]
     #[case::non_ascii_preserved("héllo", "HéLLO")]
     fn test_upper_ascii(#[case] s: &str, #[case] expected: &str) {
-        let string_val = CelValue::String(s.to_string());
         unsafe {
-            let result_ptr = cel_string_upper_ascii(&string_val as *const CelValue);
+            let result_ptr =
+                cel_string_upper_ascii(Box::into_raw(Box::new(CelValue::String(s.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
         }
@@ -1244,14 +1257,11 @@ mod tests {
     #[case::no_match("hello", "xyz", "abc", "hello")]
     #[case::empty_old("abc", "", "-", "-a-b-c-")]
     fn test_replace(#[case] s: &str, #[case] old: &str, #[case] new: &str, #[case] expected: &str) {
-        let string_val = CelValue::String(s.to_string());
-        let old_val = CelValue::String(old.to_string());
-        let new_val = CelValue::String(new.to_string());
         unsafe {
             let result_ptr = cel_string_replace(
-                &string_val as *const CelValue,
-                &old_val as *const CelValue,
-                &new_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String(s.to_string()))),
+                Box::into_raw(Box::new(CelValue::String(old.to_string()))),
+                Box::into_raw(Box::new(CelValue::String(new.to_string()))),
             );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
@@ -1269,16 +1279,12 @@ mod tests {
         #[case] n: i64,
         #[case] expected: &str,
     ) {
-        let string_val = CelValue::String(s.to_string());
-        let old_val = CelValue::String(old.to_string());
-        let new_val = CelValue::String(new.to_string());
-        let n_val = CelValue::Int(n);
         unsafe {
             let result_ptr = cel_string_replace_n(
-                &string_val as *const CelValue,
-                &old_val as *const CelValue,
-                &new_val as *const CelValue,
-                &n_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String(s.to_string()))),
+                Box::into_raw(Box::new(CelValue::String(old.to_string()))),
+                Box::into_raw(Box::new(CelValue::String(new.to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(n))),
             );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
@@ -1292,15 +1298,15 @@ mod tests {
     #[case::single_part("abc", "x", vec!["abc"])]
     #[case::empty_string("", ",", vec![""])]
     fn test_split(#[case] s: &str, #[case] sep: &str, #[case] expected: Vec<&str>) {
-        let string_val = CelValue::String(s.to_string());
-        let sep_val = CelValue::String(sep.to_string());
         let expected_cel: Vec<CelValue> = expected
             .iter()
             .map(|p| CelValue::String(p.to_string()))
             .collect();
         unsafe {
-            let result_ptr =
-                cel_string_split(&string_val as *const CelValue, &sep_val as *const CelValue);
+            let result_ptr = cel_string_split(
+                Box::into_raw(Box::new(CelValue::String(s.to_string()))),
+                Box::into_raw(Box::new(CelValue::String(sep.to_string()))),
+            );
             assert_eq!(&*result_ptr, &CelValue::Array(expected_cel));
             cel_free_value(result_ptr);
         }
@@ -1316,18 +1322,15 @@ mod tests {
         #[case] n: i64,
         #[case] expected: Vec<&str>,
     ) {
-        let string_val = CelValue::String(s.to_string());
-        let sep_val = CelValue::String(sep.to_string());
-        let n_val = CelValue::Int(n);
         let expected_cel: Vec<CelValue> = expected
             .iter()
             .map(|p| CelValue::String(p.to_string()))
             .collect();
         unsafe {
             let result_ptr = cel_string_split_n(
-                &string_val as *const CelValue,
-                &sep_val as *const CelValue,
-                &n_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String(s.to_string()))),
+                Box::into_raw(Box::new(CelValue::String(sep.to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(n))),
             );
             assert_eq!(&*result_ptr, &CelValue::Array(expected_cel));
             cel_free_value(result_ptr);
@@ -1341,12 +1344,10 @@ mod tests {
     #[case::from_start("hello", 0, "hello")]
     #[case::unicode("café", 2, "fé")]
     fn test_substring(#[case] s: &str, #[case] start: i64, #[case] expected: &str) {
-        let string_val = CelValue::String(s.to_string());
-        let start_val = CelValue::Int(start);
         unsafe {
             let result_ptr = cel_string_substring(
-                &string_val as *const CelValue,
-                &start_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String(s.to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(start))),
             );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
@@ -1355,12 +1356,10 @@ mod tests {
 
     #[test]
     fn test_substring_start_out_of_range_returns_error() {
-        let string_val = CelValue::String("hello".to_string());
-        let start_val = CelValue::Int(99);
         unsafe {
             let result_ptr = cel_string_substring(
-                &string_val as *const CelValue,
-                &start_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String("hello".to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
@@ -1377,14 +1376,11 @@ mod tests {
         #[case] end: i64,
         #[case] expected: &str,
     ) {
-        let string_val = CelValue::String(s.to_string());
-        let start_val = CelValue::Int(start);
-        let end_val = CelValue::Int(end);
         unsafe {
             let result_ptr = cel_string_substring_range(
-                &string_val as *const CelValue,
-                &start_val as *const CelValue,
-                &end_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String(s.to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(start))),
+                Box::into_raw(Box::new(CelValue::Int(end))),
             );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
@@ -1393,14 +1389,11 @@ mod tests {
 
     #[test]
     fn test_substring_range_end_before_start_returns_error() {
-        let string_val = CelValue::String("hello".to_string());
-        let start_val = CelValue::Int(3);
-        let end_val = CelValue::Int(1);
         unsafe {
             let result_ptr = cel_string_substring_range(
-                &string_val as *const CelValue,
-                &start_val as *const CelValue,
-                &end_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String("hello".to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(3))),
+                Box::into_raw(Box::new(CelValue::Int(1))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
@@ -1409,14 +1402,11 @@ mod tests {
 
     #[test]
     fn test_substring_range_out_of_range_returns_error() {
-        let string_val = CelValue::String("hello".to_string());
-        let start_val = CelValue::Int(0);
-        let end_val = CelValue::Int(99);
         unsafe {
             let result_ptr = cel_string_substring_range(
-                &string_val as *const CelValue,
-                &start_val as *const CelValue,
-                &end_val as *const CelValue,
+                Box::into_raw(Box::new(CelValue::String("hello".to_string()))),
+                Box::into_raw(Box::new(CelValue::Int(0))),
+                Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
@@ -1431,9 +1421,9 @@ mod tests {
     #[case::empty("", "")]
     #[case::only_whitespace("   ", "")]
     fn test_trim(#[case] s: &str, #[case] expected: &str) {
-        let string_val = CelValue::String(s.to_string());
         unsafe {
-            let result_ptr = cel_string_trim(&string_val as *const CelValue);
+            let result_ptr =
+                cel_string_trim(Box::into_raw(Box::new(CelValue::String(s.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
         }
@@ -1447,9 +1437,9 @@ mod tests {
     #[case::empty("", "")]
     #[case::unicode("café", "éfac")]
     fn test_reverse(#[case] s: &str, #[case] expected: &str) {
-        let string_val = CelValue::String(s.to_string());
         unsafe {
-            let result_ptr = cel_string_reverse(&string_val as *const CelValue);
+            let result_ptr =
+                cel_string_reverse(Box::into_raw(Box::new(CelValue::String(s.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
         }
@@ -1465,9 +1455,9 @@ mod tests {
     #[case::with_double_quote(r#"a"b"#, r#""a\"b""#)]
     #[case::empty("", r#""""#)]
     fn test_strings_quote(#[case] s: &str, #[case] expected: &str) {
-        let string_val = CelValue::String(s.to_string());
         unsafe {
-            let result_ptr = cel_strings_quote(&string_val as *const CelValue);
+            let result_ptr =
+                cel_strings_quote(Box::into_raw(Box::new(CelValue::String(s.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
         }
@@ -1482,11 +1472,11 @@ mod tests {
     #[case::hex_upper_verb("%X", vec![CelValue::Int(255)], "FF")]
     #[case::percent_escape("100%%", vec![], "100%")]
     fn test_format(#[case] fmt: &str, #[case] args: Vec<CelValue>, #[case] expected: &str) {
-        let fmt_val = CelValue::String(fmt.to_string());
-        let args_val = CelValue::Array(args);
         unsafe {
-            let result_ptr =
-                cel_string_format(&fmt_val as *const CelValue, &args_val as *const CelValue);
+            let result_ptr = cel_string_format(
+                Box::into_raw(Box::new(CelValue::String(fmt.to_string()))),
+                Box::into_raw(Box::new(CelValue::Array(args))),
+            );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
         }
@@ -1494,11 +1484,11 @@ mod tests {
 
     #[test]
     fn test_format_float_with_precision() {
-        let fmt_val = CelValue::String("pi: %.2f".to_string());
-        let args_val = CelValue::Array(vec![CelValue::Double(3.14159)]);
         unsafe {
-            let result_ptr =
-                cel_string_format(&fmt_val as *const CelValue, &args_val as *const CelValue);
+            let result_ptr = cel_string_format(
+                Box::into_raw(Box::new(CelValue::String("pi: %.2f".to_string()))),
+                Box::into_raw(Box::new(CelValue::Array(vec![CelValue::Double(3.14159)]))),
+            );
             assert_eq!(&*result_ptr, &CelValue::String("pi: 3.14".to_string()));
             cel_free_value(result_ptr);
         }
@@ -1506,11 +1496,13 @@ mod tests {
 
     #[test]
     fn test_format_too_few_args_returns_error() {
-        let fmt_val = CelValue::String("%s %s".to_string());
-        let args_val = CelValue::Array(vec![CelValue::String("only_one".to_string())]);
         unsafe {
-            let result_ptr =
-                cel_string_format(&fmt_val as *const CelValue, &args_val as *const CelValue);
+            let result_ptr = cel_string_format(
+                Box::into_raw(Box::new(CelValue::String("%s %s".to_string()))),
+                Box::into_raw(Box::new(CelValue::Array(vec![CelValue::String(
+                    "only_one".to_string(),
+                )]))),
+            );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
         }

@@ -49,17 +49,23 @@ pub unsafe extern "C" fn cel_value_in(
         abort_with_error("no such overload");
     }
 
-    let element = unsafe { &*element_ptr };
-    let container = unsafe { &*container_ptr };
+    let element = *Box::from_raw(element_ptr);
+    let container = *Box::from_raw(container_ptr);
+
+    Box::into_raw(Box::new(value_in(element, container)))
+}
+
+fn value_in(element: CelValue, container: CelValue) -> CelValue {
+    let log = crate::logging::get_logger();
 
     match container {
         // List membership: A in list(A)
         CelValue::Array(arr) => {
             debug!(log, "Checking list membership"; "list_size" => arr.len());
             // Linear search through array using CEL equality (supports cross-type numeric equality)
-            let found = arr.iter().any(|item| cel_equals(item, element));
+            let found = arr.iter().any(|item| cel_equals(item, &element));
             info!(log, "List membership check complete"; "found" => found);
-            Box::into_raw(Box::new(CelValue::Bool(found)))
+            CelValue::Bool(found)
         }
 
         // Map key membership: A in map(A, B)
@@ -67,14 +73,14 @@ pub unsafe extern "C" fn cel_value_in(
         // Maps can have bool, int, uint, or string keys per CEL spec
         CelValue::Object(map) => {
             use crate::types::CelMapKey;
-            match CelMapKey::from_cel_value(element) {
+            match CelMapKey::from_cel_value(&element) {
                 Some(key) => {
-                    debug!(log, "Checking map key membership"; 
+                    debug!(log, "Checking map key membership";
                         "key" => key.to_string_key(),
                         "map_size" => map.len());
                     let found = map.contains_key(&key);
                     info!(log, "Map membership check complete"; "found" => found);
-                    Box::into_raw(Box::new(CelValue::Bool(found)))
+                    CelValue::Bool(found)
                 }
                 None => {
                     error!(log, "Maps require bool, int, uint, or string keys for membership test";
@@ -115,9 +121,7 @@ mod tests {
             };
             assert_eq!(result, expected);
 
-            // Cleanup
-            let _ = Box::from_raw(element_ptr);
-            let _ = Box::from_raw(container_ptr);
+            // element_ptr and container_ptr are consumed by cel_value_in; only free the result
             let _ = Box::from_raw(result_ptr);
         }
     }

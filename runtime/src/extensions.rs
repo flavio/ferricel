@@ -29,16 +29,12 @@ unsafe extern "C" {
 unsafe fn call_extension_impl(
     namespace: Option<&str>,
     function: &str,
-    args: &[*mut CelValue],
+    args: Vec<CelValue>,
 ) -> *mut CelValue {
     // Serialize each argument CelValue to a serde_json::Value.
     let json_args: Vec<serde_json::Value> = args
-        .iter()
-        .map(|&ptr| {
-            // SAFETY: caller guarantees each ptr is a valid *mut CelValue
-            let val: &CelValue = unsafe { &*ptr };
-            serde_json::to_value(val).expect("Failed to serialize CelValue to JSON")
-        })
+        .into_iter()
+        .map(|val| serde_json::to_value(&val).expect("Failed to serialize CelValue to JSON"))
         .collect();
 
     // Build the wire-format payload.
@@ -96,7 +92,7 @@ pub unsafe extern "C" fn cel_ext_call_0(
 ) -> *mut CelValue {
     let namespace = read_optional_str(ns_ptr, ns_len);
     let function = read_str(method_ptr, method_len);
-    unsafe { call_extension_impl(namespace, function, &[]) }
+    unsafe { call_extension_impl(namespace, function, vec![]) }
 }
 
 /// Call a host extension with 1 argument.
@@ -115,7 +111,8 @@ pub unsafe extern "C" fn cel_ext_call_1(
 ) -> *mut CelValue {
     let namespace = read_optional_str(ns_ptr, ns_len);
     let function = read_str(method_ptr, method_len);
-    unsafe { call_extension_impl(namespace, function, &[arg0]) }
+    let a0 = unsafe { *Box::from_raw(arg0) };
+    unsafe { call_extension_impl(namespace, function, vec![a0]) }
 }
 
 /// Call a host extension with 2 arguments.
@@ -135,7 +132,9 @@ pub unsafe extern "C" fn cel_ext_call_2(
 ) -> *mut CelValue {
     let namespace = read_optional_str(ns_ptr, ns_len);
     let function = read_str(method_ptr, method_len);
-    unsafe { call_extension_impl(namespace, function, &[arg0, arg1]) }
+    let a0 = unsafe { *Box::from_raw(arg0) };
+    let a1 = unsafe { *Box::from_raw(arg1) };
+    unsafe { call_extension_impl(namespace, function, vec![a0, a1]) }
 }
 
 /// Call a host extension with 3 arguments.
@@ -156,7 +155,10 @@ pub unsafe extern "C" fn cel_ext_call_3(
 ) -> *mut CelValue {
     let namespace = read_optional_str(ns_ptr, ns_len);
     let function = read_str(method_ptr, method_len);
-    unsafe { call_extension_impl(namespace, function, &[arg0, arg1, arg2]) }
+    let a0 = unsafe { *Box::from_raw(arg0) };
+    let a1 = unsafe { *Box::from_raw(arg1) };
+    let a2 = unsafe { *Box::from_raw(arg2) };
+    unsafe { call_extension_impl(namespace, function, vec![a0, a1, a2]) }
 }
 
 /// Call a host extension with 4 arguments.
@@ -178,7 +180,11 @@ pub unsafe extern "C" fn cel_ext_call_4(
 ) -> *mut CelValue {
     let namespace = read_optional_str(ns_ptr, ns_len);
     let function = read_str(method_ptr, method_len);
-    unsafe { call_extension_impl(namespace, function, &[arg0, arg1, arg2, arg3]) }
+    let a0 = unsafe { *Box::from_raw(arg0) };
+    let a1 = unsafe { *Box::from_raw(arg1) };
+    let a2 = unsafe { *Box::from_raw(arg2) };
+    let a3 = unsafe { *Box::from_raw(arg3) };
+    unsafe { call_extension_impl(namespace, function, vec![a0, a1, a2, a3]) }
 }
 
 // ---------------------------------------------------------------------------

@@ -106,6 +106,26 @@ fn normalize_and_parse(s: &str, normalize: bool) -> Result<Version, String> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Pure inner logic helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn semver_is_less_than_inner(lhs: &Version, rhs: &Version) -> bool {
+    lhs.cmp_precedence(rhs) == std::cmp::Ordering::Less
+}
+
+fn semver_is_greater_than_inner(lhs: &Version, rhs: &Version) -> bool {
+    lhs.cmp_precedence(rhs) == std::cmp::Ordering::Greater
+}
+
+fn semver_compare_to_inner(lhs: &Version, rhs: &Version) -> i64 {
+    match lhs.cmp_precedence(rhs) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // isSemver(string) / isSemver(string, bool)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -123,16 +143,16 @@ pub unsafe extern "C" fn cel_k8s_is_semver(str_ptr: *mut CelValue) -> *mut CelVa
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_is_semver", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    let ok = normalize_and_parse(s, false).is_ok();
+    let ok = normalize_and_parse(&s, false).is_ok();
     Box::into_raw(Box::new(CelValue::Bool(ok)))
 }
 
@@ -154,11 +174,11 @@ pub unsafe extern "C" fn cel_k8s_is_semver_normalize(
         return create_error_value("no such overload");
     }
 
-    let str_val = unsafe { &*str_ptr };
-    let norm_val = unsafe { &*normalize_ptr };
+    let str_val = unsafe { *Box::from_raw(str_ptr) };
+    let norm_val = unsafe { *Box::from_raw(normalize_ptr) };
 
     let s = match str_val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String as first argument"; "function" => "cel_k8s_is_semver_normalize", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
@@ -166,14 +186,14 @@ pub unsafe extern "C" fn cel_k8s_is_semver_normalize(
     };
 
     let normalize = match norm_val {
-        CelValue::Bool(b) => *b,
+        CelValue::Bool(b) => b,
         other => {
             error!(log, "expected Bool as second argument"; "function" => "cel_k8s_is_semver_normalize", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    let ok = normalize_and_parse(s, normalize).is_ok();
+    let ok = normalize_and_parse(&s, normalize).is_ok();
     Box::into_raw(Box::new(CelValue::Bool(ok)))
 }
 
@@ -195,16 +215,16 @@ pub unsafe extern "C" fn cel_k8s_semver_parse(str_ptr: *mut CelValue) -> *mut Ce
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_semver_parse", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    match normalize_and_parse(s, false) {
+    match normalize_and_parse(&s, false) {
         Ok(v) => Box::into_raw(Box::new(CelValue::Semver(v))),
         Err(msg) => {
             error!(log, "invalid semver"; "function" => "cel_k8s_semver_parse", "error" => &msg);
@@ -231,11 +251,11 @@ pub unsafe extern "C" fn cel_k8s_semver_parse_normalize(
         return create_error_value("no such overload");
     }
 
-    let str_val = unsafe { &*str_ptr };
-    let norm_val = unsafe { &*normalize_ptr };
+    let str_val = unsafe { *Box::from_raw(str_ptr) };
+    let norm_val = unsafe { *Box::from_raw(normalize_ptr) };
 
     let s = match str_val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String as first argument"; "function" => "cel_k8s_semver_parse_normalize", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
@@ -243,14 +263,14 @@ pub unsafe extern "C" fn cel_k8s_semver_parse_normalize(
     };
 
     let normalize = match norm_val {
-        CelValue::Bool(b) => *b,
+        CelValue::Bool(b) => b,
         other => {
             error!(log, "expected Bool as second argument"; "function" => "cel_k8s_semver_parse_normalize", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    match normalize_and_parse(s, normalize) {
+    match normalize_and_parse(&s, normalize) {
         Ok(v) => Box::into_raw(Box::new(CelValue::Semver(v))),
         Err(msg) => {
             error!(log, "invalid semver"; "function" => "cel_k8s_semver_parse_normalize", "error" => &msg);
@@ -277,7 +297,7 @@ pub unsafe extern "C" fn cel_k8s_semver_major(semver_ptr: *mut CelValue) -> *mut
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*semver_ptr };
+    let val = unsafe { *Box::from_raw(semver_ptr) };
     match val {
         CelValue::Semver(v) => Box::into_raw(Box::new(CelValue::Int(v.major as i64))),
         other => {
@@ -301,7 +321,7 @@ pub unsafe extern "C" fn cel_k8s_semver_minor(semver_ptr: *mut CelValue) -> *mut
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*semver_ptr };
+    let val = unsafe { *Box::from_raw(semver_ptr) };
     match val {
         CelValue::Semver(v) => Box::into_raw(Box::new(CelValue::Int(v.minor as i64))),
         other => {
@@ -325,7 +345,7 @@ pub unsafe extern "C" fn cel_k8s_semver_patch(semver_ptr: *mut CelValue) -> *mut
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*semver_ptr };
+    let val = unsafe { *Box::from_raw(semver_ptr) };
     match val {
         CelValue::Semver(v) => Box::into_raw(Box::new(CelValue::Int(v.patch as i64))),
         other => {
@@ -359,8 +379,8 @@ pub unsafe extern "C" fn cel_k8s_semver_is_less_than(
         return create_error_value("no such overload");
     }
 
-    let lhs_val = unsafe { &*lhs_ptr };
-    let rhs_val = unsafe { &*rhs_ptr };
+    let lhs_val = unsafe { *Box::from_raw(lhs_ptr) };
+    let rhs_val = unsafe { *Box::from_raw(rhs_ptr) };
 
     let lhs = match lhs_val {
         CelValue::Semver(v) => v,
@@ -377,8 +397,7 @@ pub unsafe extern "C" fn cel_k8s_semver_is_less_than(
         }
     };
 
-    let result = lhs.cmp_precedence(rhs) == std::cmp::Ordering::Less;
-    Box::into_raw(Box::new(CelValue::Bool(result)))
+    Box::into_raw(Box::new(CelValue::Bool(semver_is_less_than_inner(&lhs, &rhs))))
 }
 
 /// Returns `true` if `self` > `other` (precedence comparison, ignoring build metadata).
@@ -398,8 +417,8 @@ pub unsafe extern "C" fn cel_k8s_semver_is_greater_than(
         return create_error_value("no such overload");
     }
 
-    let lhs_val = unsafe { &*lhs_ptr };
-    let rhs_val = unsafe { &*rhs_ptr };
+    let lhs_val = unsafe { *Box::from_raw(lhs_ptr) };
+    let rhs_val = unsafe { *Box::from_raw(rhs_ptr) };
 
     let lhs = match lhs_val {
         CelValue::Semver(v) => v,
@@ -416,8 +435,7 @@ pub unsafe extern "C" fn cel_k8s_semver_is_greater_than(
         }
     };
 
-    let result = lhs.cmp_precedence(rhs) == std::cmp::Ordering::Greater;
-    Box::into_raw(Box::new(CelValue::Bool(result)))
+    Box::into_raw(Box::new(CelValue::Bool(semver_is_greater_than_inner(&lhs, &rhs))))
 }
 
 /// Returns `-1`, `0`, or `1` comparing `self` to `other` by precedence (ignoring build metadata).
@@ -437,8 +455,8 @@ pub unsafe extern "C" fn cel_k8s_semver_compare_to(
         return create_error_value("no such overload");
     }
 
-    let lhs_val = unsafe { &*lhs_ptr };
-    let rhs_val = unsafe { &*rhs_ptr };
+    let lhs_val = unsafe { *Box::from_raw(lhs_ptr) };
+    let rhs_val = unsafe { *Box::from_raw(rhs_ptr) };
 
     let lhs = match lhs_val {
         CelValue::Semver(v) => v,
@@ -455,12 +473,7 @@ pub unsafe extern "C" fn cel_k8s_semver_compare_to(
         }
     };
 
-    let result: i64 = match lhs.cmp_precedence(rhs) {
-        std::cmp::Ordering::Less => -1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater => 1,
-    };
-    Box::into_raw(Box::new(CelValue::Int(result)))
+    Box::into_raw(Box::new(CelValue::Int(semver_compare_to_inner(&lhs, &rhs))))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -555,7 +568,6 @@ mod tests {
         let str_ptr = unsafe { make_str(input) };
         let result = unsafe { read_val(cel_k8s_is_semver(str_ptr)) };
         assert_eq!(result, CelValue::Bool(expected), "isSemver({:?})", input);
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     // ── isSemver(string, bool) / cel_k8s_is_semver_normalize ──────────────
@@ -583,7 +595,6 @@ mod tests {
             input,
             normalize
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     // ── semver() / cel_k8s_semver_parse ───────────────────────────────────
@@ -601,7 +612,6 @@ mod tests {
             input,
             result
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     #[rstest]
@@ -617,7 +627,6 @@ mod tests {
             input,
             result
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     // ── semver(string, bool) / cel_k8s_semver_parse_normalize ─────────────
@@ -635,7 +644,6 @@ mod tests {
             }
             other => panic!("expected Semver, got {:?}", other),
         }
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     // ── major() / minor() / patch() ───────────────────────────────────────
@@ -740,7 +748,6 @@ mod tests {
         let val_ptr = unsafe { make_val(CelValue::String("1.2.3".to_string())) };
         let result = unsafe { read_val(cel_k8s_semver_major(val_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe { drop(Box::from_raw(val_ptr)) };
     }
 
     #[test]
@@ -749,6 +756,5 @@ mod tests {
         let rhs_ptr = unsafe { make_semver("1.0.0") };
         let result = unsafe { read_val(cel_k8s_semver_is_less_than(lhs_ptr, rhs_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe { drop(Box::from_raw(lhs_ptr)) };
     }
 }

@@ -37,7 +37,7 @@ pub unsafe extern "C" fn cel_k8s_list_is_sorted(array_ptr: *mut CelValue) -> *mu
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { &*array_ptr };
+    let array_value = unsafe { *Box::from_raw(array_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
@@ -97,7 +97,7 @@ pub unsafe extern "C" fn cel_k8s_list_sum(array_ptr: *mut CelValue) -> *mut CelV
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { &*array_ptr };
+    let array_value = unsafe { *Box::from_raw(array_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
@@ -110,7 +110,7 @@ pub unsafe extern "C" fn cel_k8s_list_sum(array_ptr: *mut CelValue) -> *mut CelV
             match &vec[0] {
                 CelValue::Int(_) => {
                     let mut acc: i64 = 0;
-                    for elem in vec {
+                    for elem in &vec {
                         match elem {
                             CelValue::Int(v) => {
                                 acc = match acc.checked_add(*v) {
@@ -133,7 +133,7 @@ pub unsafe extern "C" fn cel_k8s_list_sum(array_ptr: *mut CelValue) -> *mut CelV
                 }
                 CelValue::UInt(_) => {
                     let mut acc: u64 = 0;
-                    for elem in vec {
+                    for elem in &vec {
                         match elem {
                             CelValue::UInt(v) => {
                                 acc = match acc.checked_add(*v) {
@@ -156,7 +156,7 @@ pub unsafe extern "C" fn cel_k8s_list_sum(array_ptr: *mut CelValue) -> *mut CelV
                 }
                 CelValue::Double(_) => {
                     let mut acc: f64 = 0.0;
-                    for elem in vec {
+                    for elem in &vec {
                         match elem {
                             CelValue::Double(v) => acc += v,
                             other => {
@@ -172,7 +172,7 @@ pub unsafe extern "C" fn cel_k8s_list_sum(array_ptr: *mut CelValue) -> *mut CelV
                 }
                 CelValue::Duration(_) => {
                     let mut acc = chrono::Duration::zero();
-                    for elem in vec {
+                    for elem in &vec {
                         match elem {
                             CelValue::Duration(d) => {
                                 acc = match acc.checked_add(d) {
@@ -231,7 +231,7 @@ pub unsafe extern "C" fn cel_k8s_list_min(array_ptr: *mut CelValue) -> *mut CelV
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { &*array_ptr };
+    let array_value = unsafe { *Box::from_raw(array_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
@@ -239,12 +239,12 @@ pub unsafe extern "C" fn cel_k8s_list_min(array_ptr: *mut CelValue) -> *mut CelV
                 return create_error_value("min called on empty list");
             }
 
-            let mut min = &vec[0];
-            for elem in &vec[1..] {
-                match cel_value_less_than(elem, min) {
+            let mut min_idx = 0usize;
+            for i in 1..vec.len() {
+                match cel_value_less_than(&vec[i], &vec[min_idx]) {
                     Ok(elem_lt_min) => {
                         if elem_lt_min {
-                            min = elem;
+                            min_idx = i;
                         }
                     }
                     Err(_) => {
@@ -254,7 +254,7 @@ pub unsafe extern "C" fn cel_k8s_list_min(array_ptr: *mut CelValue) -> *mut CelV
                     }
                 }
             }
-            Box::into_raw(Box::new(min.clone()))
+            Box::into_raw(Box::new(vec.into_iter().nth(min_idx).unwrap()))
         }
         other => {
             error!(log, "expected Array";
@@ -286,7 +286,7 @@ pub unsafe extern "C" fn cel_k8s_list_max(array_ptr: *mut CelValue) -> *mut CelV
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { &*array_ptr };
+    let array_value = unsafe { *Box::from_raw(array_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
@@ -294,13 +294,13 @@ pub unsafe extern "C" fn cel_k8s_list_max(array_ptr: *mut CelValue) -> *mut CelV
                 return create_error_value("max called on empty list");
             }
 
-            let mut max = &vec[0];
-            for elem in &vec[1..] {
+            let mut max_idx = 0usize;
+            for i in 1..vec.len() {
                 // elem > max  iff  max < elem
-                match cel_value_less_than(max, elem) {
+                match cel_value_less_than(&vec[max_idx], &vec[i]) {
                     Ok(max_lt_elem) => {
                         if max_lt_elem {
-                            max = elem;
+                            max_idx = i;
                         }
                     }
                     Err(_) => {
@@ -310,7 +310,7 @@ pub unsafe extern "C" fn cel_k8s_list_max(array_ptr: *mut CelValue) -> *mut CelV
                     }
                 }
             }
-            Box::into_raw(Box::new(max.clone()))
+            Box::into_raw(Box::new(vec.into_iter().nth(max_idx).unwrap()))
         }
         other => {
             error!(log, "expected Array";
@@ -343,13 +343,13 @@ pub unsafe extern "C" fn cel_k8s_list_index_of(
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { &*array_ptr };
-    let needle = unsafe { &*elem_ptr };
+    let array_value = unsafe { *Box::from_raw(array_ptr) };
+    let needle = unsafe { *Box::from_raw(elem_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
             for (i, elem) in vec.iter().enumerate() {
-                if cel_equals(elem, needle) {
+                if cel_equals(elem, &needle) {
                     return Box::into_raw(Box::new(CelValue::Int(i as i64)));
                 }
             }
@@ -386,13 +386,13 @@ pub unsafe extern "C" fn cel_k8s_list_last_index_of(
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { &*array_ptr };
-    let needle = unsafe { &*elem_ptr };
+    let array_value = unsafe { *Box::from_raw(array_ptr) };
+    let needle = unsafe { *Box::from_raw(elem_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
             for (i, elem) in vec.iter().enumerate().rev() {
-                if cel_equals(elem, needle) {
+                if cel_equals(elem, &needle) {
                     return Box::into_raw(Box::new(CelValue::Int(i as i64)));
                 }
             }
@@ -439,7 +439,6 @@ mod tests {
         let arr = unsafe { make_array(elements) };
         let result = unsafe { read_val(cel_k8s_list_is_sorted(arr)) };
         assert_eq!(result, expected);
-        unsafe { drop(Box::from_raw(arr)) };
     }
 
     // ── sum ─────────────────────────────────────────────────────────────────
@@ -460,7 +459,6 @@ mod tests {
         let arr = unsafe { make_array(elements) };
         let result = unsafe { read_val(cel_k8s_list_sum(arr)) };
         assert_eq!(result, expected);
-        unsafe { drop(Box::from_raw(arr)) };
     }
 
     // ── min ─────────────────────────────────────────────────────────────────
@@ -470,7 +468,6 @@ mod tests {
         let arr = unsafe { make_array(vec![]) };
         let result = unsafe { read_val(cel_k8s_list_min(arr)) };
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe { drop(Box::from_raw(arr)) };
     }
 
     #[rstest]
@@ -480,7 +477,6 @@ mod tests {
         let arr = unsafe { make_array(elements) };
         let result = unsafe { read_val(cel_k8s_list_min(arr)) };
         assert_eq!(result, expected);
-        unsafe { drop(Box::from_raw(arr)) };
     }
 
     // ── max ─────────────────────────────────────────────────────────────────
@@ -490,7 +486,6 @@ mod tests {
         let arr = unsafe { make_array(vec![]) };
         let result = unsafe { read_val(cel_k8s_list_max(arr)) };
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe { drop(Box::from_raw(arr)) };
     }
 
     #[rstest]
@@ -500,7 +495,6 @@ mod tests {
         let arr = unsafe { make_array(elements) };
         let result = unsafe { read_val(cel_k8s_list_max(arr)) };
         assert_eq!(result, expected);
-        unsafe { drop(Box::from_raw(arr)) };
     }
 
     // ── indexOf ─────────────────────────────────────────────────────────────
@@ -530,10 +524,6 @@ mod tests {
         let needle_ptr = unsafe { make_val(needle) };
         let result = unsafe { read_val(cel_k8s_list_index_of(arr, needle_ptr)) };
         assert_eq!(result, expected);
-        unsafe {
-            drop(Box::from_raw(arr));
-            drop(Box::from_raw(needle_ptr));
-        }
     }
 
     // ── lastIndexOf ─────────────────────────────────────────────────────────
@@ -563,9 +553,5 @@ mod tests {
         let needle_ptr = unsafe { make_val(needle) };
         let result = unsafe { read_val(cel_k8s_list_last_index_of(arr, needle_ptr)) };
         assert_eq!(result, expected);
-        unsafe {
-            drop(Box::from_raw(arr));
-            drop(Box::from_raw(needle_ptr));
-        }
     }
 }

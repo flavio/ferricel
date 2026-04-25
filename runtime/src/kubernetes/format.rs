@@ -292,9 +292,9 @@ pub unsafe extern "C" fn cel_k8s_format_named(name_ptr: *mut CelValue) -> *mut C
         error!(log, "null pointer"; "function" => "cel_k8s_format_named");
         return create_error_value("no such overload");
     }
-    let name_val = unsafe { &*name_ptr };
+    let name_val = unsafe { *Box::from_raw(name_ptr) };
     let name = match name_val {
-        CelValue::String(s) => s.clone(),
+        CelValue::String(s) => s,
         other => {
             error!(log, "expected string"; "function" => "cel_k8s_format_named", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
@@ -372,17 +372,17 @@ pub unsafe extern "C" fn cel_k8s_format_validate(
         error!(log, "null pointer"; "function" => "cel_k8s_format_validate");
         return create_error_value("no such overload");
     }
-    let format_val = unsafe { &*format_ptr };
+    let format_val = unsafe { *Box::from_raw(format_ptr) };
     let format_name = match format_val {
-        CelValue::Format(s) => s.clone(),
+        CelValue::Format(s) => s,
         other => {
             error!(log, "expected Format"; "function" => "cel_k8s_format_validate", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
-    let value_val = unsafe { &*value_ptr };
+    let value_val = unsafe { *Box::from_raw(value_ptr) };
     let value_str = match value_val {
-        CelValue::String(s) => s.clone(),
+        CelValue::String(s) => s,
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_format_validate", "got" => format!("{:?}", other));
             return create_error_value("no such overload");

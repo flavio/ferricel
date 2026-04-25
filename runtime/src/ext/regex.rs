@@ -75,7 +75,8 @@ fn cel_replacement_to_regex_lite(cel_repl: &str) -> Result<String, String> {
 /// invalid, or the replacement string contains an invalid escape.
 ///
 /// # Safety
-/// All pointer arguments must be valid non-null pointers to `CelValue`.
+/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_regex_replace(
@@ -90,32 +91,30 @@ pub unsafe extern "C" fn cel_regex_replace(
         return create_error_value("no such overload");
     }
 
-    let target_val = unsafe { &*target_ptr };
-    let pattern_val = unsafe { &*pattern_ptr };
-    let replacement_val = unsafe { &*replacement_ptr };
+    let target_val = unsafe { *Box::from_raw(target_ptr) };
+    let pattern_val = unsafe { *Box::from_raw(pattern_ptr) };
+    let replacement_val = unsafe { *Box::from_raw(replacement_ptr) };
 
     let (target, pattern, replacement) = match (target_val, pattern_val, replacement_val) {
-        (CelValue::String(t), CelValue::String(p), CelValue::String(r)) => {
-            (t.as_str(), p.as_str(), r.as_str())
-        }
+        (CelValue::String(t), CelValue::String(p), CelValue::String(r)) => (t, p, r),
         _ => {
             error!(log, "expected String arguments"; "function" => "cel_regex_replace");
             return create_error_value("no such overload");
         }
     };
 
-    let re = match Regex::new(pattern) {
+    let re = match Regex::new(&pattern) {
         Ok(r) => r,
         Err(e) => {
             error!(log, "invalid regex";
                 "function" => "cel_regex_replace",
-                "pattern" => pattern,
+                "pattern" => &pattern,
                 "error" => format!("{}", e));
             return create_error_value(&format!("invalid regex: {}", e));
         }
     };
 
-    let repl = match cel_replacement_to_regex_lite(replacement) {
+    let repl = match cel_replacement_to_regex_lite(&replacement) {
         Ok(r) => r,
         Err(e) => {
             error!(log, "invalid replacement string";
@@ -125,7 +124,7 @@ pub unsafe extern "C" fn cel_regex_replace(
         }
     };
 
-    let result = re.replace_all(target, repl.as_str()).into_owned();
+    let result = re.replace_all(&target, repl.as_str()).into_owned();
     Box::into_raw(Box::new(CelValue::String(result)))
 }
 
@@ -142,7 +141,8 @@ pub unsafe extern "C" fn cel_regex_replace(
 /// - `count > 0`: replaces at most `count` matches.
 ///
 /// # Safety
-/// All pointer arguments must be valid non-null pointers to `CelValue`.
+/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_regex_replace_n(
@@ -162,15 +162,13 @@ pub unsafe extern "C" fn cel_regex_replace_n(
         return create_error_value("no such overload");
     }
 
-    let target_val = unsafe { &*target_ptr };
-    let pattern_val = unsafe { &*pattern_ptr };
-    let replacement_val = unsafe { &*replacement_ptr };
-    let count_val = unsafe { &*count_ptr };
+    let target_val = unsafe { *Box::from_raw(target_ptr) };
+    let pattern_val = unsafe { *Box::from_raw(pattern_ptr) };
+    let replacement_val = unsafe { *Box::from_raw(replacement_ptr) };
+    let count_val = unsafe { *Box::from_raw(count_ptr) };
 
     let (target, pattern, replacement) = match (target_val, pattern_val, replacement_val) {
-        (CelValue::String(t), CelValue::String(p), CelValue::String(r)) => {
-            (t.as_str(), p.as_str(), r.as_str())
-        }
+        (CelValue::String(t), CelValue::String(p), CelValue::String(r)) => (t, p, r),
         _ => {
             error!(log, "expected String arguments"; "function" => "cel_regex_replace_n");
             return create_error_value("no such overload");
@@ -178,7 +176,7 @@ pub unsafe extern "C" fn cel_regex_replace_n(
     };
 
     let count: i64 = match count_val {
-        CelValue::Int(n) => *n,
+        CelValue::Int(n) => n,
         other => {
             error!(log, "expected Int count";
                 "function" => "cel_regex_replace_n",
@@ -189,21 +187,21 @@ pub unsafe extern "C" fn cel_regex_replace_n(
 
     // count == 0: return target unchanged
     if count == 0 {
-        return Box::into_raw(Box::new(CelValue::String(target.to_string())));
+        return Box::into_raw(Box::new(CelValue::String(target)));
     }
 
-    let re = match Regex::new(pattern) {
+    let re = match Regex::new(&pattern) {
         Ok(r) => r,
         Err(e) => {
             error!(log, "invalid regex";
                 "function" => "cel_regex_replace_n",
-                "pattern" => pattern,
+                "pattern" => &pattern,
                 "error" => format!("{}", e));
             return create_error_value(&format!("invalid regex: {}", e));
         }
     };
 
-    let repl = match cel_replacement_to_regex_lite(replacement) {
+    let repl = match cel_replacement_to_regex_lite(&replacement) {
         Ok(r) => r,
         Err(e) => {
             error!(log, "invalid replacement string";
@@ -214,10 +212,10 @@ pub unsafe extern "C" fn cel_regex_replace_n(
     };
 
     let result = if count < 0 {
-        re.replace_all(target, repl.as_str()).into_owned()
+        re.replace_all(&target, repl.as_str()).into_owned()
     } else {
         // replace_n replaces exactly the first `count` matches
-        re.replacen(target, count as usize, repl.as_str())
+        re.replacen(&target, count as usize, repl.as_str())
             .into_owned()
     };
 
@@ -240,7 +238,8 @@ pub unsafe extern "C" fn cel_regex_replace_n(
 /// either argument is not a String, or if the regex is invalid.
 ///
 /// # Safety
-/// Both pointer arguments must be valid non-null pointers to `CelValue`.
+/// Caller must transfer ownership of both pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_regex_extract(
@@ -254,23 +253,23 @@ pub unsafe extern "C" fn cel_regex_extract(
         return create_error_value("no such overload");
     }
 
-    let target_val = unsafe { &*target_ptr };
-    let pattern_val = unsafe { &*pattern_ptr };
+    let target_val = unsafe { *Box::from_raw(target_ptr) };
+    let pattern_val = unsafe { *Box::from_raw(pattern_ptr) };
 
     let (target, pattern) = match (target_val, pattern_val) {
-        (CelValue::String(t), CelValue::String(p)) => (t.as_str(), p.as_str()),
+        (CelValue::String(t), CelValue::String(p)) => (t, p),
         _ => {
             error!(log, "expected String arguments"; "function" => "cel_regex_extract");
             return create_error_value("no such overload");
         }
     };
 
-    let re = match Regex::new(pattern) {
+    let re = match Regex::new(&pattern) {
         Ok(r) => r,
         Err(e) => {
             error!(log, "invalid regex";
                 "function" => "cel_regex_extract",
-                "pattern" => pattern,
+                "pattern" => &pattern,
                 "error" => format!("{}", e));
             return create_error_value(&format!("invalid regex: {}", e));
         }
@@ -283,7 +282,7 @@ pub unsafe extern "C" fn cel_regex_extract(
         return create_error_value("regex.extract: pattern must have at most one capture group");
     }
 
-    match re.captures(target) {
+    match re.captures(&target) {
         None => Box::into_raw(Box::new(CelValue::Optional(None))),
         Some(caps) => {
             let result = if num_captures == 1 {
@@ -316,7 +315,8 @@ pub unsafe extern "C" fn cel_regex_extract(
 /// either argument is not a String, or if the regex is invalid.
 ///
 /// # Safety
-/// Both pointer arguments must be valid non-null pointers to `CelValue`.
+/// Caller must transfer ownership of both pointer arguments (heap-allocated `CelValue`s)
+/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_regex_extract_all(
@@ -330,23 +330,23 @@ pub unsafe extern "C" fn cel_regex_extract_all(
         return create_error_value("no such overload");
     }
 
-    let target_val = unsafe { &*target_ptr };
-    let pattern_val = unsafe { &*pattern_ptr };
+    let target_val = unsafe { *Box::from_raw(target_ptr) };
+    let pattern_val = unsafe { *Box::from_raw(pattern_ptr) };
 
     let (target, pattern) = match (target_val, pattern_val) {
-        (CelValue::String(t), CelValue::String(p)) => (t.as_str(), p.as_str()),
+        (CelValue::String(t), CelValue::String(p)) => (t, p),
         _ => {
             error!(log, "expected String arguments"; "function" => "cel_regex_extract_all");
             return create_error_value("no such overload");
         }
     };
 
-    let re = match Regex::new(pattern) {
+    let re = match Regex::new(&pattern) {
         Ok(r) => r,
         Err(e) => {
             error!(log, "invalid regex";
                 "function" => "cel_regex_extract_all",
-                "pattern" => pattern,
+                "pattern" => &pattern,
                 "error" => format!("{}", e));
             return create_error_value(&format!("invalid regex: {}", e));
         }
@@ -359,7 +359,7 @@ pub unsafe extern "C" fn cel_regex_extract_all(
     }
 
     let results: Vec<CelValue> = re
-        .captures_iter(target)
+        .captures_iter(&target)
         .map(|caps| {
             let s = if num_captures == 1 {
                 caps.get(1).map(|m| m.as_str()).unwrap_or("").to_string()
@@ -444,11 +444,6 @@ mod tests {
         let r = make_str(replacement);
         let result = read_val(unsafe { cel_regex_replace(t, p, r) });
         assert_eq!(result, CelValue::String(expected.to_string()));
-        unsafe {
-            drop(Box::from_raw(t));
-            drop(Box::from_raw(p));
-            drop(Box::from_raw(r));
-        }
     }
 
     #[test]
@@ -458,11 +453,6 @@ mod tests {
         let r = make_str("X");
         let result = read_val(unsafe { cel_regex_replace(t, p, r) });
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe {
-            drop(Box::from_raw(t));
-            drop(Box::from_raw(p));
-            drop(Box::from_raw(r));
-        }
     }
 
     // ── regex.replace (with count) ───────────────────────────────────────────
@@ -490,12 +480,6 @@ mod tests {
         let c = make_int(count);
         let result = read_val(unsafe { cel_regex_replace_n(t, p, r, c) });
         assert_eq!(result, CelValue::String(expected.to_string()));
-        unsafe {
-            drop(Box::from_raw(t));
-            drop(Box::from_raw(p));
-            drop(Box::from_raw(r));
-            drop(Box::from_raw(c));
-        }
     }
 
     // ── regex.extract ────────────────────────────────────────────────────────
@@ -509,10 +493,6 @@ mod tests {
         let p = make_str(pattern);
         let result = read_val(unsafe { cel_regex_extract(t, p) });
         assert_eq!(result, expected);
-        unsafe {
-            drop(Box::from_raw(t));
-            drop(Box::from_raw(p));
-        }
     }
 
     #[test]
@@ -521,10 +501,6 @@ mod tests {
         let p = make_str(r"(hello) (\d+)");
         let result = read_val(unsafe { cel_regex_extract(t, p) });
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe {
-            drop(Box::from_raw(t));
-            drop(Box::from_raw(p));
-        }
     }
 
     // ── regex.extractAll ─────────────────────────────────────────────────────
@@ -538,10 +514,6 @@ mod tests {
         let p = make_str(pattern);
         let result = read_val(unsafe { cel_regex_extract_all(t, p) });
         assert_eq!(result, expected);
-        unsafe {
-            drop(Box::from_raw(t));
-            drop(Box::from_raw(p));
-        }
     }
 
     #[test]
@@ -550,9 +522,5 @@ mod tests {
         let p = make_str(r"(hello) (\d+)");
         let result = read_val(unsafe { cel_regex_extract_all(t, p) });
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe {
-            drop(Box::from_raw(t));
-            drop(Box::from_raw(p));
-        }
     }
 }

@@ -155,8 +155,10 @@ fn make_duration(seconds: i64, nanos: i32) -> CelValue {
 /// timestamp + duration = timestamp
 /// Preserves the timezone of the original timestamp.
 ///
+/// Consuming: takes ownership of both `ts_ptr` and `dur_ptr`.
+///
 /// # Safety
-/// - Both pointers must be valid, non-null CelValue pointers
+/// - Both pointers must be valid, non-null, uniquely-owned CelValue pointers
 /// - First must be Timestamp, second must be Duration
 ///
 /// # Panics
@@ -166,8 +168,16 @@ pub unsafe fn cel_timestamp_add_duration(
     ts_ptr: *mut CelValue,
     dur_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let duration = extract_duration_chrono(dur_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let dur = *Box::from_raw(dur_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_add_duration: expected Timestamp"),
+    };
+    let duration = match dur {
+        CelValue::Duration(d) => d,
+        _ => abort_with_error("cel_timestamp_add_duration: expected Duration"),
+    };
 
     // Chrono addition preserves timezone
     let result = dt
@@ -183,20 +193,25 @@ pub unsafe fn cel_timestamp_add_duration(
 /// timestamp - duration = timestamp
 /// Preserves the timezone of the original timestamp.
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `dur_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - `ts_ptr` points to an initialized CelValue::Timestamp instance
-/// - `dur_ptr` points to an initialized CelValue::Duration instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_timestamp_sub_duration(
     ts_ptr: *mut CelValue,
     dur_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let duration = extract_duration_chrono(dur_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let dur = *Box::from_raw(dur_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_sub_duration: expected Timestamp"),
+    };
+    let duration = match dur {
+        CelValue::Duration(d) => d,
+        _ => abort_with_error("cel_timestamp_sub_duration: expected Duration"),
+    };
 
     let result = dt
         .checked_sub_signed(duration)
@@ -210,16 +225,22 @@ pub unsafe fn cel_timestamp_sub_duration(
 /// Computes the difference between two timestamps.
 /// timestamp - timestamp = duration
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts1_ptr` and `ts2_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Timestamp instances
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue::Timestamp pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_timestamp_diff(ts1_ptr: *mut CelValue, ts2_ptr: *mut CelValue) -> *mut CelValue {
-    let dt1 = extract_datetime(ts1_ptr);
-    let dt2 = extract_datetime(ts2_ptr);
+    let ts1 = *Box::from_raw(ts1_ptr);
+    let ts2 = *Box::from_raw(ts2_ptr);
+    let dt1 = match ts1 {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_diff: expected Timestamp"),
+    };
+    let dt2 = match ts2 {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_diff: expected Timestamp"),
+    };
 
     // Chrono subtraction returns Duration
     let duration = dt1.signed_duration_since(dt2);
@@ -239,16 +260,22 @@ pub unsafe fn cel_timestamp_diff(ts1_ptr: *mut CelValue, ts2_ptr: *mut CelValue)
 /// Adds two durations.
 /// duration + duration = duration
 ///
-/// # Safety
+/// Consuming: takes ownership of both `dur1_ptr` and `dur2_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Duration instances
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue::Duration pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_add(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue) -> *mut CelValue {
-    let (secs1, nanos1) = extract_duration(dur1_ptr);
-    let (secs2, nanos2) = extract_duration(dur2_ptr);
+    let d1 = *Box::from_raw(dur1_ptr);
+    let d2 = *Box::from_raw(dur2_ptr);
+    let (secs1, nanos1) = match d1 {
+        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
+        _ => abort_with_error("cel_duration_add: expected Duration"),
+    };
+    let (secs2, nanos2) = match d2 {
+        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
+        _ => abort_with_error("cel_duration_add: expected Duration"),
+    };
 
     let result_secs = secs1.checked_add(secs2).expect("duration overflow");
     let result_nanos = nanos1 + nanos2;
@@ -261,16 +288,22 @@ pub unsafe fn cel_duration_add(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue)
 /// Subtracts one duration from another.
 /// duration - duration = duration
 ///
-/// # Safety
+/// Consuming: takes ownership of both `dur1_ptr` and `dur2_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - Both pointers point to initialized CelValue::Duration instances
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue::Duration pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_sub(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue) -> *mut CelValue {
-    let (secs1, nanos1) = extract_duration(dur1_ptr);
-    let (secs2, nanos2) = extract_duration(dur2_ptr);
+    let d1 = *Box::from_raw(dur1_ptr);
+    let d2 = *Box::from_raw(dur2_ptr);
+    let (secs1, nanos1) = match d1 {
+        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
+        _ => abort_with_error("cel_duration_sub: expected Duration"),
+    };
+    let (secs2, nanos2) = match d2 {
+        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
+        _ => abort_with_error("cel_duration_sub: expected Duration"),
+    };
 
     let result_secs = secs1.checked_sub(secs2).expect("duration underflow");
     let result_nanos = nanos1 - nanos2;
@@ -283,15 +316,17 @@ pub unsafe fn cel_duration_sub(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue)
 /// Negates a duration.
 /// -duration = duration
 ///
-/// # Safety
+/// Consuming: takes ownership of `dur_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned
-/// - The pointer points to an initialized CelValue::Duration instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let (secs, nanos) = extract_duration(dur_ptr);
+    let d = *Box::from_raw(dur_ptr);
+    let (secs, nanos) = match d {
+        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
+        _ => abort_with_error("cel_duration_negate: expected Duration"),
+    };
 
     let neg_secs = secs.checked_neg().expect("duration negation overflow");
     let neg_nanos = -nanos;
@@ -311,15 +346,17 @@ pub unsafe fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut CelValue {
 /// Converts the entire duration to hours (truncated).
 /// Example: duration('10000s').getHours() returns 2 (not 2.77...)
 ///
-/// # Safety
+/// Consuming: takes ownership of `dur_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned
-/// - The pointer points to an initialized CelValue::Duration instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_get_hours(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let (secs, _nanos) = extract_duration(dur_ptr);
+    let d = *Box::from_raw(dur_ptr);
+    let (secs, _nanos) = match d {
+        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
+        _ => abort_with_error("cel_duration_get_hours: expected Duration"),
+    };
     // Convert seconds to hours, truncating fractional part
     let hours = secs / 3600;
     Box::into_raw(Box::new(CelValue::Int(hours)))
@@ -329,15 +366,17 @@ pub unsafe fn cel_duration_get_hours(dur_ptr: *mut CelValue) -> *mut CelValue {
 /// Converts the entire duration to minutes (truncated).
 /// Example: duration('3730s').getMinutes() returns 62 (not 62.16...)
 ///
-/// # Safety
+/// Consuming: takes ownership of `dur_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned
-/// - The pointer points to an initialized CelValue::Duration instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let (secs, _nanos) = extract_duration(dur_ptr);
+    let d = *Box::from_raw(dur_ptr);
+    let (secs, _nanos) = match d {
+        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
+        _ => abort_with_error("cel_duration_get_minutes: expected Duration"),
+    };
     // Convert seconds to minutes, truncating fractional part
     let minutes = secs / 60;
     Box::into_raw(Box::new(CelValue::Int(minutes)))
@@ -347,15 +386,17 @@ pub unsafe fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mut CelValue 
 /// Returns the total seconds in the duration.
 /// Example: duration('3730s').getSeconds() returns 3730
 ///
-/// # Safety
+/// Consuming: takes ownership of `dur_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned
-/// - The pointer points to an initialized CelValue::Duration instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let (secs, _nanos) = extract_duration(dur_ptr);
+    let d = *Box::from_raw(dur_ptr);
+    let (secs, _nanos) = match d {
+        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
+        _ => abort_with_error("cel_duration_get_seconds: expected Duration"),
+    };
     Box::into_raw(Box::new(CelValue::Int(secs)))
 }
 
@@ -365,15 +406,17 @@ pub unsafe fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mut CelValue 
 /// it is the nanoseconds sub-second component expressed in whole milliseconds.
 /// Example: duration('123.321456789s').getMilliseconds() returns 321
 ///
-/// # Safety
+/// Consuming: takes ownership of `dur_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned
-/// - The pointer points to an initialized CelValue::Duration instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_get_milliseconds(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let (_secs, nanos) = extract_duration(dur_ptr);
+    let d = *Box::from_raw(dur_ptr);
+    let (_secs, nanos) = match d {
+        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
+        _ => abort_with_error("cel_duration_get_milliseconds: expected Duration"),
+    };
     // Return the millisecond component of the nanoseconds field only.
     let millis = nanos as i64 / 1_000_000;
     Box::into_raw(Box::new(CelValue::Int(millis)))
@@ -412,16 +455,18 @@ fn validate_duration(seconds: i64, _nanos: i32) {
 /// timestamp.getFullYear() -> int
 /// Returns the year in UTC (per CEL spec default)
 ///
-/// # Safety
+/// Consuming: takes ownership of `ts_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned
-/// - The pointer points to an initialized CelValue::Timestamp instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_full_year(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_full_year: expected Timestamp"),
+    };
     let utc_dt = dt.with_timezone(&Utc);
     Box::into_raw(Box::new(CelValue::Int(utc_dt.year() as i64)))
 }
@@ -429,21 +474,26 @@ pub unsafe extern "C" fn cel_timestamp_get_full_year(ts_ptr: *mut CelValue) -> *
 /// timestamp.getFullYear(timezone) -> int
 /// Returns the year in the specified timezone
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - `ts_ptr` points to an initialized CelValue::Timestamp instance
-/// - `tz_ptr` points to an initialized CelValue::String instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_full_year_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let tz_str = extract_string(tz_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let tz_val = *Box::from_raw(tz_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_full_year_tz: expected Timestamp"),
+    };
+    let tz_str = match tz_val {
+        CelValue::String(s) => s,
+        _ => abort_with_error("cel_timestamp_get_full_year_tz: expected String timezone"),
+    };
 
     let timezone = crate::chrono_helpers::parse_timezone(&tz_str)
         .unwrap_or_else(|e| panic!("Invalid timezone '{}': {}", tz_str, e));
@@ -459,16 +509,18 @@ pub unsafe extern "C" fn cel_timestamp_get_full_year_tz(
 /// timestamp.getMonth() -> int
 /// Returns the month (0-based: 0=January, 11=December) in UTC
 ///
-/// # Safety
+/// Consuming: takes ownership of `ts_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned
-/// - The pointer points to an initialized CelValue::Timestamp instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_month(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_month: expected Timestamp"),
+    };
     let utc_dt = dt.with_timezone(&Utc);
     Box::into_raw(Box::new(CelValue::Int((utc_dt.month() - 1) as i64))) // chrono returns 1-12, convert to 0-11
 }
@@ -476,21 +528,26 @@ pub unsafe extern "C" fn cel_timestamp_get_month(ts_ptr: *mut CelValue) -> *mut 
 /// timestamp.getMonth(timezone) -> int
 /// Returns the month (0-based) in the specified timezone
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - `ts_ptr` points to an initialized CelValue::Timestamp instance
-/// - `tz_ptr` points to an initialized CelValue::String instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_month_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let tz_str = extract_string(tz_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let tz_val = *Box::from_raw(tz_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_month_tz: expected Timestamp"),
+    };
+    let tz_str = match tz_val {
+        CelValue::String(s) => s,
+        _ => abort_with_error("cel_timestamp_get_month_tz: expected String timezone"),
+    };
 
     let timezone = crate::chrono_helpers::parse_timezone(&tz_str)
         .unwrap_or_else(|e| panic!("Invalid timezone '{}': {}", tz_str, e));
@@ -506,16 +563,18 @@ pub unsafe extern "C" fn cel_timestamp_get_month_tz(
 /// timestamp.getDate() -> int
 /// Returns the day of month (1-based: 1-31) in UTC
 ///
-/// # Safety
+/// Consuming: takes ownership of `ts_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned
-/// - The pointer points to an initialized CelValue::Timestamp instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_date(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_date: expected Timestamp"),
+    };
     let utc_dt = dt.with_timezone(&Utc);
     Box::into_raw(Box::new(CelValue::Int(utc_dt.day() as i64)))
 }
@@ -523,21 +582,26 @@ pub unsafe extern "C" fn cel_timestamp_get_date(ts_ptr: *mut CelValue) -> *mut C
 /// timestamp.getDate(timezone) -> int
 /// Returns the day of month in the specified timezone
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - `ts_ptr` points to an initialized CelValue::Timestamp instance
-/// - `tz_ptr` points to an initialized CelValue::String instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_date_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let tz_str = extract_string(tz_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let tz_val = *Box::from_raw(tz_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_date_tz: expected Timestamp"),
+    };
+    let tz_str = match tz_val {
+        CelValue::String(s) => s,
+        _ => abort_with_error("cel_timestamp_get_date_tz: expected String timezone"),
+    };
 
     let timezone = crate::chrono_helpers::parse_timezone(&tz_str)
         .unwrap_or_else(|e| panic!("Invalid timezone '{}': {}", tz_str, e));
@@ -553,16 +617,18 @@ pub unsafe extern "C" fn cel_timestamp_get_date_tz(
 /// timestamp.getDayOfMonth() -> int
 /// Returns the day of month (0-based: 0-30) in UTC
 ///
-/// # Safety
+/// Consuming: takes ownership of `ts_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned
-/// - The pointer points to an initialized CelValue::Timestamp instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_month(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_day_of_month: expected Timestamp"),
+    };
     let utc_dt = dt.with_timezone(&Utc);
     Box::into_raw(Box::new(CelValue::Int((utc_dt.day() - 1) as i64))) // Convert to 0-based
 }
@@ -570,21 +636,26 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_month(ts_ptr: *mut CelValue) -
 /// timestamp.getDayOfMonth(timezone) -> int
 /// Returns the day of month (0-based) in the specified timezone
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - `ts_ptr` points to an initialized CelValue::Timestamp instance
-/// - `tz_ptr` points to an initialized CelValue::String instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_month_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let tz_str = extract_string(tz_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let tz_val = *Box::from_raw(tz_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_day_of_month_tz: expected Timestamp"),
+    };
+    let tz_str = match tz_val {
+        CelValue::String(s) => s,
+        _ => abort_with_error("cel_timestamp_get_day_of_month_tz: expected String timezone"),
+    };
 
     let timezone = crate::chrono_helpers::parse_timezone(&tz_str)
         .unwrap_or_else(|e| panic!("Invalid timezone '{}': {}", tz_str, e));
@@ -600,16 +671,18 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_month_tz(
 /// timestamp.getDayOfWeek() -> int
 /// Returns day of week (0=Sunday, 1=Monday, ..., 6=Saturday) in UTC
 ///
-/// # Safety
+/// Consuming: takes ownership of `ts_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - The pointer argument is valid and properly aligned
-/// - The pointer points to an initialized CelValue::Timestamp instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_week(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_day_of_week: expected Timestamp"),
+    };
     let utc_dt = dt.with_timezone(&Utc);
     let dow = utc_dt.weekday().num_days_from_sunday();
     Box::into_raw(Box::new(CelValue::Int(dow as i64)))
@@ -618,21 +691,26 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_week(ts_ptr: *mut CelValue) ->
 /// timestamp.getDayOfWeek(timezone) -> int
 /// Returns day of week in the specified timezone
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - Both pointer arguments are valid and properly aligned
-/// - `ts_ptr` points to an initialized CelValue::Timestamp instance
-/// - `tz_ptr` points to an initialized CelValue::String instance
-/// - The returned pointer must be freed using the appropriate cleanup function
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_week_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let tz_str = extract_string(tz_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let tz_val = *Box::from_raw(tz_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_day_of_week_tz: expected Timestamp"),
+    };
+    let tz_str = match tz_val {
+        CelValue::String(s) => s,
+        _ => abort_with_error("cel_timestamp_get_day_of_week_tz: expected String timezone"),
+    };
 
     let timezone = crate::chrono_helpers::parse_timezone(&tz_str)
         .unwrap_or_else(|e| panic!("Invalid timezone '{}': {}", tz_str, e));
@@ -652,15 +730,18 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_week_tz(
 /// timestamp.getDayOfYear() -> int
 /// Returns day of year (0-based: 0-365) in UTC
 ///
-/// # Safety
+/// Consuming: takes ownership of `ts_ptr`.
 ///
-/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
-/// - `ts_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a Timestamp
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_year(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_day_of_year: expected Timestamp"),
+    };
     let utc_dt = dt.with_timezone(&Utc);
     let doy = utc_dt.ordinal() - 1; // chrono returns 1-366, convert to 0-365
     Box::into_raw(Box::new(CelValue::Int(doy as i64)))
@@ -669,20 +750,26 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_year(ts_ptr: *mut CelValue) ->
 /// timestamp.getDayOfYear(timezone) -> int
 /// Returns day of year (0-based) in the specified timezone
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `ts_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a Timestamp
-/// - `tz_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a String (timezone name)
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_year_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let tz_str = extract_string(tz_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let tz_val = *Box::from_raw(tz_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_day_of_year_tz: expected Timestamp"),
+    };
+    let tz_str = match tz_val {
+        CelValue::String(s) => s,
+        _ => abort_with_error("cel_timestamp_get_day_of_year_tz: expected String timezone"),
+    };
 
     let timezone = crate::chrono_helpers::parse_timezone(&tz_str)
         .unwrap_or_else(|e| panic!("Invalid timezone '{}': {}", tz_str, e));
@@ -699,22 +786,24 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_year_tz(
 /// - timestamp.getHours() -> Returns hour component (0-23) in UTC
 /// - duration.getHours() -> Converts total duration to hours (truncated)
 ///
-/// # Safety
+/// Consuming: takes ownership of `value_ptr`.
 ///
-/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
-/// - `value_ptr` is a valid, properly aligned pointer to an initialized CelValue containing either a Timestamp or Duration
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue pointer
+/// (either Timestamp or Duration).
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_hours(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { &*value_ptr };
+    let value = *Box::from_raw(value_ptr);
     match value {
-        CelValue::Timestamp(_) => {
-            let dt = extract_datetime(value_ptr);
+        CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
             Box::into_raw(Box::new(CelValue::Int(utc_dt.hour() as i64)))
         }
-        CelValue::Duration(_) => cel_duration_get_hours(value_ptr),
+        CelValue::Duration(d) => {
+            let (secs, _nanos) = crate::chrono_helpers::duration_to_parts(&d);
+            Box::into_raw(Box::new(CelValue::Int(secs / 3600)))
+        }
         _ => abort_with_error("getHours() must be called on a timestamp or duration"),
     }
 }
@@ -722,20 +811,26 @@ pub unsafe extern "C" fn cel_timestamp_get_hours(value_ptr: *mut CelValue) -> *m
 /// timestamp.getHours(timezone) -> int
 /// Returns hour component in the specified timezone
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `ts_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a Timestamp
-/// - `tz_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a String (timezone name)
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_hours_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let tz_str = extract_string(tz_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let tz_val = *Box::from_raw(tz_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_hours_tz: expected Timestamp"),
+    };
+    let tz_str = match tz_val {
+        CelValue::String(s) => s,
+        _ => abort_with_error("cel_timestamp_get_hours_tz: expected String timezone"),
+    };
 
     let timezone = crate::chrono_helpers::parse_timezone(&tz_str)
         .unwrap_or_else(|e| panic!("Invalid timezone '{}': {}", tz_str, e));
@@ -752,22 +847,24 @@ pub unsafe extern "C" fn cel_timestamp_get_hours_tz(
 /// - timestamp.getMinutes() -> Returns minutes component (0-59) in UTC
 /// - duration.getMinutes() -> Converts total duration to minutes (truncated)
 ///
-/// # Safety
+/// Consuming: takes ownership of `value_ptr`.
 ///
-/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
-/// - `value_ptr` is a valid, properly aligned pointer to an initialized CelValue containing either a Timestamp or Duration
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue pointer
+/// (either Timestamp or Duration).
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_minutes(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { &*value_ptr };
+    let value = *Box::from_raw(value_ptr);
     match value {
-        CelValue::Timestamp(_) => {
-            let dt = extract_datetime(value_ptr);
+        CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
             Box::into_raw(Box::new(CelValue::Int(utc_dt.minute() as i64)))
         }
-        CelValue::Duration(_) => cel_duration_get_minutes(value_ptr),
+        CelValue::Duration(d) => {
+            let (secs, _nanos) = crate::chrono_helpers::duration_to_parts(&d);
+            Box::into_raw(Box::new(CelValue::Int(secs / 60)))
+        }
         _ => abort_with_error("getMinutes() must be called on a timestamp or duration"),
     }
 }
@@ -775,20 +872,26 @@ pub unsafe extern "C" fn cel_timestamp_get_minutes(value_ptr: *mut CelValue) -> 
 /// timestamp.getMinutes(timezone) -> int
 /// Returns minutes component in the specified timezone
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `ts_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a Timestamp
-/// - `tz_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a String (timezone name)
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_minutes_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let tz_str = extract_string(tz_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let tz_val = *Box::from_raw(tz_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_minutes_tz: expected Timestamp"),
+    };
+    let tz_str = match tz_val {
+        CelValue::String(s) => s,
+        _ => abort_with_error("cel_timestamp_get_minutes_tz: expected String timezone"),
+    };
 
     let timezone = crate::chrono_helpers::parse_timezone(&tz_str)
         .unwrap_or_else(|e| panic!("Invalid timezone '{}': {}", tz_str, e));
@@ -805,22 +908,24 @@ pub unsafe extern "C" fn cel_timestamp_get_minutes_tz(
 /// - timestamp.getSeconds() -> Returns seconds component (0-59) in UTC
 /// - duration.getSeconds() -> Returns total seconds in the duration
 ///
-/// # Safety
+/// Consuming: takes ownership of `value_ptr`.
 ///
-/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
-/// - `value_ptr` is a valid, properly aligned pointer to an initialized CelValue containing either a Timestamp or Duration
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue pointer
+/// (either Timestamp or Duration).
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_seconds(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { &*value_ptr };
+    let value = *Box::from_raw(value_ptr);
     match value {
-        CelValue::Timestamp(_) => {
-            let dt = extract_datetime(value_ptr);
+        CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
             Box::into_raw(Box::new(CelValue::Int(utc_dt.second() as i64)))
         }
-        CelValue::Duration(_) => cel_duration_get_seconds(value_ptr),
+        CelValue::Duration(d) => {
+            let (secs, _nanos) = crate::chrono_helpers::duration_to_parts(&d);
+            Box::into_raw(Box::new(CelValue::Int(secs)))
+        }
         _ => abort_with_error("getSeconds() must be called on a timestamp or duration"),
     }
 }
@@ -828,20 +933,26 @@ pub unsafe extern "C" fn cel_timestamp_get_seconds(value_ptr: *mut CelValue) -> 
 /// timestamp.getSeconds(timezone) -> int
 /// Returns seconds component in the specified timezone
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `ts_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a Timestamp
-/// - `tz_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a String (timezone name)
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_seconds_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let tz_str = extract_string(tz_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let tz_val = *Box::from_raw(tz_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_seconds_tz: expected Timestamp"),
+    };
+    let tz_str = match tz_val {
+        CelValue::String(s) => s,
+        _ => abort_with_error("cel_timestamp_get_seconds_tz: expected String timezone"),
+    };
 
     let timezone = crate::chrono_helpers::parse_timezone(&tz_str)
         .unwrap_or_else(|e| panic!("Invalid timezone '{}': {}", tz_str, e));
@@ -861,23 +972,25 @@ pub unsafe extern "C" fn cel_timestamp_get_seconds_tz(
 /// Also handles a Duration that arrived through the JSON bridge as a
 /// CelValue::Object with __type__ == "google.protobuf.Duration".
 ///
-/// # Safety
+/// Consuming: takes ownership of `value_ptr`.
 ///
-/// This function is unsafe because it dereferences a raw pointer. The caller must ensure:
-/// - `value_ptr` is a valid, properly aligned pointer to an initialized CelValue containing either a Timestamp or Duration
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// # Safety
+/// The pointer must be a valid, non-null, uniquely-owned CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_milliseconds(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { &*value_ptr };
+    let value = *Box::from_raw(value_ptr);
     match value {
-        CelValue::Timestamp(_) => {
-            let dt = extract_datetime(value_ptr);
+        CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
             let millis = utc_dt.timestamp_subsec_millis();
             Box::into_raw(Box::new(CelValue::Int(millis as i64)))
         }
-        CelValue::Duration(_) => cel_duration_get_milliseconds(value_ptr),
+        CelValue::Duration(d) => {
+            let (_secs, nanos) = crate::chrono_helpers::duration_to_parts(&d);
+            let millis = nanos as i64 / 1_000_000;
+            Box::into_raw(Box::new(CelValue::Int(millis)))
+        }
         CelValue::Object(map) => {
             // Handle a google.protobuf.Duration that arrived through the JSON bridge
             // as {"__type__": "google.protobuf.Duration", "seconds": <s>, "nanos": <n>}.
@@ -900,20 +1013,26 @@ pub unsafe extern "C" fn cel_timestamp_get_milliseconds(value_ptr: *mut CelValue
 /// timestamp.getMilliseconds(timezone) -> int
 /// Returns milliseconds component in the specified timezone
 ///
-/// # Safety
+/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `ts_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a Timestamp
-/// - `tz_ptr` is a valid, properly aligned pointer to an initialized CelValue containing a String (timezone name)
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_milliseconds_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let dt = extract_datetime(ts_ptr);
-    let tz_str = extract_string(tz_ptr);
+    let ts = *Box::from_raw(ts_ptr);
+    let tz_val = *Box::from_raw(tz_ptr);
+    let dt = match ts {
+        CelValue::Timestamp(dt) => dt,
+        _ => abort_with_error("cel_timestamp_get_milliseconds_tz: expected Timestamp"),
+    };
+    let tz_str = match tz_val {
+        CelValue::String(s) => s,
+        _ => abort_with_error("cel_timestamp_get_milliseconds_tz: expected String timezone"),
+    };
 
     let timezone = crate::chrono_helpers::parse_timezone(&tz_str)
         .unwrap_or_else(|e| panic!("Invalid timezone '{}': {}", tz_str, e));
@@ -1028,22 +1147,23 @@ mod tests {
     fn test_get_hours_utc_vs_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z
-            let ts_ptr = cel_create_timestamp(1685287800, 0);
-
             // UTC: 15:30
+            let ts_ptr = cel_create_timestamp(1685287800, 0);
             let utc_result = cel_timestamp_get_hours(ts_ptr);
             let utc_hours = extract_int(utc_result);
             assert_eq!(utc_hours, 15);
 
             // Los Angeles: 08:30 (PDT is UTC-7)
+            let ts_ptr2 = cel_create_timestamp(1685287800, 0);
             let la_tz_ptr = create_string_value("America/Los_Angeles");
-            let la_result = cel_timestamp_get_hours_tz(ts_ptr, la_tz_ptr);
+            let la_result = cel_timestamp_get_hours_tz(ts_ptr2, la_tz_ptr);
             let la_hours = extract_int(la_result);
             assert_eq!(la_hours, 8);
 
             // +09:00: 00:30 next day
+            let ts_ptr3 = cel_create_timestamp(1685287800, 0);
             let tokyo_tz_ptr = create_string_value("+09:00");
-            let tokyo_result = cel_timestamp_get_hours_tz(ts_ptr, tokyo_tz_ptr);
+            let tokyo_result = cel_timestamp_get_hours_tz(ts_ptr3, tokyo_tz_ptr);
             let tokyo_hours = extract_int(tokyo_result);
             assert_eq!(tokyo_hours, 0);
         }
@@ -1065,16 +1185,16 @@ mod tests {
     fn test_get_day_of_week_with_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z is Sunday (0)
-            let ts_ptr = cel_create_timestamp(1685287800, 0);
-
             // UTC: Sunday
+            let ts_ptr = cel_create_timestamp(1685287800, 0);
             let utc_result = cel_timestamp_get_day_of_week(ts_ptr);
             let utc_dow = extract_int(utc_result);
             assert_eq!(utc_dow, 0); // Sunday
 
             // Same in LA timezone (still Sunday)
+            let ts_ptr2 = cel_create_timestamp(1685287800, 0);
             let la_tz_ptr = create_string_value("America/Los_Angeles");
-            let la_result = cel_timestamp_get_day_of_week_tz(ts_ptr, la_tz_ptr);
+            let la_result = cel_timestamp_get_day_of_week_tz(ts_ptr2, la_tz_ptr);
             let la_dow = extract_int(la_result);
             assert_eq!(la_dow, 0); // Still Sunday
         }
@@ -1084,22 +1204,23 @@ mod tests {
     fn test_get_date_with_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z
-            let ts_ptr = cel_create_timestamp(1685287800, 0);
-
             // UTC: day 28
+            let ts_ptr = cel_create_timestamp(1685287800, 0);
             let utc_result = cel_timestamp_get_date(ts_ptr);
             let utc_day = extract_int(utc_result);
             assert_eq!(utc_day, 28);
 
             // LA timezone: still day 28
+            let ts_ptr2 = cel_create_timestamp(1685287800, 0);
             let la_tz_ptr = create_string_value("America/Los_Angeles");
-            let la_result = cel_timestamp_get_date_tz(ts_ptr, la_tz_ptr);
+            let la_result = cel_timestamp_get_date_tz(ts_ptr2, la_tz_ptr);
             let la_day = extract_int(la_result);
             assert_eq!(la_day, 28);
 
             // +09:00: day 29 (crosses midnight)
+            let ts_ptr3 = cel_create_timestamp(1685287800, 0);
             let tokyo_tz_ptr = create_string_value("+09:00");
-            let tokyo_result = cel_timestamp_get_date_tz(ts_ptr, tokyo_tz_ptr);
+            let tokyo_result = cel_timestamp_get_date_tz(ts_ptr3, tokyo_tz_ptr);
             let tokyo_day = extract_int(tokyo_result);
             assert_eq!(tokyo_day, 29);
         }
@@ -1110,23 +1231,25 @@ mod tests {
         unsafe {
             // 2023-05-28T15:30:45.123Z
             let ts_ptr = cel_create_timestamp(1685287845, 123_000_000);
-
             let seconds_result = cel_timestamp_get_seconds(ts_ptr);
             let seconds = extract_int(seconds_result);
             assert_eq!(seconds, 45);
 
-            let millis_result = cel_timestamp_get_milliseconds(ts_ptr);
+            let ts_ptr2 = cel_create_timestamp(1685287845, 123_000_000);
+            let millis_result = cel_timestamp_get_milliseconds(ts_ptr2);
             let millis = extract_int(millis_result);
             assert_eq!(millis, 123);
 
             // Same with timezone
+            let ts_ptr3 = cel_create_timestamp(1685287845, 123_000_000);
             let tz_ptr = create_string_value("UTC");
-            let tz_seconds_result = cel_timestamp_get_seconds_tz(ts_ptr, tz_ptr);
+            let tz_seconds_result = cel_timestamp_get_seconds_tz(ts_ptr3, tz_ptr);
             let tz_seconds = extract_int(tz_seconds_result);
             assert_eq!(tz_seconds, 45);
 
+            let ts_ptr4 = cel_create_timestamp(1685287845, 123_000_000);
             let tz_ptr2 = create_string_value("UTC");
-            let tz_millis_result = cel_timestamp_get_milliseconds_tz(ts_ptr, tz_ptr2);
+            let tz_millis_result = cel_timestamp_get_milliseconds_tz(ts_ptr4, tz_ptr2);
             let tz_millis = extract_int(tz_millis_result);
             assert_eq!(tz_millis, 123);
         }
@@ -1137,13 +1260,13 @@ mod tests {
         unsafe {
             // 2023-05-28T15:30:00Z (May 28 is day 147 of the year, 0-indexed = 147)
             let ts_ptr = cel_create_timestamp(1685287800, 0);
-
             let utc_result = cel_timestamp_get_day_of_year(ts_ptr);
             let utc_doy = extract_int(utc_result);
             assert_eq!(utc_doy, 147);
 
+            let ts_ptr2 = cel_create_timestamp(1685287800, 0);
             let tz_ptr = create_string_value("America/Los_Angeles");
-            let tz_result = cel_timestamp_get_day_of_year_tz(ts_ptr, tz_ptr);
+            let tz_result = cel_timestamp_get_day_of_year_tz(ts_ptr2, tz_ptr);
             let tz_doy = extract_int(tz_result);
             assert_eq!(tz_doy, 147); // Same day
         }

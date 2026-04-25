@@ -76,16 +76,16 @@ pub unsafe extern "C" fn cel_k8s_url_parse(str_ptr: *mut CelValue) -> *mut CelVa
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_url_parse", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    match is_valid_request_uri(s) {
+    match is_valid_request_uri(&s) {
         Ok((u, original)) => Box::into_raw(Box::new(CelValue::Url(u, original))),
         Err(msg) => {
             error!(log, "invalid URL"; "function" => "cel_k8s_url_parse", "error" => &msg);
@@ -112,16 +112,16 @@ pub unsafe extern "C" fn cel_k8s_is_url(str_ptr: *mut CelValue) -> *mut CelValue
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_is_url", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    let ok = is_valid_request_uri(s).is_ok();
+    let ok = is_valid_request_uri(&s).is_ok();
     Box::into_raw(Box::new(CelValue::Bool(ok)))
 }
 
@@ -143,10 +143,10 @@ pub unsafe extern "C" fn cel_k8s_url_get_scheme(url_ptr: *mut CelValue) -> *mut 
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*url_ptr };
+    let val = unsafe { *Box::from_raw(url_ptr) };
     match val {
         CelValue::Url(u, original) => {
-            let scheme = if is_path_only(original) {
+            let scheme = if is_path_only(&original) {
                 String::new()
             } else {
                 u.scheme().to_string()
@@ -179,10 +179,10 @@ pub unsafe extern "C" fn cel_k8s_url_get_host(url_ptr: *mut CelValue) -> *mut Ce
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*url_ptr };
+    let val = unsafe { *Box::from_raw(url_ptr) };
     match val {
         CelValue::Url(u, original) => {
-            let host = if is_path_only(original) {
+            let host = if is_path_only(&original) {
                 String::new()
             } else {
                 // u.host_str() returns host without port; we need host+port.
@@ -221,10 +221,10 @@ pub unsafe extern "C" fn cel_k8s_url_get_hostname(url_ptr: *mut CelValue) -> *mu
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*url_ptr };
+    let val = unsafe { *Box::from_raw(url_ptr) };
     match val {
         CelValue::Url(u, original) => {
-            let hostname = if is_path_only(original) {
+            let hostname = if is_path_only(&original) {
                 String::new()
             } else {
                 // Use the Host enum so IPv6 addresses are returned without brackets.
@@ -264,10 +264,10 @@ pub unsafe extern "C" fn cel_k8s_url_get_port(url_ptr: *mut CelValue) -> *mut Ce
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*url_ptr };
+    let val = unsafe { *Box::from_raw(url_ptr) };
     match val {
         CelValue::Url(u, original) => {
-            let port = if is_path_only(original) {
+            let port = if is_path_only(&original) {
                 String::new()
             } else {
                 u.port().map(|p| p.to_string()).unwrap_or_default()
@@ -299,7 +299,7 @@ pub unsafe extern "C" fn cel_k8s_url_get_escaped_path(url_ptr: *mut CelValue) ->
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*url_ptr };
+    let val = unsafe { *Box::from_raw(url_ptr) };
     match val {
         CelValue::Url(u, original) => {
             // url::Url normalises URLs without an explicit path to path="/".
@@ -308,8 +308,8 @@ pub unsafe extern "C" fn cel_k8s_url_get_escaped_path(url_ptr: *mut CelValue) ->
             //
             // For path-only URLs the original string IS the path.
             // For absolute URIs we check the original for an explicit path component.
-            let path = if is_path_only(original) {
-                original.to_string()
+            let path = if is_path_only(&original) {
+                original.clone()
             } else {
                 let raw = u.path();
                 // If the normalised path is "/" and the original string didn't
@@ -351,7 +351,7 @@ pub unsafe extern "C" fn cel_k8s_url_get_query(url_ptr: *mut CelValue) -> *mut C
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*url_ptr };
+    let val = unsafe { *Box::from_raw(url_ptr) };
     match val {
         CelValue::Url(u, _original) => {
             // Collect query params into a map<string, list<string>>.
@@ -410,7 +410,6 @@ mod tests {
             input,
             result
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     #[rstest]
@@ -425,7 +424,6 @@ mod tests {
             input,
             result
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     #[rstest]
@@ -437,7 +435,6 @@ mod tests {
         let str_ptr = unsafe { make_str(input) };
         let result = unsafe { read_val(cel_k8s_is_url(str_ptr)) };
         assert_eq!(result, CelValue::Bool(expected), "isURL({:?})", input);
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     // ── getScheme() ──────────────────────────────────────────────────────────
@@ -613,6 +610,5 @@ mod tests {
         let val_ptr = unsafe { make_val(CelValue::Int(42)) };
         let result = unsafe { read_val(cel_k8s_url_get_scheme(val_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe { drop(Box::from_raw(val_ptr)) };
     }
 }

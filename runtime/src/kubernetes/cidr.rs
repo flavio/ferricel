@@ -163,16 +163,16 @@ pub unsafe extern "C" fn cel_k8s_cidr_parse(str_ptr: *mut CelValue) -> *mut CelV
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_cidr_parse", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    match parse_k8s_cidr(s) {
+    match parse_k8s_cidr(&s) {
         Ok((addr, prefix_len)) => Box::into_raw(Box::new(CelValue::Cidr(addr, prefix_len))),
         Err(msg) => {
             error!(log, "invalid CIDR"; "function" => "cel_k8s_cidr_parse", "error" => &msg);
@@ -199,16 +199,16 @@ pub unsafe extern "C" fn cel_k8s_is_cidr(str_ptr: *mut CelValue) -> *mut CelValu
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*str_ptr };
+    let val = unsafe { *Box::from_raw(str_ptr) };
     let s = match val {
-        CelValue::String(s) => s.as_str(),
+        CelValue::String(ref s) => s.clone(),
         other => {
             error!(log, "expected String"; "function" => "cel_k8s_is_cidr", "got" => format!("{:?}", other));
             return create_error_value("no such overload");
         }
     };
 
-    let ok = parse_k8s_cidr(s).is_ok();
+    let ok = parse_k8s_cidr(&s).is_ok();
     Box::into_raw(Box::new(CelValue::Bool(ok)))
 }
 
@@ -230,9 +230,9 @@ pub unsafe extern "C" fn cel_k8s_cidr_ip(cidr_ptr: *mut CelValue) -> *mut CelVal
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*cidr_ptr };
+    let val = unsafe { *Box::from_raw(cidr_ptr) };
     match val {
-        CelValue::Cidr(addr, _) => Box::into_raw(Box::new(CelValue::IpAddr(*addr))),
+        CelValue::Cidr(addr, _) => Box::into_raw(Box::new(CelValue::IpAddr(addr))),
         other => {
             error!(log, "expected Cidr"; "function" => "cel_k8s_cidr_ip", "got" => format!("{:?}", other));
             create_error_value("no such overload")
@@ -258,11 +258,11 @@ pub unsafe extern "C" fn cel_k8s_cidr_masked(cidr_ptr: *mut CelValue) -> *mut Ce
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*cidr_ptr };
+    let val = unsafe { *Box::from_raw(cidr_ptr) };
     match val {
         CelValue::Cidr(addr, prefix_len) => {
-            let network = apply_mask(*addr, *prefix_len);
-            Box::into_raw(Box::new(CelValue::Cidr(network, *prefix_len)))
+            let network = apply_mask(addr, prefix_len);
+            Box::into_raw(Box::new(CelValue::Cidr(network, prefix_len)))
         }
         other => {
             error!(log, "expected Cidr"; "function" => "cel_k8s_cidr_masked", "got" => format!("{:?}", other));
@@ -289,9 +289,9 @@ pub unsafe extern "C" fn cel_k8s_cidr_prefix_length(cidr_ptr: *mut CelValue) -> 
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { &*cidr_ptr };
+    let val = unsafe { *Box::from_raw(cidr_ptr) };
     match val {
-        CelValue::Cidr(_, prefix_len) => Box::into_raw(Box::new(CelValue::Int(*prefix_len as i64))),
+        CelValue::Cidr(_, prefix_len) => Box::into_raw(Box::new(CelValue::Int(prefix_len as i64))),
         other => {
             error!(log, "expected Cidr"; "function" => "cel_k8s_cidr_prefix_length", "got" => format!("{:?}", other));
             create_error_value("no such overload")
@@ -323,11 +323,11 @@ pub unsafe extern "C" fn cel_k8s_cidr_contains_ip_obj(
         return create_error_value("no such overload");
     }
 
-    let cidr_val = unsafe { &*cidr_ptr };
-    let ip_val = unsafe { &*ip_ptr };
+    let cidr_val = unsafe { *Box::from_raw(cidr_ptr) };
+    let ip_val = unsafe { *Box::from_raw(ip_ptr) };
 
     let (cidr_addr, prefix_len) = match cidr_val {
-        CelValue::Cidr(a, p) => (*a, *p),
+        CelValue::Cidr(a, p) => (a, p),
         _ => {
             error!(log, "expected Cidr as first argument"; "function" => "cel_k8s_cidr_contains_ip_obj");
             return create_error_value("no such overload");
@@ -335,8 +335,8 @@ pub unsafe extern "C" fn cel_k8s_cidr_contains_ip_obj(
     };
 
     let ip: IpAddr = match ip_val {
-        CelValue::IpAddr(a) => *a,
-        CelValue::String(s) => match s.parse() {
+        CelValue::IpAddr(a) => a,
+        CelValue::String(ref s) => match s.parse() {
             Ok(a) => a,
             Err(_) => {
                 let msg = format!(
@@ -381,11 +381,11 @@ pub unsafe extern "C" fn cel_k8s_cidr_contains_cidr_obj(
         return create_error_value("no such overload");
     }
 
-    let cidr_val = unsafe { &*cidr_ptr };
-    let other_val = unsafe { &*other_ptr };
+    let cidr_val = unsafe { *Box::from_raw(cidr_ptr) };
+    let other_val = unsafe { *Box::from_raw(other_ptr) };
 
     let (cidr_addr, prefix_len) = match cidr_val {
-        CelValue::Cidr(a, p) => (*a, *p),
+        CelValue::Cidr(a, p) => (a, p),
         _ => {
             error!(log, "expected Cidr as first argument"; "function" => "cel_k8s_cidr_contains_cidr_obj");
             return create_error_value("no such overload");
@@ -393,8 +393,8 @@ pub unsafe extern "C" fn cel_k8s_cidr_contains_cidr_obj(
     };
 
     let (other_addr, other_prefix) = match other_val {
-        CelValue::Cidr(a, p) => (*a, *p),
-        CelValue::String(s) => match parse_k8s_cidr(s) {
+        CelValue::Cidr(a, p) => (a, p),
+        CelValue::String(ref s) => match parse_k8s_cidr(s) {
             Ok(v) => v,
             Err(msg) => return create_error_value(&msg),
         },
@@ -448,7 +448,6 @@ mod tests {
             input,
             result
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     #[rstest]
@@ -467,7 +466,6 @@ mod tests {
             input,
             result
         );
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     #[rstest]
@@ -479,7 +477,6 @@ mod tests {
         let str_ptr = unsafe { make_str(input) };
         let result = unsafe { read_val(cel_k8s_is_cidr(str_ptr)) };
         assert_eq!(result, CelValue::Bool(expected), "isCIDR({:?})", input);
-        unsafe { drop(Box::from_raw(str_ptr)) };
     }
 
     // ── cidr.ip() ─────────────────────────────────────────────────────────────
@@ -659,6 +656,5 @@ mod tests {
         let val_ptr = unsafe { make_val(CelValue::Int(42)) };
         let result = unsafe { read_val(cel_k8s_cidr_ip(val_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
-        unsafe { drop(Box::from_raw(val_ptr)) };
     }
 }
