@@ -12,7 +12,7 @@ use crate::helpers::{
     extract_string,
 };
 use crate::types::CelValue;
-use chrono::{Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
 
 // Timestamp range constants (CEL spec)
 // Min: 0001-01-01T00:00:00Z
@@ -56,6 +56,95 @@ fn normalize_duration(mut seconds: i64, mut nanos: i32) -> (i64, i32) {
     }
 
     (seconds, nanos)
+}
+
+// ============================================================================
+// Pure-Rust inner functions (no raw pointers) — called by consuming wrappers
+// in helpers.rs
+// ============================================================================
+
+/// timestamp + duration = timestamp (pure Rust, no pointers)
+pub(crate) fn timestamp_add_duration_inner(
+    dt: DateTime<FixedOffset>,
+    duration: chrono::Duration,
+) -> CelValue {
+    let result = dt
+        .checked_add_signed(duration)
+        .expect("timestamp overflow in addition");
+    validate_datetime(&result);
+    CelValue::Timestamp(result)
+}
+
+/// timestamp - duration = timestamp (pure Rust, no pointers)
+pub(crate) fn timestamp_sub_duration_inner(
+    dt: DateTime<FixedOffset>,
+    duration: chrono::Duration,
+) -> CelValue {
+    let result = dt
+        .checked_sub_signed(duration)
+        .expect("timestamp underflow in subtraction");
+    validate_datetime(&result);
+    CelValue::Timestamp(result)
+}
+
+/// timestamp - timestamp = duration (pure Rust, no pointers)
+pub(crate) fn timestamp_diff_inner(
+    dt1: DateTime<FixedOffset>,
+    dt2: DateTime<FixedOffset>,
+) -> CelValue {
+    let duration = dt1.signed_duration_since(dt2);
+    let seconds = duration.num_seconds();
+    let nanos = duration.subsec_nanos();
+    validate_duration(seconds, nanos);
+    CelValue::Duration(duration)
+}
+
+/// duration + duration = duration (pure Rust, no pointers)
+pub(crate) fn duration_add_inner(
+    d1: chrono::Duration,
+    d2: chrono::Duration,
+) -> CelValue {
+    let secs1 = d1.num_seconds();
+    let nanos1 = d1.subsec_nanos();
+    let secs2 = d2.num_seconds();
+    let nanos2 = d2.subsec_nanos();
+    let result_secs = secs1.checked_add(secs2).expect("duration overflow");
+    let result_nanos = nanos1 + nanos2;
+    let (final_secs, final_nanos) = normalize_duration(result_secs, result_nanos);
+    validate_duration(final_secs, final_nanos);
+    make_duration(final_secs, final_nanos)
+}
+
+/// duration - duration = duration (pure Rust, no pointers)
+pub(crate) fn duration_sub_inner(
+    d1: chrono::Duration,
+    d2: chrono::Duration,
+) -> CelValue {
+    let secs1 = d1.num_seconds();
+    let nanos1 = d1.subsec_nanos();
+    let secs2 = d2.num_seconds();
+    let nanos2 = d2.subsec_nanos();
+    let result_secs = secs1.checked_sub(secs2).expect("duration underflow");
+    let result_nanos = nanos1 - nanos2;
+    let (final_secs, final_nanos) = normalize_duration(result_secs, result_nanos);
+    validate_duration(final_secs, final_nanos);
+    make_duration(final_secs, final_nanos)
+}
+
+/// -duration (pure Rust, no pointers)
+pub(crate) fn duration_negate_inner(d: chrono::Duration) -> CelValue {
+    let secs = d.num_seconds();
+    let nanos = d.subsec_nanos();
+    let neg_secs = secs.checked_neg().expect("duration negation overflow");
+    let neg_nanos = -(nanos as i32);
+    let (final_secs, final_nanos) = normalize_duration(neg_secs, neg_nanos);
+    validate_duration(final_secs, final_nanos);
+    make_duration(final_secs, final_nanos)
+}
+
+/// Construct a CelValue::Duration from (seconds, nanos).
+fn make_duration(seconds: i64, nanos: i32) -> CelValue {
+    CelValue::Duration(crate::chrono_helpers::parts_to_duration(seconds, nanos as i64))
 }
 
 // ============================================================================

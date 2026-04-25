@@ -333,455 +333,266 @@ pub(crate) fn extract_duration_chrono_with_log(
     }
 }
 
-/// Polymorphic addition operator for CelValue objects.
-/// Dispatches to type-specific implementations:
-/// - Int + Int = Int (arithmetic addition)
-/// - Double + Double = Double (arithmetic addition)
-/// - String + String = String (concatenation)
-/// - Array + Array = Array (concatenation)
-///
-/// Note: Following CEL spec, there is NO automatic type coercion.
-/// Mixed-type arithmetic (e.g., Int + Double) will panic.
+/// Polymorphic addition operator. Consumes both operands.
 ///
 /// # Safety
-/// - Both pointers must be valid, non-null CelValue pointers
-///
-/// # Arguments
-/// - `a_ptr`: Pointer to the first operand
-/// - `b_ptr`: Pointer to the second operand
-///
-/// # Returns
-/// Pointer to a new heap-allocated CelValue containing the result
-///
-/// # Panics
-/// - If either pointer is null
-/// - If the operand types don't match
-/// - If the operation is not supported for the given types
-/// - On integer overflow (for Int addition)
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_add(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    Box::into_raw(Box::new(value_add(a, b)))
+}
+
+fn value_add(a: CelValue, b: CelValue) -> CelValue {
     let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot add null values";
-                "function" => "cel_value_add");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        // Propagate errors
-        if let CelValue::Error(_) = &*a_ptr {
-            return a_ptr;
-        }
-        if let CelValue::Error(_) = &*b_ptr {
-            return b_ptr;
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        match (a_val, b_val) {
-            (CelValue::Int(a), CelValue::Int(b)) => {
-                debug!(log, "Performing Int addition"; "left" => *a, "right" => *b);
-                match a.checked_add(*b) {
-                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
-                    None => {
-                        error!(log, "Integer overflow in addition";
-                            "operation" => "cel_value_add",
-                            "type" => "Int",
-                            "left" => *a,
-                            "right" => *b);
-                        crate::error::create_error_value("return error for overflow")
-                    }
+    match (a, b) {
+        (CelValue::Error(e), _) => CelValue::Error(e),
+        (_, CelValue::Error(e)) => CelValue::Error(e),
+        (CelValue::Int(a), CelValue::Int(b)) => {
+            debug!(log, "Performing Int addition"; "left" => a, "right" => b);
+            match a.checked_add(b) {
+                Some(r) => CelValue::Int(r),
+                None => {
+                    error!(log, "Integer overflow in addition"; "left" => a, "right" => b);
+                    CelValue::Error("return error for overflow".into())
                 }
             }
-            (CelValue::UInt(a), CelValue::UInt(b)) => {
-                debug!(log, "Performing UInt addition"; "left" => *a, "right" => *b);
-                match a.checked_add(*b) {
-                    Some(result) => Box::into_raw(Box::new(CelValue::UInt(result))),
-                    None => {
-                        error!(log, "Unsigned integer overflow in addition";
-                            "operation" => "cel_value_add",
-                            "type" => "UInt",
-                            "left" => *a,
-                            "right" => *b);
-                        crate::error::create_error_value("return error for overflow")
-                    }
+        }
+        (CelValue::UInt(a), CelValue::UInt(b)) => {
+            debug!(log, "Performing UInt addition"; "left" => a, "right" => b);
+            match a.checked_add(b) {
+                Some(r) => CelValue::UInt(r),
+                None => {
+                    error!(log, "UInt overflow in addition"; "left" => a, "right" => b);
+                    CelValue::Error("return error for overflow".into())
                 }
             }
-            (CelValue::Double(a), CelValue::Double(b)) => {
-                debug!(log, "Performing Double addition"; "left" => *a, "right" => *b);
-                let result = arithmetic::double_add(*a, *b);
-                Box::into_raw(Box::new(CelValue::Double(result)))
-            }
-            (CelValue::String(a_str), CelValue::String(b_str)) => {
-                debug!(log, "Performing String concatenation"; 
-                    "left_len" => a_str.len(), "right_len" => b_str.len());
-                let result = string::cel_string_concat(a_str, b_str);
-                Box::into_raw(Box::new(CelValue::String(result)))
-            }
-            (CelValue::Bytes(a_bytes), CelValue::Bytes(b_bytes)) => {
-                debug!(log, "Performing Bytes concatenation"; 
-                    "left_len" => a_bytes.len(), "right_len" => b_bytes.len());
-                let result = bytes::cel_bytes_concat_internal(a_bytes, b_bytes);
-                Box::into_raw(Box::new(CelValue::Bytes(result)))
-            }
-            (CelValue::Array(a_vec), CelValue::Array(b_vec)) => {
-                debug!(log, "Performing Array concatenation"; 
-                    "left_len" => a_vec.len(), "right_len" => b_vec.len());
-                let result = array::cel_array_concat(a_vec, b_vec);
-                Box::into_raw(Box::new(CelValue::Array(result)))
-            }
-            (CelValue::Timestamp(_), CelValue::Duration(_)) => {
-                debug!(log, "Performing Timestamp + Duration");
-                temporal::cel_timestamp_add_duration(a_ptr, b_ptr)
-            }
-            (CelValue::Duration(_), CelValue::Timestamp(_)) => {
-                debug!(log, "Performing Duration + Timestamp");
-                temporal::cel_timestamp_add_duration(b_ptr, a_ptr)
-            }
-            (CelValue::Duration(_), CelValue::Duration(_)) => {
-                debug!(log, "Performing Duration + Duration");
-                temporal::cel_duration_add(a_ptr, b_ptr)
-            }
-            _ => {
-                error!(log, "Cannot add incompatible types";
-                    "operation" => "cel_value_add",
-                    "left_type" => format!("{:?}", a_val),
-                    "right_type" => format!("{:?}", b_val));
-                crate::error::create_error_value("no such overload")
-            }
+        }
+        (CelValue::Double(a), CelValue::Double(b)) => {
+            CelValue::Double(arithmetic::double_add(a, b))
+        }
+        (CelValue::String(a), CelValue::String(b)) => {
+            CelValue::String(string::cel_string_concat(&a, &b))
+        }
+        (CelValue::Bytes(a), CelValue::Bytes(b)) => {
+            CelValue::Bytes(bytes::cel_bytes_concat_internal(&a, &b))
+        }
+        (CelValue::Array(a), CelValue::Array(b)) => {
+            CelValue::Array(array::cel_array_concat(&a, &b))
+        }
+        (CelValue::Timestamp(ts), CelValue::Duration(dur)) => {
+            temporal::timestamp_add_duration_inner(ts, dur)
+        }
+        (CelValue::Duration(dur), CelValue::Timestamp(ts)) => {
+            temporal::timestamp_add_duration_inner(ts, dur)
+        }
+        (CelValue::Duration(d1), CelValue::Duration(d2)) => {
+            temporal::duration_add_inner(d1, d2)
+        }
+        (a, b) => {
+            error!(log, "Cannot add incompatible types";
+                "left_type" => format!("{:?}", a),
+                "right_type" => format!("{:?}", b));
+            CelValue::Error("no such overload".into())
         }
     }
 }
 
-/// Polymorphic subtraction operator for CelValue objects.
-/// Dispatches to type-specific implementations based on operand types.
-///
-/// Note: Following CEL spec, there is NO automatic type coercion.
+/// Polymorphic subtraction operator. Consumes both operands.
 ///
 /// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_sub(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    Box::into_raw(Box::new(value_sub(a, b)))
+}
+
+fn value_sub(a: CelValue, b: CelValue) -> CelValue {
     let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot subtract null values";
-                "function" => "cel_value_sub");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        // Propagate errors
-        if let CelValue::Error(_) = &*a_ptr {
-            return a_ptr;
-        }
-        if let CelValue::Error(_) = &*b_ptr {
-            return b_ptr;
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        match (a_val, b_val) {
-            (CelValue::Int(a), CelValue::Int(b)) => {
-                debug!(log, "Performing Int subtraction"; "left" => *a, "right" => *b);
-                match a.checked_sub(*b) {
-                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
-                    None => {
-                        error!(log, "Integer overflow in subtraction";
-                            "operation" => "cel_value_sub",
-                            "type" => "Int",
-                            "left" => *a,
-                            "right" => *b);
-                        crate::error::create_error_value("return error for overflow")
-                    }
+    match (a, b) {
+        (CelValue::Error(e), _) => CelValue::Error(e),
+        (_, CelValue::Error(e)) => CelValue::Error(e),
+        (CelValue::Int(a), CelValue::Int(b)) => {
+            debug!(log, "Performing Int subtraction"; "left" => a, "right" => b);
+            match a.checked_sub(b) {
+                Some(r) => CelValue::Int(r),
+                None => {
+                    error!(log, "Integer overflow in subtraction"; "left" => a, "right" => b);
+                    CelValue::Error("return error for overflow".into())
                 }
             }
-            (CelValue::UInt(a), CelValue::UInt(b)) => {
-                debug!(log, "Performing UInt subtraction"; "left" => *a, "right" => *b);
-                match a.checked_sub(*b) {
-                    Some(result) => Box::into_raw(Box::new(CelValue::UInt(result))),
-                    None => {
-                        error!(log, "Unsigned integer underflow in subtraction";
-                            "operation" => "cel_value_sub",
-                            "type" => "UInt",
-                            "left" => *a,
-                            "right" => *b);
-                        crate::error::create_error_value("return error for overflow")
-                    }
+        }
+        (CelValue::UInt(a), CelValue::UInt(b)) => {
+            debug!(log, "Performing UInt subtraction"; "left" => a, "right" => b);
+            match a.checked_sub(b) {
+                Some(r) => CelValue::UInt(r),
+                None => {
+                    error!(log, "UInt underflow in subtraction"; "left" => a, "right" => b);
+                    CelValue::Error("return error for overflow".into())
                 }
             }
-            (CelValue::Double(a), CelValue::Double(b)) => {
-                debug!(log, "Performing Double subtraction"; "left" => *a, "right" => *b);
-                let result = arithmetic::double_sub(*a, *b);
-                Box::into_raw(Box::new(CelValue::Double(result)))
-            }
-            (CelValue::Timestamp(_), CelValue::Duration(_)) => {
-                debug!(log, "Performing Timestamp - Duration");
-                temporal::cel_timestamp_sub_duration(a_ptr, b_ptr)
-            }
-            (CelValue::Timestamp(_), CelValue::Timestamp(_)) => {
-                debug!(log, "Performing Timestamp - Timestamp");
-                temporal::cel_timestamp_diff(a_ptr, b_ptr)
-            }
-            (CelValue::Duration(_), CelValue::Duration(_)) => {
-                debug!(log, "Performing Duration - Duration");
-                temporal::cel_duration_sub(a_ptr, b_ptr)
-            }
-            _ => {
-                error!(log, "Cannot subtract incompatible types";
-                    "operation" => "cel_value_sub",
-                    "left_type" => format!("{:?}", a_val),
-                    "right_type" => format!("{:?}", b_val));
-                crate::error::create_error_value("no such overload")
-            }
+        }
+        (CelValue::Double(a), CelValue::Double(b)) => {
+            CelValue::Double(arithmetic::double_sub(a, b))
+        }
+        (CelValue::Timestamp(ts), CelValue::Duration(dur)) => {
+            temporal::timestamp_sub_duration_inner(ts, dur)
+        }
+        (CelValue::Timestamp(ts1), CelValue::Timestamp(ts2)) => {
+            temporal::timestamp_diff_inner(ts1, ts2)
+        }
+        (CelValue::Duration(d1), CelValue::Duration(d2)) => {
+            temporal::duration_sub_inner(d1, d2)
+        }
+        (a, b) => {
+            error!(log, "Cannot subtract incompatible types";
+                "left_type" => format!("{:?}", a),
+                "right_type" => format!("{:?}", b));
+            CelValue::Error("no such overload".into())
         }
     }
 }
 
-/// Polymorphic multiplication operator for CelValue objects.
+/// Polymorphic multiplication operator. Consumes both operands.
 ///
 /// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_mul(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    Box::into_raw(Box::new(value_mul(a, b)))
+}
+
+fn value_mul(a: CelValue, b: CelValue) -> CelValue {
     let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot multiply null values";
-                "function" => "cel_value_mul");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        // Propagate errors
-        if let CelValue::Error(_) = &*a_ptr {
-            return a_ptr;
-        }
-        if let CelValue::Error(_) = &*b_ptr {
-            return b_ptr;
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        match (a_val, b_val) {
-            (CelValue::Int(a), CelValue::Int(b)) => {
-                debug!(log, "Performing Int multiplication"; "left" => *a, "right" => *b);
-                match a.checked_mul(*b) {
-                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
-                    None => {
-                        error!(log, "Integer overflow in multiplication";
-                            "operation" => "cel_value_mul",
-                            "type" => "Int",
-                            "left" => *a,
-                            "right" => *b);
-                        crate::error::create_error_value("return error for overflow")
-                    }
-                }
+    match (a, b) {
+        (CelValue::Error(e), _) => CelValue::Error(e),
+        (_, CelValue::Error(e)) => CelValue::Error(e),
+        (CelValue::Int(a), CelValue::Int(b)) => match a.checked_mul(b) {
+            Some(r) => CelValue::Int(r),
+            None => {
+                error!(log, "Integer overflow in multiplication"; "left" => a, "right" => b);
+                CelValue::Error("return error for overflow".into())
             }
-            (CelValue::UInt(a), CelValue::UInt(b)) => {
-                debug!(log, "Performing UInt multiplication"; "left" => *a, "right" => *b);
-                match a.checked_mul(*b) {
-                    Some(result) => Box::into_raw(Box::new(CelValue::UInt(result))),
-                    None => {
-                        error!(log, "Unsigned integer overflow in multiplication";
-                            "operation" => "cel_value_mul",
-                            "type" => "UInt",
-                            "left" => *a,
-                            "right" => *b);
-                        crate::error::create_error_value("return error for overflow")
-                    }
-                }
+        },
+        (CelValue::UInt(a), CelValue::UInt(b)) => match a.checked_mul(b) {
+            Some(r) => CelValue::UInt(r),
+            None => {
+                error!(log, "UInt overflow in multiplication"; "left" => a, "right" => b);
+                CelValue::Error("return error for overflow".into())
             }
-            (CelValue::Double(a), CelValue::Double(b)) => {
-                debug!(log, "Performing Double multiplication"; "left" => *a, "right" => *b);
-                let result = arithmetic::double_mul(*a, *b);
-                Box::into_raw(Box::new(CelValue::Double(result)))
-            }
-            _ => {
-                error!(log, "Cannot multiply incompatible types";
-                    "operation" => "cel_value_mul",
-                    "left_type" => format!("{:?}", a_val),
-                    "right_type" => format!("{:?}", b_val));
-                crate::error::create_error_value("no such overload")
-            }
+        },
+        (CelValue::Double(a), CelValue::Double(b)) => CelValue::Double(arithmetic::double_mul(a, b)),
+        (a, b) => {
+            error!(log, "Cannot multiply incompatible types";
+                "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
+            CelValue::Error("no such overload".into())
         }
     }
 }
 
-/// Polymorphic division operator for CelValue objects.
+/// Polymorphic division operator. Consumes both operands.
 ///
 /// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_div(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    Box::into_raw(Box::new(value_div(a, b)))
+}
+
+fn value_div(a: CelValue, b: CelValue) -> CelValue {
     let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot divide null values";
-                "function" => "cel_value_div");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        // Propagate errors
-        if let CelValue::Error(_) = &*a_ptr {
-            return a_ptr;
-        }
-        if let CelValue::Error(_) = &*b_ptr {
-            return b_ptr;
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        match (a_val, b_val) {
-            (CelValue::Int(a), CelValue::Int(b)) => {
-                debug!(log, "Performing Int division"; "dividend" => *a, "divisor" => *b);
-                if *b == 0 {
-                    error!(log, "Division by zero";
-                        "operation" => "cel_value_div",
-                        "type" => "Int",
-                        "dividend" => *a,
-                        "divisor" => *b);
-                    return crate::error::create_error_value("divide by zero");
-                }
-                match a.checked_div(*b) {
-                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
-                    None => {
-                        error!(log, "Integer overflow in division";
-                            "operation" => "cel_value_div",
-                            "dividend" => *a,
-                            "divisor" => *b);
-                        crate::error::create_error_value("return error for overflow")
-                    }
+    match (a, b) {
+        (CelValue::Error(e), _) => CelValue::Error(e),
+        (_, CelValue::Error(e)) => CelValue::Error(e),
+        (CelValue::Int(a), CelValue::Int(b)) => {
+            if b == 0 {
+                return CelValue::Error("divide by zero".into());
+            }
+            match a.checked_div(b) {
+                Some(r) => CelValue::Int(r),
+                None => {
+                    error!(log, "Integer overflow in division"; "dividend" => a, "divisor" => b);
+                    CelValue::Error("return error for overflow".into())
                 }
             }
-            (CelValue::UInt(a), CelValue::UInt(b)) => {
-                debug!(log, "Performing UInt division"; "dividend" => *a, "divisor" => *b);
-                if *b == 0 {
-                    error!(log, "Division by zero";
-                        "operation" => "cel_value_div",
-                        "type" => "UInt",
-                        "dividend" => *a,
-                        "divisor" => *b);
-                    return crate::error::create_error_value("divide by zero");
-                }
-                Box::into_raw(Box::new(CelValue::UInt(a / b)))
+        }
+        (CelValue::UInt(a), CelValue::UInt(b)) => {
+            if b == 0 {
+                return CelValue::Error("divide by zero".into());
             }
-            (CelValue::Double(a), CelValue::Double(b)) => {
-                debug!(log, "Performing Double division"; "dividend" => *a, "divisor" => *b);
-                let result = arithmetic::double_div(*a, *b);
-                Box::into_raw(Box::new(CelValue::Double(result)))
-            }
-            _ => {
-                error!(log, "Cannot divide incompatible types";
-                    "operation" => "cel_value_div",
-                    "left_type" => format!("{:?}", a_val),
-                    "right_type" => format!("{:?}", b_val));
-                crate::error::create_error_value("no such overload")
-            }
+            CelValue::UInt(a / b)
+        }
+        (CelValue::Double(a), CelValue::Double(b)) => CelValue::Double(arithmetic::double_div(a, b)),
+        (a, b) => {
+            error!(log, "Cannot divide incompatible types";
+                "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
+            CelValue::Error("no such overload".into())
         }
     }
 }
 
-/// Polymorphic modulo operator for CelValue objects.
-/// Note: Per CEL spec, modulo is only defined for int and uint.
+/// Polymorphic modulo operator. Consumes both operands.
 ///
 /// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_mod(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    Box::into_raw(Box::new(value_mod(a, b)))
+}
+
+fn value_mod(a: CelValue, b: CelValue) -> CelValue {
     let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot modulo null values";
-                "function" => "cel_value_mod");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        // Propagate errors
-        if let CelValue::Error(_) = &*a_ptr {
-            return a_ptr;
-        }
-        if let CelValue::Error(_) = &*b_ptr {
-            return b_ptr;
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        match (a_val, b_val) {
-            (CelValue::Int(a), CelValue::Int(b)) => {
-                debug!(log, "Performing Int modulo"; "dividend" => *a, "divisor" => *b);
-                if *b == 0 {
-                    error!(log, "Modulo by zero";
-                        "operation" => "cel_value_mod",
-                        "type" => "Int",
-                        "dividend" => *a,
-                        "divisor" => *b);
-                    return crate::error::create_error_value("modulus by zero");
-                }
-                match a.checked_rem(*b) {
-                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
-                    None => crate::error::create_error_value("return error for overflow"),
-                }
+    match (a, b) {
+        (CelValue::Error(e), _) => CelValue::Error(e),
+        (_, CelValue::Error(e)) => CelValue::Error(e),
+        (CelValue::Int(a), CelValue::Int(b)) => {
+            if b == 0 {
+                return CelValue::Error("modulus by zero".into());
             }
-            (CelValue::UInt(a), CelValue::UInt(b)) => {
-                debug!(log, "Performing UInt modulo"; "dividend" => *a, "divisor" => *b);
-                if *b == 0 {
-                    error!(log, "Modulo by zero";
-                        "operation" => "cel_value_mod",
-                        "type" => "UInt",
-                        "dividend" => *a,
-                        "divisor" => *b);
-                    return crate::error::create_error_value("modulus by zero");
-                }
-                Box::into_raw(Box::new(CelValue::UInt(a % b)))
+            match a.checked_rem(b) {
+                Some(r) => CelValue::Int(r),
+                None => CelValue::Error("return error for overflow".into()),
             }
-            _ => {
-                error!(log, "Modulo is only defined for int and uint";
-                    "operation" => "cel_value_mod",
-                    "left_type" => format!("{:?}", a_val),
-                    "right_type" => format!("{:?}", b_val));
-                crate::error::create_error_value("no_such_overload")
+        }
+        (CelValue::UInt(a), CelValue::UInt(b)) => {
+            if b == 0 {
+                return CelValue::Error("modulus by zero".into());
             }
+            CelValue::UInt(a % b)
+        }
+        (a, b) => {
+            error!(log, "Modulo is only defined for int and uint";
+                "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
+            CelValue::Error("no_such_overload".into())
         }
     }
 }
@@ -1018,159 +829,87 @@ fn cel_map_keys_equal(a: &crate::types::CelMapKey, b: &crate::types::CelMapKey) 
     }
 }
 
-/// Polymorphic equality operator for CelValue objects.
-/// Implements CEL spec cross-type numeric equality: int, uint, and double
-/// are compared as if they exist on a continuous number line.
+/// Polymorphic equality operator. Consumes both operands.
 ///
 /// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot compare null values";
-                "function" => "cel_value_eq");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        // Check for errors and propagate them BEFORE type checking
-        if let CelValue::Error(_) = &*a_ptr {
-            return a_ptr;
-        }
-        if let CelValue::Error(_) = &*b_ptr {
-            return b_ptr;
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        let result = cel_equals(a_val, b_val);
-        Box::into_raw(Box::new(CelValue::Bool(result)))
-    }
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    let result = match (&a, &b) {
+        (CelValue::Error(_), _) => return Box::into_raw(Box::new(a)),
+        (_, CelValue::Error(_)) => return Box::into_raw(Box::new(b)),
+        _ => cel_equals(&a, &b),
+    };
+    Box::into_raw(Box::new(CelValue::Bool(result)))
 }
 
-/// Polymorphic inequality operator for CelValue objects.
-/// Implements CEL spec cross-type numeric inequality (negation of equality).
+/// Polymorphic inequality operator. Consumes both operands.
 ///
 /// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot compare null values";
-                "function" => "cel_value_ne");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        // Check for errors and propagate them BEFORE type checking
-        if let CelValue::Error(_) = &*a_ptr {
-            return a_ptr;
-        }
-        if let CelValue::Error(_) = &*b_ptr {
-            return b_ptr;
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        let result = !cel_equals(a_val, b_val);
-        Box::into_raw(Box::new(CelValue::Bool(result)))
-    }
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    let result = match (&a, &b) {
+        (CelValue::Error(_), _) => return Box::into_raw(Box::new(a)),
+        (_, CelValue::Error(_)) => return Box::into_raw(Box::new(b)),
+        _ => !cel_equals(&a, &b),
+    };
+    Box::into_raw(Box::new(CelValue::Bool(result)))
 }
 
-/// Polymorphic greater-than operator for CelValue objects.
-/// Implements CEL spec cross-type numeric ordering.
+/// Polymorphic greater-than operator. Consumes both operands.
 ///
 /// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot compare null values";
-                "function" => "cel_value_gt");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        // Check if either operand is an error and propagate it
-        match (a_val, b_val) {
-            (CelValue::Error(_), _) => return a_ptr,
-            (_, CelValue::Error(_)) => return b_ptr,
-            _ => {}
-        }
-
-        let result = match (a_val, b_val) {
-            // Same-type comparisons
-            (CelValue::Int(a), CelValue::Int(b)) => a > b,
-            (CelValue::UInt(a), CelValue::UInt(b)) => a > b,
-            (CelValue::Double(a), CelValue::Double(b)) => a > b,
-            (CelValue::Bytes(a), CelValue::Bytes(b)) => a > b,
-            (CelValue::String(a), CelValue::String(b)) => a > b,
-            (CelValue::Bool(a), CelValue::Bool(b)) => a > b, // false < true in CEL
-            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a > b,
-            (CelValue::Duration(a), CelValue::Duration(b)) => a > b,
-
-            // Cross-type numeric ordering
-            (CelValue::Int(a), CelValue::UInt(b)) => {
-                if *a < 0 {
-                    false
-                } else {
-                    (*a as u64) > *b
-                }
-            }
-            (CelValue::UInt(a), CelValue::Int(b)) => {
-                if *b < 0 {
-                    true
-                } else {
-                    *a > (*b as u64)
-                }
-            }
-            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) > *b,
-            (CelValue::Double(a), CelValue::Int(b)) => *a > (*b as f64),
-            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) > *b,
-            (CelValue::Double(a), CelValue::UInt(b)) => *a > (*b as f64),
-
-            _ => {
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    match (&a, &b) {
+        (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
+        (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
+        _ => match cel_value_less_than(&b, &a) {
+            Ok(result) => Box::into_raw(Box::new(CelValue::Bool(result))),
+            Err(_) => {
+                let log = crate::logging::get_logger();
                 error!(log, "Cannot compare incompatible types for greater-than";
-                    "operation" => "cel_value_gt",
-                    "left_type" => format!("{:?}", a_val),
-                    "right_type" => format!("{:?}", b_val));
-                return crate::error::create_error_value("no such overload");
+                    "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
+                crate::error::create_error_value("no such overload")
             }
-        };
-        Box::into_raw(Box::new(CelValue::Bool(result)))
+        },
     }
 }
 
-/// Polymorphic less-than operator for CelValue objects.
-/// Implements CEL spec cross-type numeric ordering.
+/// Polymorphic less-than operator. Consumes both operands.
 ///
-/// Internal helper: compare two CelValue references for less-than ordering.
-///
-/// Returns `Ok(true)` if `a < b`, `Ok(false)` if `a >= b`, or `Err(msg)` if the
-/// types are incomparable.  Does not touch raw pointers or allocation.
+/// # Safety
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    match (&a, &b) {
+        (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
+        (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
+        _ => match cel_value_less_than(&a, &b) {
+            Ok(result) => Box::into_raw(Box::new(CelValue::Bool(result))),
+            Err(_) => {
+                let log = crate::logging::get_logger();
+                error!(log, "Cannot compare incompatible types for less-than";
+                    "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
+                crate::error::create_error_value("no such overload")
+            }
+        },
+    }
+}
 pub(crate) fn cel_value_less_than(
     a_val: &CelValue,
     b_val: &CelValue,
@@ -1211,198 +950,59 @@ pub(crate) fn cel_value_less_than(
     Ok(result)
 }
 
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
-/// - The returned pointer must be freed using `cel_free` when no longer needed
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot compare null values";
-                "function" => "cel_value_lt");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        // Check for errors and propagate them BEFORE type checking
-        if let CelValue::Error(_) = &*a_ptr {
-            return a_ptr;
-        }
-        if let CelValue::Error(_) = &*b_ptr {
-            return b_ptr;
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        match cel_value_less_than(a_val, b_val) {
-            Ok(result) => Box::into_raw(Box::new(CelValue::Bool(result))),
-            Err(_) => {
-                error!(log, "Cannot compare incompatible types for less-than";
-                    "operation" => "cel_value_lt",
-                    "left_type" => format!("{:?}", a_val),
-                    "right_type" => format!("{:?}", b_val));
-                crate::error::create_error_value("no such overload")
-            }
-        }
-    }
-}
-
-/// Polymorphic greater-than-or-equal operator for CelValue objects.
-/// Implements CEL spec cross-type numeric ordering.
+/// Polymorphic greater-than-or-equal operator. Consumes both operands.
 ///
 /// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_gte(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot compare null values";
-                "function" => "cel_value_gte");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        // Check for errors and propagate them BEFORE type checking
-        if let CelValue::Error(_) = &*a_ptr {
-            return a_ptr;
-        }
-        if let CelValue::Error(_) = &*b_ptr {
-            return b_ptr;
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        let result = match (a_val, b_val) {
-            // Same-type comparisons
-            (CelValue::Int(a), CelValue::Int(b)) => a >= b,
-            (CelValue::UInt(a), CelValue::UInt(b)) => a >= b,
-            (CelValue::Double(a), CelValue::Double(b)) => a >= b,
-            (CelValue::Bytes(a), CelValue::Bytes(b)) => a >= b,
-            (CelValue::String(a), CelValue::String(b)) => a >= b,
-            (CelValue::Bool(a), CelValue::Bool(b)) => a >= b, // false < true in CEL
-            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a >= b,
-            (CelValue::Duration(a), CelValue::Duration(b)) => a >= b,
-
-            // Cross-type numeric ordering
-            (CelValue::Int(a), CelValue::UInt(b)) => {
-                if *a < 0 {
-                    false
-                } else {
-                    (*a as u64) >= *b
-                }
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    match (&a, &b) {
+        (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
+        (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
+        // gte(a, b) == !lt(a, b)
+        _ => match cel_value_less_than(&a, &b) {
+            Ok(lt) => Box::into_raw(Box::new(CelValue::Bool(!lt))),
+            Err(_) => {
+                let log = crate::logging::get_logger();
+                error!(log, "Cannot compare incompatible types for >=";
+                    "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
+                crate::error::create_error_value("no such overload")
             }
-            (CelValue::UInt(a), CelValue::Int(b)) => {
-                if *b < 0 {
-                    true
-                } else {
-                    *a >= (*b as u64)
-                }
-            }
-            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) >= *b,
-            (CelValue::Double(a), CelValue::Int(b)) => *a >= (*b as f64),
-            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) >= *b,
-            (CelValue::Double(a), CelValue::UInt(b)) => *a >= (*b as f64),
-
-            _ => {
-                error!(log, "Cannot compare incompatible types for greater-than-or-equal";
-                    "operation" => "cel_value_gte",
-                    "left_type" => format!("{:?}", a_val),
-                    "right_type" => format!("{:?}", b_val));
-                return crate::error::create_error_value("no such overload");
-            }
-        };
-        Box::into_raw(Box::new(CelValue::Bool(result)))
+        },
     }
 }
 
-/// Polymorphic less-than-or-equal operator for CelValue objects.
-/// Implements CEL spec cross-type numeric ordering.
+/// Polymorphic less-than-or-equal operator. Consumes both operands.
 ///
 /// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `a_ptr` and `b_ptr` are valid, properly aligned pointers to initialized CelValue instances
-/// - The returned pointer must be freed using `cel_free` when no longer needed
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_lte(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let log = crate::logging::get_logger();
-
-    unsafe {
-        if a_ptr.is_null() || b_ptr.is_null() {
-            error!(log, "Cannot compare null values";
-                "function" => "cel_value_lte");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        // Check for errors and propagate them BEFORE type checking
-        if let CelValue::Error(_) = &*a_ptr {
-            return a_ptr;
-        }
-        if let CelValue::Error(_) = &*b_ptr {
-            return b_ptr;
-        }
-
-        let a_val = &*a_ptr;
-        let b_val = &*b_ptr;
-
-        let result = match (a_val, b_val) {
-            // Same-type comparisons
-            (CelValue::Int(a), CelValue::Int(b)) => a <= b,
-            (CelValue::UInt(a), CelValue::UInt(b)) => a <= b,
-            (CelValue::Double(a), CelValue::Double(b)) => a <= b,
-            (CelValue::Bytes(a), CelValue::Bytes(b)) => a <= b,
-            (CelValue::String(a), CelValue::String(b)) => a <= b,
-            (CelValue::Bool(a), CelValue::Bool(b)) => a <= b, // false < true in CEL
-            (CelValue::Timestamp(a), CelValue::Timestamp(b)) => a <= b,
-            (CelValue::Duration(a), CelValue::Duration(b)) => a <= b,
-
-            // Cross-type numeric ordering
-            (CelValue::Int(a), CelValue::UInt(b)) => {
-                if *a < 0 {
-                    true
-                } else {
-                    (*a as u64) <= *b
-                }
+    let a = unsafe { *Box::from_raw(a_ptr) };
+    let b = unsafe { *Box::from_raw(b_ptr) };
+    match (&a, &b) {
+        (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
+        (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
+        // lte(a, b) == !lt(b, a)
+        _ => match cel_value_less_than(&b, &a) {
+            Ok(gt) => Box::into_raw(Box::new(CelValue::Bool(!gt))),
+            Err(_) => {
+                let log = crate::logging::get_logger();
+                error!(log, "Cannot compare incompatible types for <=";
+                    "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
+                crate::error::create_error_value("no such overload")
             }
-            (CelValue::UInt(a), CelValue::Int(b)) => {
-                if *b < 0 {
-                    false
-                } else {
-                    *a <= (*b as u64)
-                }
-            }
-            (CelValue::Int(a), CelValue::Double(b)) => (*a as f64) <= *b,
-            (CelValue::Double(a), CelValue::Int(b)) => *a <= (*b as f64),
-            (CelValue::UInt(a), CelValue::Double(b)) => (*a as f64) <= *b,
-            (CelValue::Double(a), CelValue::UInt(b)) => *a <= (*b as f64),
-
-            _ => {
-                error!(log, "Cannot compare incompatible types for less-than-or-equal";
-                    "operation" => "cel_value_lte",
-                    "left_type" => format!("{:?}", a_val),
-                    "right_type" => format!("{:?}", b_val));
-                return crate::error::create_error_value("no such overload");
-            }
-        };
-        Box::into_raw(Box::new(CelValue::Bool(result)))
+        },
     }
 }
 
@@ -1414,245 +1014,152 @@ pub unsafe extern "C" fn cel_value_lte(
 /// - Map: number of keys
 ///
 /// # Safety
-/// - `ptr` must be a valid, non-null CelValue pointer
-///
-/// # Arguments
-/// - `ptr`: Pointer to the value
-///
-/// # Returns
-/// The size as i64
-///
-/// # Panics
-/// - If the pointer is null
-/// - If the type doesn't support size operation
+/// - `ptr` must be a valid, non-null, uniquely-owned CelValue pointer
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
     let log = crate::logging::get_logger();
 
-    unsafe {
+    let value = unsafe {
         if ptr.is_null() {
-            error!(log, "Cannot get size of null value";
-                "function" => "cel_value_size");
-            // size() returns i64, can't return an error pointer — abort is the only option here
+            error!(log, "Cannot get size of null value"; "function" => "cel_value_size");
             abort_with_error("no such overload");
         }
+        &*ptr
+    };
 
-        let value = &*ptr;
-
-        match value {
-            CelValue::String(_) => string::cel_string_size(ptr),
-            CelValue::Bytes(_) => bytes::cel_bytes_size(ptr),
-            CelValue::Array(arr) => arr.len() as i64,
-            CelValue::Object(map) => map.len() as i64,
-            other => {
-                error!(log, "size() not supported for this type";
-                    "function" => "cel_value_size",
-                    "type" => format!("{:?}", other));
-                abort_with_error("no such overload");
-            }
+    match value {
+        CelValue::String(_) => string::cel_string_size(ptr),
+        CelValue::Bytes(_) => bytes::cel_bytes_size(ptr),
+        CelValue::Array(arr) => arr.len() as i64,
+        CelValue::Object(map) => map.len() as i64,
+        other => {
+            error!(log, "size() not supported for this type";
+                "function" => "cel_value_size",
+                "type" => format!("{:?}", other));
+            abort_with_error("no such overload");
         }
     }
 }
 
-/// Polymorphic negation operator for CelValue objects.
-/// Performs unary negation:
-/// - Int: arithmetic negation
-/// - Double: arithmetic negation
-/// - Duration: temporal negation
+/// Polymorphic negation operator. Consumes the operand.
 ///
 /// # Safety
-/// - `ptr` must be a valid, non-null CelValue pointer
-///
-/// # Arguments
-/// - `ptr`: Pointer to the operand
-///
-/// # Returns
-/// Pointer to a new heap-allocated CelValue containing the negated result
-///
-/// # Panics
-/// - If the pointer is null
-/// - If the type doesn't support negation
-/// - On integer overflow (negating i64::MIN)
+/// Pointer must be valid, non-null, uniquely-owned CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
+    let value = unsafe { *Box::from_raw(ptr) };
+    Box::into_raw(Box::new(value_negate(value)))
+}
+
+fn value_negate(value: CelValue) -> CelValue {
     let log = crate::logging::get_logger();
-
-    unsafe {
-        if ptr.is_null() {
-            error!(log, "Cannot negate null value";
-                "function" => "cel_value_negate");
-            return crate::error::create_error_value("no such overload");
-        }
-
-        let value = &*ptr;
-
-        // Propagate errors
-        if let CelValue::Error(_) = value {
-            return ptr;
-        }
-
-        match value {
-            CelValue::Int(i) => {
-                debug!(log, "Performing Int negation"; "value" => *i);
-                match i.checked_neg() {
-                    Some(result) => Box::into_raw(Box::new(CelValue::Int(result))),
-                    None => crate::error::create_error_value("return error for overflow"),
-                }
-            }
-            CelValue::Double(d) => {
-                debug!(log, "Performing Double negation"; "value" => *d);
-                Box::into_raw(Box::new(CelValue::Double(-d)))
-            }
-            CelValue::Duration(_) => {
-                debug!(log, "Performing Duration negation");
-                temporal::cel_duration_negate(ptr)
-            }
-            other => {
-                error!(log, "Negation not supported for this type";
-                    "function" => "cel_value_negate",
-                    "type" => format!("{:?}", other));
-                crate::error::create_error_value("no such overload")
-            }
+    match value {
+        CelValue::Error(e) => CelValue::Error(e),
+        CelValue::Int(i) => match i.checked_neg() {
+            Some(r) => CelValue::Int(r),
+            None => CelValue::Error("return error for overflow".into()),
+        },
+        CelValue::Double(d) => CelValue::Double(-d),
+        CelValue::Duration(d) => temporal::duration_negate_inner(d),
+        other => {
+            error!(log, "Negation not supported for this type";
+                "type" => format!("{:?}", other));
+            CelValue::Error("no such overload".into())
         }
     }
 }
 
-/// Index operator for arrays and maps.
-///
-/// # Parameters
-/// - `container_ptr`: Pointer to a CelValue (must be an Array or Object)
-/// - `index_ptr`: Pointer to a CelValue to use as index (Int/UInt/Double for arrays, String for maps)
-///
-/// # Returns
-/// - Pointer to a new CelValue containing the element at the given index
-///
-/// # Panics
-/// - If either pointer is null
-/// - If the container is not an Array or Object
-/// - If the index type doesn't match the container type
-/// - If the index is out of bounds (for arrays)
-/// - If the key doesn't exist (for maps)
-/// - If Double index is not a whole number
+/// Index operator for arrays and maps. Consumes both operands.
 ///
 /// # Safety
-/// - Both pointers must be valid CelValue pointers
+/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_index(
     container_ptr: *mut CelValue,
     index_ptr: *mut CelValue,
 ) -> *mut CelValue {
+    let container = unsafe { *Box::from_raw(container_ptr) };
+    let index = unsafe { *Box::from_raw(index_ptr) };
+    Box::into_raw(Box::new(value_index(container, index)))
+}
+
+fn value_index(container: CelValue, index: CelValue) -> CelValue {
     let log = crate::logging::get_logger();
-
-    unsafe {
-        if container_ptr.is_null() {
-            error!(log, "Cannot index null container";
-                "function" => "cel_value_index");
-            return crate::error::create_error_value("no such overload");
+    match (container, index) {
+        // Error propagation
+        (CelValue::Error(e), _) => CelValue::Error(e),
+        (_, CelValue::Error(e)) => CelValue::Error(e),
+        // Optional container
+        (CelValue::Optional(None), _) => CelValue::Optional(None),
+        (CelValue::Optional(Some(inner)), idx) => {
+            let result = value_index(*inner, idx);
+            match result {
+                CelValue::Error(_) => CelValue::Optional(None),
+                v => CelValue::Optional(Some(Box::new(v))),
+            }
         }
-        if index_ptr.is_null() {
-            error!(log, "Cannot use null index";
-                "function" => "cel_value_index");
-            return crate::error::create_error_value("no such overload");
+        // Array indexing with Int
+        (CelValue::Array(vec), CelValue::Int(idx)) => {
+            let i = if idx < 0 {
+                return CelValue::Error("index out of bounds".into());
+            } else {
+                idx as usize
+            };
+            match vec.into_iter().nth(i) {
+                Some(v) => v,
+                None => CelValue::Error("index out of bounds".into()),
+            }
         }
-
-        let container = &*container_ptr;
-        let index = &*index_ptr;
-
-        match (container, index) {
-            // Optional container: propagate into inner value, keeping Optional wrapper
-            (CelValue::Optional(None), _) => {
-                debug!(log, "Indexing optional.none(), returning Optional(None)"; "function" => "cel_value_index");
-                Box::into_raw(Box::new(CelValue::Optional(None)))
+        // Array indexing with UInt
+        (CelValue::Array(vec), CelValue::UInt(idx)) => {
+            match vec.into_iter().nth(idx as usize) {
+                Some(v) => v,
+                None => CelValue::Error("index out of bounds".into()),
             }
-            (CelValue::Optional(Some(inner)), _) => {
-                debug!(log, "Indexing into optional, propagating to inner"; "function" => "cel_value_index");
-                // Re-box the inner value, index it, then wrap result back in Optional
-                let inner_ptr = Box::into_raw(Box::new(*inner.clone()));
-                let result_ptr = cel_value_index(inner_ptr, index_ptr);
-                // Free the temporary inner clone — cel_value_index only borrows its arguments
-                drop(Box::from_raw(inner_ptr));
-                // If the inner index errored (key absent), return Optional(None)
-                // Otherwise wrap result in Optional(Some(...))
-                if matches!(&*result_ptr, CelValue::Error(_)) {
-                    // clean up the error value
-                    drop(Box::from_raw(result_ptr));
-                    Box::into_raw(Box::new(CelValue::Optional(None)))
-                } else {
-                    let val = *Box::from_raw(result_ptr);
-                    Box::into_raw(Box::new(CelValue::Optional(Some(Box::new(val)))))
-                }
+        }
+        // Array indexing with Double (whole numbers only)
+        (CelValue::Array(vec), CelValue::Double(idx)) => {
+            if idx.fract() != 0.0 || idx < 0.0 {
+                return CelValue::Error("no such overload".into());
             }
-            // Array indexing with Int
-            (CelValue::Array(_), CelValue::Int(idx)) => {
-                debug!(log, "Indexing array with Int"; "index" => *idx);
-                array::cel_array_get(container_ptr, *idx as i32)
+            match vec.into_iter().nth(idx as usize) {
+                Some(v) => v,
+                None => CelValue::Error("index out of bounds".into()),
             }
-            // Array indexing with UInt (convert to Int)
-            (CelValue::Array(_), CelValue::UInt(idx)) => {
-                debug!(log, "Indexing array with UInt"; "index" => *idx);
-                let idx_i64: i64 = match (*idx).try_into() {
-                    Ok(v) => v,
-                    Err(_) => {
-                        error!(log, "UInt index too large to convert to Int";
-                            "function" => "cel_value_index",
-                            "index" => *idx);
-                        return crate::error::create_error_value("no such overload");
-                    }
-                };
-                array::cel_array_get(container_ptr, idx_i64 as i32)
-            }
-            // Array indexing with Double (convert to Int)
-            (CelValue::Array(_), CelValue::Double(idx)) => {
-                debug!(log, "Indexing array with Double"; "index" => *idx);
-                // Check if the double is a whole number
-                if idx.fract() != 0.0 {
-                    error!(log, "Array index must be a whole number";
-                        "function" => "cel_value_index",
-                        "index" => *idx);
-                    // Return error value instead of aborting to allow logical operators to absorb errors
-                    return crate::error::create_error_value("no such overload");
-                }
-                // Convert to i64
-                let idx_i64 = *idx as i64;
-                array::cel_array_get(container_ptr, idx_i64 as i32)
-            }
-            // Map indexing with valid key types (bool, int, uint, string)
-            (CelValue::Object(map), key) => {
-                use crate::types::CelMapKey;
-                match CelMapKey::from_cel_value(key) {
-                    Some(map_key) => {
-                        debug!(log, "Indexing map"; "key" => map_key.to_string_key());
-                        match map.get(&map_key) {
-                            Some(value) => Box::into_raw(Box::new(value.clone())),
-                            None => crate::error::create_error_value("no such key"),
-                        }
-                    }
-                    None => {
-                        error!(log, "Map key must be bool, int, uint, or string";
-                            "function" => "cel_value_index",
-                            "key_type" => format!("{:?}", key));
-                        crate::error::create_error_value("no such overload")
+        }
+        // Map indexing
+        (CelValue::Object(map), key) => {
+            use crate::types::CelMapKey;
+            match CelMapKey::from_cel_value(&key) {
+                Some(map_key) => {
+                    debug!(log, "Indexing map"; "key" => map_key.to_string_key());
+                    match map.get(&map_key) {
+                        Some(value) => value.clone(),
+                        None => CelValue::Error("no such key".into()),
                     }
                 }
+                None => {
+                    error!(log, "Map key must be bool, int, uint, or string";
+                        "key_type" => format!("{:?}", key));
+                    CelValue::Error("no such overload".into())
+                }
             }
-            // Type mismatches
-            (CelValue::Array(_), _) => {
-                error!(log, "Array index must be Int, UInt, or Double";
-                    "function" => "cel_value_index",
-                    "index_type" => format!("{:?}", index));
-                // Return error value instead of aborting to allow logical operators to absorb errors
-                crate::error::create_error_value("no such overload")
-            }
-            _ => {
-                error!(log, "Index operator not supported for this type";
-                    "function" => "cel_value_index",
-                    "container_type" => format!("{:?}", container),
-                    "index_type" => format!("{:?}", index));
-                crate::error::create_error_value("no such overload")
-            }
+        }
+        // Array with wrong index type
+        (CelValue::Array(_), idx) => {
+            error!(log, "Array index must be Int, UInt, or Double";
+                "index_type" => format!("{:?}", idx));
+            CelValue::Error("no such overload".into())
+        }
+        // Anything else
+        (container, index) => {
+            error!(log, "Index operator not supported for this type";
+                "container_type" => format!("{:?}", container),
+                "index_type" => format!("{:?}", index));
+            CelValue::Error("no such overload".into())
         }
     }
 }
@@ -1794,9 +1301,7 @@ mod tests {
 
             assert_eq!(result, &expected);
 
-            // Clean up
-            cel_free_value(a_ptr);
-            cel_free_value(b_ptr);
+            // Clean up — inputs consumed by cel_value_add, only free result
             cel_free_value(result_ptr);
         }
     }
@@ -1851,9 +1356,7 @@ mod tests {
 
             assert_eq!(result, &expected);
 
-            // Clean up
-            cel_free_value(a_ptr);
-            cel_free_value(b_ptr);
+            // Clean up — inputs consumed by cel_value_eq, only free result
             cel_free_value(result_ptr);
         }
     }
@@ -1882,9 +1385,7 @@ mod tests {
 
             assert_eq!(result, &expected);
 
-            // Clean up
-            cel_free_value(a_ptr);
-            cel_free_value(b_ptr);
+            // Clean up — inputs consumed by cel_value_lt, only free result
             cel_free_value(result_ptr);
         }
     }
@@ -1911,9 +1412,7 @@ mod tests {
 
             assert_eq!(result, &expected);
 
-            // Clean up
-            cel_free_value(a_ptr);
-            cel_free_value(b_ptr);
+            // Clean up — inputs consumed by cel_value_gt, only free result
             cel_free_value(result_ptr);
         }
     }

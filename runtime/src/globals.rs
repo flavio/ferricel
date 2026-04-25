@@ -71,7 +71,7 @@ pub unsafe extern "C" fn cel_get_variable(name_ptr: *const u8, name_len: i32) ->
         let key = CelMapKey::String(name.to_string());
 
         match map.get(&key) {
-            Some(value) => value as *const CelValue as *mut CelValue,
+            Some(value) => Box::into_raw(Box::new(value.clone())),
             None => ptr::null_mut(),
         }
     }
