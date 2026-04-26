@@ -7,7 +7,7 @@
 //!
 //! Reference: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-regex-library>
 
-use crate::error::create_error_value;
+use crate::error::{null_to_unbound, create_error_value};
 use crate::types::CelValue;
 use regex_lite::Regex;
 use slog::error;
@@ -38,8 +38,8 @@ pub unsafe extern "C" fn cel_k8s_regex_find(
         return create_error_value("no such overload");
     }
 
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let pattern_val = unsafe { *Box::from_raw(pattern_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let pattern_val = unsafe { null_to_unbound(pattern_ptr) };
 
     let (s, pattern) = match (&string_val, &pattern_val) {
         (CelValue::String(s), CelValue::String(p)) => (s.clone(), p.clone()),
@@ -97,9 +97,9 @@ pub unsafe extern "C" fn cel_k8s_regex_find_all_n(
         return create_error_value("no such overload");
     }
 
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let pattern_val = unsafe { *Box::from_raw(pattern_ptr) };
-    let limit_val = unsafe { *Box::from_raw(limit_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let pattern_val = unsafe { null_to_unbound(pattern_ptr) };
+    let limit_val = unsafe { null_to_unbound(limit_ptr) };
 
     let (s, pattern) = match (&string_val, &pattern_val) {
         (CelValue::String(s), CelValue::String(p)) => (s.clone(), p.clone()),

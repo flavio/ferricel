@@ -8,7 +8,7 @@
 //! - Time cost for lists: O(n×m) where n is list size, m is element size
 //! - Time cost for maps: O(1) expected (implementation may vary)
 
-use crate::error::abort_with_error;
+use crate::error::{null_to_unbound, abort_with_error};
 use crate::helpers::cel_equals;
 use crate::types::CelValue;
 use slog::{debug, error, info};
@@ -49,8 +49,8 @@ pub unsafe extern "C" fn cel_value_in(
         abort_with_error("no such overload");
     }
 
-    let element = *Box::from_raw(element_ptr);
-    let container = *Box::from_raw(container_ptr);
+    let element = null_to_unbound(element_ptr);
+    let container = null_to_unbound(container_ptr);
 
     Box::into_raw(Box::new(value_in(element, container)))
 }

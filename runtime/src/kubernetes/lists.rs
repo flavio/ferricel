@@ -10,7 +10,7 @@
 //!
 //! Reference: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-list-library>
 
-use crate::error::create_error_value;
+use crate::error::{null_to_unbound, create_error_value};
 use crate::helpers::{cel_equals, cel_value_less_than};
 use crate::types::CelValue;
 use slog::error;
@@ -37,7 +37,7 @@ pub unsafe extern "C" fn cel_k8s_list_is_sorted(array_ptr: *mut CelValue) -> *mu
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { *Box::from_raw(array_ptr) };
+    let array_value = unsafe { null_to_unbound(array_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
@@ -97,7 +97,7 @@ pub unsafe extern "C" fn cel_k8s_list_sum(array_ptr: *mut CelValue) -> *mut CelV
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { *Box::from_raw(array_ptr) };
+    let array_value = unsafe { null_to_unbound(array_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
@@ -231,7 +231,7 @@ pub unsafe extern "C" fn cel_k8s_list_min(array_ptr: *mut CelValue) -> *mut CelV
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { *Box::from_raw(array_ptr) };
+    let array_value = unsafe { null_to_unbound(array_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
@@ -286,7 +286,7 @@ pub unsafe extern "C" fn cel_k8s_list_max(array_ptr: *mut CelValue) -> *mut CelV
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { *Box::from_raw(array_ptr) };
+    let array_value = unsafe { null_to_unbound(array_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
@@ -343,8 +343,8 @@ pub unsafe extern "C" fn cel_k8s_list_index_of(
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { *Box::from_raw(array_ptr) };
-    let needle = unsafe { *Box::from_raw(elem_ptr) };
+    let array_value = unsafe { null_to_unbound(array_ptr) };
+    let needle = unsafe { null_to_unbound(elem_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {
@@ -386,8 +386,8 @@ pub unsafe extern "C" fn cel_k8s_list_last_index_of(
         return create_error_value("no such overload");
     }
 
-    let array_value = unsafe { *Box::from_raw(array_ptr) };
-    let needle = unsafe { *Box::from_raw(elem_ptr) };
+    let array_value = unsafe { null_to_unbound(array_ptr) };
+    let needle = unsafe { null_to_unbound(elem_ptr) };
 
     match array_value {
         CelValue::Array(vec) => {

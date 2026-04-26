@@ -13,7 +13,7 @@
 //!   - `<URL>.getEscapedPath()` → string (percent-encoded)
 //!   - `<URL>.getQuery()`    → map\<string, list\<string\>>
 
-use crate::error::create_error_value;
+use crate::error::{null_to_unbound, create_error_value};
 use crate::types::{CelMapKey, CelValue};
 use slog::error;
 use std::collections::HashMap;
@@ -76,7 +76,7 @@ pub unsafe extern "C" fn cel_k8s_url_parse(str_ptr: *mut CelValue) -> *mut CelVa
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { *Box::from_raw(str_ptr) };
+    let val = unsafe { null_to_unbound(str_ptr) };
     let s = match val {
         CelValue::String(ref s) => s.clone(),
         other => {
@@ -112,7 +112,7 @@ pub unsafe extern "C" fn cel_k8s_is_url(str_ptr: *mut CelValue) -> *mut CelValue
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { *Box::from_raw(str_ptr) };
+    let val = unsafe { null_to_unbound(str_ptr) };
     let s = match val {
         CelValue::String(ref s) => s.clone(),
         other => {
@@ -143,7 +143,7 @@ pub unsafe extern "C" fn cel_k8s_url_get_scheme(url_ptr: *mut CelValue) -> *mut 
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { *Box::from_raw(url_ptr) };
+    let val = unsafe { null_to_unbound(url_ptr) };
     match val {
         CelValue::Url(u, original) => {
             let scheme = if is_path_only(&original) {
@@ -179,7 +179,7 @@ pub unsafe extern "C" fn cel_k8s_url_get_host(url_ptr: *mut CelValue) -> *mut Ce
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { *Box::from_raw(url_ptr) };
+    let val = unsafe { null_to_unbound(url_ptr) };
     match val {
         CelValue::Url(u, original) => {
             let host = if is_path_only(&original) {
@@ -221,7 +221,7 @@ pub unsafe extern "C" fn cel_k8s_url_get_hostname(url_ptr: *mut CelValue) -> *mu
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { *Box::from_raw(url_ptr) };
+    let val = unsafe { null_to_unbound(url_ptr) };
     match val {
         CelValue::Url(u, original) => {
             let hostname = if is_path_only(&original) {
@@ -264,7 +264,7 @@ pub unsafe extern "C" fn cel_k8s_url_get_port(url_ptr: *mut CelValue) -> *mut Ce
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { *Box::from_raw(url_ptr) };
+    let val = unsafe { null_to_unbound(url_ptr) };
     match val {
         CelValue::Url(u, original) => {
             let port = if is_path_only(&original) {
@@ -299,7 +299,7 @@ pub unsafe extern "C" fn cel_k8s_url_get_escaped_path(url_ptr: *mut CelValue) ->
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { *Box::from_raw(url_ptr) };
+    let val = unsafe { null_to_unbound(url_ptr) };
     match val {
         CelValue::Url(u, original) => {
             // url::Url normalises URLs without an explicit path to path="/".
@@ -351,7 +351,7 @@ pub unsafe extern "C" fn cel_k8s_url_get_query(url_ptr: *mut CelValue) -> *mut C
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { *Box::from_raw(url_ptr) };
+    let val = unsafe { null_to_unbound(url_ptr) };
     match val {
         CelValue::Url(u, _original) => {
             // Collect query params into a map<string, list<string>>.

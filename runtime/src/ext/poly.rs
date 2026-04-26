@@ -2,6 +2,7 @@
 //! - `indexOf` / `lastIndexOf`: `String` → substring search; `Array` → element search
 //! - `reverse`: `String` → character reversal; `Array` → element reversal
 
+use crate::error::null_to_unbound;
 use super::lists::list_reverse_impl;
 use super::strings::{find_index_of, find_last_index_of, string_reverse_impl};
 use crate::helpers::cel_equals;
@@ -18,7 +19,7 @@ use crate::types::CelValue;
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_reverse_poly(receiver_ptr: *mut CelValue) -> *mut CelValue {
-    let receiver = unsafe { *Box::from_raw(receiver_ptr) };
+    let receiver = unsafe { null_to_unbound(receiver_ptr) };
     match receiver {
         CelValue::String(s) => Box::into_raw(Box::new(string_reverse_impl(s))),
         CelValue::Array(v) => Box::into_raw(Box::new(list_reverse_impl(v))),
@@ -42,8 +43,8 @@ pub unsafe extern "C" fn cel_index_of_poly(
     receiver_ptr: *mut CelValue,
     arg_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let receiver = unsafe { *Box::from_raw(receiver_ptr) };
-    let arg = unsafe { *Box::from_raw(arg_ptr) };
+    let receiver = unsafe { null_to_unbound(receiver_ptr) };
+    let arg = unsafe { null_to_unbound(arg_ptr) };
     match receiver {
         CelValue::String(s) => {
             let sub = match arg {
@@ -85,8 +86,8 @@ pub unsafe extern "C" fn cel_last_index_of_poly(
     receiver_ptr: *mut CelValue,
     arg_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let receiver = unsafe { *Box::from_raw(receiver_ptr) };
-    let arg = unsafe { *Box::from_raw(arg_ptr) };
+    let receiver = unsafe { null_to_unbound(receiver_ptr) };
+    let arg = unsafe { null_to_unbound(arg_ptr) };
     match receiver {
         CelValue::String(s) => {
             let sub = match arg {

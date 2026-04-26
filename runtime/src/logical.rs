@@ -1,5 +1,6 @@
 //! Boolean logic operations on CelValue::Bool pointers.
 
+use crate::error::null_to_unbound;
 use crate::types::CelValue;
 
 // ---------------------------------------------------------------------------
@@ -17,12 +18,13 @@ use crate::types::CelValue;
 /// - non-bool operand => error "no such overload"
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid (or null) CelValue pointers. Null is treated as
+/// an unbound variable error. Non-null pointers must be uniquely-owned.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bool_and(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     Box::into_raw(Box::new(bool_and(a, b)))
 }
 
@@ -59,12 +61,13 @@ fn bool_and(a: CelValue, b: CelValue) -> CelValue {
 /// - non-bool operand => error "no such overload"
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid (or null) CelValue pointers. Null is treated as
+/// an unbound variable error. Non-null pointers must be uniquely-owned.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     Box::into_raw(Box::new(bool_or(a, b)))
 }
 
@@ -90,14 +93,19 @@ fn bool_or(a: CelValue, b: CelValue) -> CelValue {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Non-consuming query functions (called by compiler short-circuit control flow)
+// These BORROW the pointer — they do NOT take ownership.
+// ---------------------------------------------------------------------------
+
 /// Boolean NOT operator. Consumes the operand.
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid (or null) CelValue pointer. Null is treated as unbound error.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bool_not(a_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
     let result = match a {
         CelValue::Bool(b) => CelValue::Bool(!b),
         CelValue::Error(e) => CelValue::Error(e),
@@ -110,11 +118,11 @@ pub unsafe extern "C" fn cel_bool_not(a_ptr: *mut CelValue) -> *mut CelValue {
 /// Returns true for anything that is not CelValue::Bool(false).
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid (or null) CelValue pointer. Null is treated as unbound error.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_not_strictly_false(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     let result = !matches!(value, CelValue::Bool(false));
     Box::into_raw(Box::new(CelValue::Bool(result)))
 }

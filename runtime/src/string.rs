@@ -7,6 +7,7 @@
 //! - String comparison (startsWith, endsWith, contains)
 //! - Regular expression matching (matches)
 
+use crate::error::null_to_unbound;
 use crate::types::CelValue;
 use regex_lite::Regex;
 
@@ -109,8 +110,8 @@ pub unsafe extern "C" fn cel_string_starts_with(
     string_ptr: *mut CelValue,
     prefix_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = unsafe { *Box::from_raw(string_ptr) };
-    let p = unsafe { *Box::from_raw(prefix_ptr) };
+    let s = unsafe { null_to_unbound(string_ptr) };
+    let p = unsafe { null_to_unbound(prefix_ptr) };
     Box::into_raw(Box::new(string_starts_with(s, p)))
 }
 
@@ -144,8 +145,8 @@ pub unsafe extern "C" fn cel_string_ends_with(
     string_ptr: *mut CelValue,
     suffix_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = unsafe { *Box::from_raw(string_ptr) };
-    let p = unsafe { *Box::from_raw(suffix_ptr) };
+    let s = unsafe { null_to_unbound(string_ptr) };
+    let p = unsafe { null_to_unbound(suffix_ptr) };
     Box::into_raw(Box::new(string_ends_with(s, p)))
 }
 
@@ -179,8 +180,8 @@ pub unsafe extern "C" fn cel_string_contains(
     string_ptr: *mut CelValue,
     substring_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = unsafe { *Box::from_raw(string_ptr) };
-    let sub = unsafe { *Box::from_raw(substring_ptr) };
+    let s = unsafe { null_to_unbound(string_ptr) };
+    let sub = unsafe { null_to_unbound(substring_ptr) };
     Box::into_raw(Box::new(string_contains(s, sub)))
 }
 
@@ -226,8 +227,8 @@ pub unsafe extern "C" fn cel_string_matches(
     string_ptr: *mut CelValue,
     pattern_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let s = unsafe { *Box::from_raw(string_ptr) };
-    let p = unsafe { *Box::from_raw(pattern_ptr) };
+    let s = unsafe { null_to_unbound(string_ptr) };
+    let p = unsafe { null_to_unbound(pattern_ptr) };
     Box::into_raw(Box::new(string_matches(s, p)))
 }
 

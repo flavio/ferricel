@@ -2,7 +2,7 @@
 //! These functions extract values from CelValue pointers and panic on type mismatches.
 //! Also provides CEL type conversion functions (uint(), int(), double(), string(), timestamp(), duration()).
 
-use crate::error::abort_with_error;
+use crate::error::{null_to_unbound, abort_with_error};
 use crate::helpers::cel_create_duration;
 use crate::types::CelValue;
 use slog::{debug, error};
@@ -53,7 +53,7 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     Box::into_raw(Box::new(convert_uint(value)))
 }
 
@@ -105,7 +105,7 @@ fn convert_uint(value: CelValue) -> CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     Box::into_raw(Box::new(convert_int(value)))
 }
 
@@ -159,7 +159,7 @@ fn convert_int(value: CelValue) -> CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     Box::into_raw(Box::new(convert_double(value)))
 }
 
@@ -191,7 +191,7 @@ fn convert_double(value: CelValue) -> CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     Box::into_raw(Box::new(convert_timestamp(value)))
 }
 
@@ -237,7 +237,7 @@ fn convert_timestamp(value: CelValue) -> CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_duration(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     convert_duration_ptr(value)
 }
 
@@ -273,7 +273,7 @@ fn convert_duration_ptr(value: CelValue) -> *mut CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bytes(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     Box::into_raw(Box::new(convert_bytes(value)))
 }
 
@@ -297,7 +297,7 @@ fn convert_bytes(value: CelValue) -> CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bool(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     Box::into_raw(Box::new(convert_bool(value)))
 }
 
@@ -331,7 +331,7 @@ fn convert_bool(value: CelValue) -> CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     Box::into_raw(Box::new(convert_string(value)))
 }
 
@@ -377,7 +377,7 @@ fn convert_string(value: CelValue) -> CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     let type_name = value.type_name().to_string();
     Box::into_raw(Box::new(CelValue::Type(type_name)))
 }

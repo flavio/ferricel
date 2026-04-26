@@ -10,6 +10,7 @@
 //! - `slice(start, end)` — sub-list by index range
 //! - `sort` — sort comparable elements
 
+use crate::error::null_to_unbound;
 use crate::helpers::{cel_equals, cel_value_less_than};
 use crate::types::CelValue;
 
@@ -22,7 +23,7 @@ use crate::types::CelValue;
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_join(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -57,8 +58,8 @@ pub unsafe extern "C" fn cel_list_join_sep(
     list_ptr: *mut CelValue,
     sep_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
-    let sep_val = unsafe { *Box::from_raw(sep_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let sep_val = unsafe { null_to_unbound(sep_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -105,7 +106,7 @@ pub unsafe extern "C" fn cel_list_join_sep(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_distinct(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -134,7 +135,7 @@ pub unsafe extern "C" fn cel_list_distinct(list_ptr: *mut CelValue) -> *mut CelV
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_flatten(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -159,8 +160,8 @@ pub unsafe extern "C" fn cel_list_flatten_depth(
     list_ptr: *mut CelValue,
     depth_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
-    let depth_val = unsafe { *Box::from_raw(depth_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let depth_val = unsafe { null_to_unbound(depth_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -211,7 +212,7 @@ fn list_flatten_depth(list: &[CelValue], depth: i64) -> Vec<CelValue> {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_range(n_ptr: *mut CelValue) -> *mut CelValue {
-    let n_val = unsafe { *Box::from_raw(n_ptr) };
+    let n_val = unsafe { null_to_unbound(n_ptr) };
     let n = match n_val {
         CelValue::Int(n) => n,
         _ => {
@@ -240,7 +241,7 @@ pub(crate) fn list_reverse_impl(list: Vec<CelValue>) -> CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_reverse(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -270,9 +271,9 @@ pub unsafe extern "C" fn cel_list_slice(
     start_ptr: *mut CelValue,
     end_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
-    let start_val = unsafe { *Box::from_raw(start_ptr) };
-    let end_val = unsafe { *Box::from_raw(end_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let start_val = unsafe { null_to_unbound(start_ptr) };
+    let end_val = unsafe { null_to_unbound(end_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -329,7 +330,7 @@ pub unsafe extern "C" fn cel_list_slice(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_sort(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -389,8 +390,8 @@ pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
     values_ptr: *mut CelValue,
     keys_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let values_val = unsafe { *Box::from_raw(values_ptr) };
-    let keys_val = unsafe { *Box::from_raw(keys_ptr) };
+    let values_val = unsafe { null_to_unbound(values_ptr) };
+    let keys_val = unsafe { null_to_unbound(keys_ptr) };
     let values = match values_val {
         CelValue::Array(v) => v,
         _ => {
@@ -463,7 +464,7 @@ pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_first(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -489,7 +490,7 @@ pub unsafe extern "C" fn cel_list_first(list_ptr: *mut CelValue) -> *mut CelValu
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_last(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {

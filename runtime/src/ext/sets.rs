@@ -11,6 +11,7 @@
 //!
 //! The algorithms mirror the Go reference implementation (O(n*m) linear scans).
 
+use crate::error::null_to_unbound;
 use crate::helpers::cel_equals;
 use crate::types::CelValue;
 
@@ -28,8 +29,8 @@ pub unsafe extern "C" fn cel_sets_contains(
     list_ptr: *mut CelValue,
     sublist_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_val = unsafe { *Box::from_raw(list_ptr) };
-    let sublist_val = unsafe { *Box::from_raw(sublist_ptr) };
+    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let sublist_val = unsafe { null_to_unbound(sublist_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -65,8 +66,8 @@ pub unsafe extern "C" fn cel_sets_intersects(
     list_a_ptr: *mut CelValue,
     list_b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_a_val = unsafe { *Box::from_raw(list_a_ptr) };
-    let list_b_val = unsafe { *Box::from_raw(list_b_ptr) };
+    let list_a_val = unsafe { null_to_unbound(list_a_ptr) };
+    let list_b_val = unsafe { null_to_unbound(list_b_ptr) };
     let list_a = match list_a_val {
         CelValue::Array(v) => v,
         _ => {
@@ -105,8 +106,8 @@ pub unsafe extern "C" fn cel_sets_equivalent(
     list_a_ptr: *mut CelValue,
     list_b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_a_val = unsafe { *Box::from_raw(list_a_ptr) };
-    let list_b_val = unsafe { *Box::from_raw(list_b_ptr) };
+    let list_a_val = unsafe { null_to_unbound(list_a_ptr) };
+    let list_b_val = unsafe { null_to_unbound(list_b_ptr) };
     let list_a = match list_a_val {
         CelValue::Array(v) => v,
         _ => {

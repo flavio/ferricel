@@ -115,3 +115,20 @@ macro_rules! cel_abort {
 pub fn create_error_value(message: &str) -> *mut crate::types::CelValue {
     Box::into_raw(Box::new(crate::types::CelValue::Error(message.to_string())))
 }
+
+/// Consume a raw `*mut CelValue` pointer, handling null.
+///
+/// A null pointer arises when `cel_get_variable` cannot find a variable in the
+/// bindings map (unbound variable). All consuming ABI-boundary functions must
+/// call this instead of `*Box::from_raw(ptr)` to avoid a crash on null.
+///
+/// # Safety
+/// If non-null, `ptr` must be a valid, uniquely-owned heap allocation of a `CelValue`.
+#[inline]
+pub unsafe fn null_to_unbound(ptr: *mut crate::types::CelValue) -> crate::types::CelValue {
+    if ptr.is_null() {
+        crate::types::CelValue::Error("undeclared reference".into())
+    } else {
+        unsafe { *Box::from_raw(ptr) }
+    }
+}

@@ -6,7 +6,7 @@
 //! - Timestamp accessors (getFullYear, getMonth, etc.)
 //! - Overflow checking for valid timestamp range
 
-use crate::error::abort_with_error;
+use crate::error::{null_to_unbound, abort_with_error};
 use crate::helpers::{
     cel_create_duration, extract_datetime, extract_duration, extract_duration_chrono,
     extract_string,
@@ -168,8 +168,8 @@ pub unsafe fn cel_timestamp_add_duration(
     ts_ptr: *mut CelValue,
     dur_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let dur = *Box::from_raw(dur_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let dur = null_to_unbound(dur_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_add_duration: expected Timestamp"),
@@ -202,8 +202,8 @@ pub unsafe fn cel_timestamp_sub_duration(
     ts_ptr: *mut CelValue,
     dur_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let dur = *Box::from_raw(dur_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let dur = null_to_unbound(dur_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_sub_duration: expected Timestamp"),
@@ -231,8 +231,8 @@ pub unsafe fn cel_timestamp_sub_duration(
 /// Both pointers must be valid, non-null, uniquely-owned CelValue::Timestamp pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_timestamp_diff(ts1_ptr: *mut CelValue, ts2_ptr: *mut CelValue) -> *mut CelValue {
-    let ts1 = *Box::from_raw(ts1_ptr);
-    let ts2 = *Box::from_raw(ts2_ptr);
+    let ts1 = null_to_unbound(ts1_ptr);
+    let ts2 = null_to_unbound(ts2_ptr);
     let dt1 = match ts1 {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_diff: expected Timestamp"),
@@ -266,8 +266,8 @@ pub unsafe fn cel_timestamp_diff(ts1_ptr: *mut CelValue, ts2_ptr: *mut CelValue)
 /// Both pointers must be valid, non-null, uniquely-owned CelValue::Duration pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_add(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue) -> *mut CelValue {
-    let d1 = *Box::from_raw(dur1_ptr);
-    let d2 = *Box::from_raw(dur2_ptr);
+    let d1 = null_to_unbound(dur1_ptr);
+    let d2 = null_to_unbound(dur2_ptr);
     let (secs1, nanos1) = match d1 {
         CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
         _ => abort_with_error("cel_duration_add: expected Duration"),
@@ -294,8 +294,8 @@ pub unsafe fn cel_duration_add(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue)
 /// Both pointers must be valid, non-null, uniquely-owned CelValue::Duration pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_sub(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue) -> *mut CelValue {
-    let d1 = *Box::from_raw(dur1_ptr);
-    let d2 = *Box::from_raw(dur2_ptr);
+    let d1 = null_to_unbound(dur1_ptr);
+    let d2 = null_to_unbound(dur2_ptr);
     let (secs1, nanos1) = match d1 {
         CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
         _ => abort_with_error("cel_duration_sub: expected Duration"),
@@ -322,7 +322,7 @@ pub unsafe fn cel_duration_sub(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue)
 /// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let d = *Box::from_raw(dur_ptr);
+    let d = null_to_unbound(dur_ptr);
     let (secs, nanos) = match d {
         CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
         _ => abort_with_error("cel_duration_negate: expected Duration"),
@@ -352,7 +352,7 @@ pub unsafe fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut CelValue {
 /// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_get_hours(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let d = *Box::from_raw(dur_ptr);
+    let d = null_to_unbound(dur_ptr);
     let (secs, _nanos) = match d {
         CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
         _ => abort_with_error("cel_duration_get_hours: expected Duration"),
@@ -372,7 +372,7 @@ pub unsafe fn cel_duration_get_hours(dur_ptr: *mut CelValue) -> *mut CelValue {
 /// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let d = *Box::from_raw(dur_ptr);
+    let d = null_to_unbound(dur_ptr);
     let (secs, _nanos) = match d {
         CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
         _ => abort_with_error("cel_duration_get_minutes: expected Duration"),
@@ -392,7 +392,7 @@ pub unsafe fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mut CelValue 
 /// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let d = *Box::from_raw(dur_ptr);
+    let d = null_to_unbound(dur_ptr);
     let (secs, _nanos) = match d {
         CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
         _ => abort_with_error("cel_duration_get_seconds: expected Duration"),
@@ -412,7 +412,7 @@ pub unsafe fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mut CelValue 
 /// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_get_milliseconds(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let d = *Box::from_raw(dur_ptr);
+    let d = null_to_unbound(dur_ptr);
     let (_secs, nanos) = match d {
         CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
         _ => abort_with_error("cel_duration_get_milliseconds: expected Duration"),
@@ -462,7 +462,7 @@ fn validate_duration(seconds: i64, _nanos: i32) {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_full_year(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
+    let ts = null_to_unbound(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_full_year: expected Timestamp"),
@@ -484,8 +484,8 @@ pub unsafe extern "C" fn cel_timestamp_get_full_year_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let tz_val = *Box::from_raw(tz_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let tz_val = null_to_unbound(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_full_year_tz: expected Timestamp"),
@@ -516,7 +516,7 @@ pub unsafe extern "C" fn cel_timestamp_get_full_year_tz(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_month(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
+    let ts = null_to_unbound(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_month: expected Timestamp"),
@@ -538,8 +538,8 @@ pub unsafe extern "C" fn cel_timestamp_get_month_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let tz_val = *Box::from_raw(tz_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let tz_val = null_to_unbound(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_month_tz: expected Timestamp"),
@@ -570,7 +570,7 @@ pub unsafe extern "C" fn cel_timestamp_get_month_tz(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_date(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
+    let ts = null_to_unbound(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_date: expected Timestamp"),
@@ -592,8 +592,8 @@ pub unsafe extern "C" fn cel_timestamp_get_date_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let tz_val = *Box::from_raw(tz_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let tz_val = null_to_unbound(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_date_tz: expected Timestamp"),
@@ -624,7 +624,7 @@ pub unsafe extern "C" fn cel_timestamp_get_date_tz(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_month(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
+    let ts = null_to_unbound(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_month: expected Timestamp"),
@@ -646,8 +646,8 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_month_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let tz_val = *Box::from_raw(tz_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let tz_val = null_to_unbound(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_month_tz: expected Timestamp"),
@@ -678,7 +678,7 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_month_tz(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_week(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
+    let ts = null_to_unbound(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_week: expected Timestamp"),
@@ -701,8 +701,8 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_week_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let tz_val = *Box::from_raw(tz_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let tz_val = null_to_unbound(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_week_tz: expected Timestamp"),
@@ -737,7 +737,7 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_week_tz(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_year(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
+    let ts = null_to_unbound(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_year: expected Timestamp"),
@@ -760,8 +760,8 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_year_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let tz_val = *Box::from_raw(tz_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let tz_val = null_to_unbound(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_year_tz: expected Timestamp"),
@@ -794,7 +794,7 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_year_tz(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_hours(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = *Box::from_raw(value_ptr);
+    let value = null_to_unbound(value_ptr);
     match value {
         CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
@@ -821,8 +821,8 @@ pub unsafe extern "C" fn cel_timestamp_get_hours_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let tz_val = *Box::from_raw(tz_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let tz_val = null_to_unbound(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_hours_tz: expected Timestamp"),
@@ -855,7 +855,7 @@ pub unsafe extern "C" fn cel_timestamp_get_hours_tz(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_minutes(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = *Box::from_raw(value_ptr);
+    let value = null_to_unbound(value_ptr);
     match value {
         CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
@@ -882,8 +882,8 @@ pub unsafe extern "C" fn cel_timestamp_get_minutes_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let tz_val = *Box::from_raw(tz_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let tz_val = null_to_unbound(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_minutes_tz: expected Timestamp"),
@@ -916,7 +916,7 @@ pub unsafe extern "C" fn cel_timestamp_get_minutes_tz(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_seconds(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = *Box::from_raw(value_ptr);
+    let value = null_to_unbound(value_ptr);
     match value {
         CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
@@ -943,8 +943,8 @@ pub unsafe extern "C" fn cel_timestamp_get_seconds_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let tz_val = *Box::from_raw(tz_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let tz_val = null_to_unbound(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_seconds_tz: expected Timestamp"),
@@ -979,7 +979,7 @@ pub unsafe extern "C" fn cel_timestamp_get_seconds_tz(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_milliseconds(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = *Box::from_raw(value_ptr);
+    let value = null_to_unbound(value_ptr);
     match value {
         CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
@@ -1023,8 +1023,8 @@ pub unsafe extern "C" fn cel_timestamp_get_milliseconds_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = *Box::from_raw(ts_ptr);
-    let tz_val = *Box::from_raw(tz_ptr);
+    let ts = null_to_unbound(ts_ptr);
+    let tz_val = null_to_unbound(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_milliseconds_tz: expected Timestamp"),

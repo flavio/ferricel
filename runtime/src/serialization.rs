@@ -1,6 +1,7 @@
 //! JSON serialization of CEL values with memory-encoded results.
 //! Returns i64 with pointer in low 32 bits, length in high 32 bits.
 
+use crate::error::null_to_unbound;
 use crate::memory::cel_malloc;
 use crate::types::CelValue;
 
@@ -71,7 +72,7 @@ pub unsafe extern "C" fn cel_serialize_value(value_ptr: *mut CelValue) -> i64 {
     if value_ptr.is_null() {
         panic!("Null pointer passed to cel_serialize_value");
     }
-    let value = unsafe { *Box::from_raw(value_ptr) };
+    let value = unsafe { null_to_unbound(value_ptr) };
     serialize_to_json(&value)
 }
 

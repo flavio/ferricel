@@ -2,7 +2,7 @@
 //! These are used internally by other runtime functions and exported for compiler use.
 //! Also includes polymorphic operators that dispatch to type-specific implementations.
 
-use crate::error::abort_with_error;
+use crate::error::{abort_with_error, null_to_unbound};
 use crate::types::CelValue;
 use crate::{arithmetic, array, bytes, string, temporal};
 use slog::{debug, error};
@@ -343,8 +343,8 @@ pub unsafe extern "C" fn cel_value_add(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     Box::into_raw(Box::new(value_add(a, b)))
 }
 
@@ -413,8 +413,8 @@ pub unsafe extern "C" fn cel_value_sub(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     Box::into_raw(Box::new(value_sub(a, b)))
 }
 
@@ -474,8 +474,8 @@ pub unsafe extern "C" fn cel_value_mul(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     Box::into_raw(Box::new(value_mul(a, b)))
 }
 
@@ -517,8 +517,8 @@ pub unsafe extern "C" fn cel_value_div(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     Box::into_raw(Box::new(value_div(a, b)))
 }
 
@@ -564,8 +564,8 @@ pub unsafe extern "C" fn cel_value_mod(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     Box::into_raw(Box::new(value_mod(a, b)))
 }
 
@@ -836,8 +836,8 @@ fn cel_map_keys_equal(a: &crate::types::CelMapKey, b: &crate::types::CelMapKey) 
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     let result = match (&a, &b) {
         (CelValue::Error(_), _) => return Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => return Box::into_raw(Box::new(b)),
@@ -853,8 +853,8 @@ pub unsafe extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     let result = match (&a, &b) {
         (CelValue::Error(_), _) => return Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => return Box::into_raw(Box::new(b)),
@@ -870,8 +870,8 @@ pub unsafe extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     match (&a, &b) {
         (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
@@ -894,8 +894,8 @@ pub unsafe extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     match (&a, &b) {
         (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
@@ -960,8 +960,8 @@ pub unsafe extern "C" fn cel_value_gte(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     match (&a, &b) {
         (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
@@ -988,8 +988,8 @@ pub unsafe extern "C" fn cel_value_lte(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { *Box::from_raw(a_ptr) };
-    let b = unsafe { *Box::from_raw(b_ptr) };
+    let a = unsafe { null_to_unbound(a_ptr) };
+    let b = unsafe { null_to_unbound(b_ptr) };
     match (&a, &b) {
         (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
@@ -1049,7 +1049,7 @@ pub unsafe extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { *Box::from_raw(ptr) };
+    let value = unsafe { null_to_unbound(ptr) };
     Box::into_raw(Box::new(value_negate(value)))
 }
 
@@ -1081,8 +1081,8 @@ pub unsafe extern "C" fn cel_value_index(
     container_ptr: *mut CelValue,
     index_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let container = unsafe { *Box::from_raw(container_ptr) };
-    let index = unsafe { *Box::from_raw(index_ptr) };
+    let container = unsafe { null_to_unbound(container_ptr) };
+    let index = unsafe { null_to_unbound(index_ptr) };
     Box::into_raw(Box::new(value_index(container, index)))
 }
 

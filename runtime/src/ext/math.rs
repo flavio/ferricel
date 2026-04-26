@@ -7,6 +7,7 @@
 //!
 //! See: <https://pkg.go.dev/github.com/google/cel-go/ext#Math>
 
+use crate::error::null_to_unbound;
 use crate::types::CelValue;
 
 // ---------------------------------------------------------------------------
@@ -98,7 +99,7 @@ fn least_in_list(arr: &[CelValue]) -> *mut CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_greatest(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Array(ref arr) => greatest_in_list(arr),
         CelValue::Int(_) | CelValue::UInt(_) | CelValue::Double(_) => {
@@ -119,7 +120,7 @@ pub unsafe extern "C" fn cel_math_greatest(val_ptr: *mut CelValue) -> *mut CelVa
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_least(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Array(ref arr) => least_in_list(arr),
         CelValue::Int(_) | CelValue::UInt(_) | CelValue::Double(_) => {
@@ -140,7 +141,7 @@ pub unsafe extern "C" fn cel_math_least(val_ptr: *mut CelValue) -> *mut CelValue
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_ceil(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Double(d.ceil()))),
         _ => no_such_overload("math.ceil(double)"),
@@ -154,7 +155,7 @@ pub unsafe extern "C" fn cel_math_ceil(val_ptr: *mut CelValue) -> *mut CelValue 
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_floor(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Double(d.floor()))),
         _ => no_such_overload("math.floor(double)"),
@@ -171,7 +172,7 @@ pub unsafe extern "C" fn cel_math_floor(val_ptr: *mut CelValue) -> *mut CelValue
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_round(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Double(d.round()))),
         _ => no_such_overload("math.round(double)"),
@@ -187,7 +188,7 @@ pub unsafe extern "C" fn cel_math_round(val_ptr: *mut CelValue) -> *mut CelValue
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_trunc(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Double(d.trunc()))),
         _ => no_such_overload("math.trunc(double)"),
@@ -209,7 +210,7 @@ pub unsafe extern "C" fn cel_math_trunc(val_ptr: *mut CelValue) -> *mut CelValue
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_abs(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Int(i) => match i.checked_abs() {
             Some(v) => Box::into_raw(Box::new(CelValue::Int(v))),
@@ -231,7 +232,7 @@ pub unsafe extern "C" fn cel_math_abs(val_ptr: *mut CelValue) -> *mut CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_sign(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Int(i) => Box::into_raw(Box::new(CelValue::Int(i.signum()))),
         CelValue::UInt(u) => {
@@ -266,7 +267,7 @@ pub unsafe extern "C" fn cel_math_sign(val_ptr: *mut CelValue) -> *mut CelValue 
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_is_inf(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Bool(d.is_infinite()))),
         _ => no_such_overload("math.isInf(double)"),
@@ -282,7 +283,7 @@ pub unsafe extern "C" fn cel_math_is_inf(val_ptr: *mut CelValue) -> *mut CelValu
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_is_nan(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Bool(d.is_nan()))),
         _ => no_such_overload("math.isNaN(double)"),
@@ -299,7 +300,7 @@ pub unsafe extern "C" fn cel_math_is_nan(val_ptr: *mut CelValue) -> *mut CelValu
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_is_finite(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Bool(d.is_finite()))),
         _ => no_such_overload("math.isFinite(double)"),
@@ -320,8 +321,8 @@ pub unsafe extern "C" fn cel_math_bit_or(
     lhs_ptr: *mut CelValue,
     rhs_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let lhs = unsafe { *Box::from_raw(lhs_ptr) };
-    let rhs = unsafe { *Box::from_raw(rhs_ptr) };
+    let lhs = unsafe { null_to_unbound(lhs_ptr) };
+    let rhs = unsafe { null_to_unbound(rhs_ptr) };
     let type_names = (lhs.type_name(), rhs.type_name());
     match (lhs, rhs) {
         (CelValue::Int(a), CelValue::Int(b)) => Box::into_raw(Box::new(CelValue::Int(a | b))),
@@ -343,8 +344,8 @@ pub unsafe extern "C" fn cel_math_bit_and(
     lhs_ptr: *mut CelValue,
     rhs_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let lhs = unsafe { *Box::from_raw(lhs_ptr) };
-    let rhs = unsafe { *Box::from_raw(rhs_ptr) };
+    let lhs = unsafe { null_to_unbound(lhs_ptr) };
+    let rhs = unsafe { null_to_unbound(rhs_ptr) };
     let type_names = (lhs.type_name(), rhs.type_name());
     match (lhs, rhs) {
         (CelValue::Int(a), CelValue::Int(b)) => Box::into_raw(Box::new(CelValue::Int(a & b))),
@@ -366,8 +367,8 @@ pub unsafe extern "C" fn cel_math_bit_xor(
     lhs_ptr: *mut CelValue,
     rhs_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let lhs = unsafe { *Box::from_raw(lhs_ptr) };
-    let rhs = unsafe { *Box::from_raw(rhs_ptr) };
+    let lhs = unsafe { null_to_unbound(lhs_ptr) };
+    let rhs = unsafe { null_to_unbound(rhs_ptr) };
     let type_names = (lhs.type_name(), rhs.type_name());
     match (lhs, rhs) {
         (CelValue::Int(a), CelValue::Int(b)) => Box::into_raw(Box::new(CelValue::Int(a ^ b))),
@@ -388,7 +389,7 @@ pub unsafe extern "C" fn cel_math_bit_xor(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_bit_not(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     let type_name = val.type_name();
     match val {
         CelValue::Int(i) => Box::into_raw(Box::new(CelValue::Int(!i))),
@@ -410,8 +411,8 @@ pub unsafe extern "C" fn cel_math_bit_shift_left(
     val_ptr: *mut CelValue,
     offset_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
-    let offset_val = unsafe { *Box::from_raw(offset_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
+    let offset_val = unsafe { null_to_unbound(offset_ptr) };
     let offset = match offset_val {
         CelValue::Int(i) => i,
         ref v => return no_such_overload(&format!("math.bitShiftLeft(_, {})", v.type_name())),
@@ -447,8 +448,8 @@ pub unsafe extern "C" fn cel_math_bit_shift_right(
     val_ptr: *mut CelValue,
     offset_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
-    let offset_val = unsafe { *Box::from_raw(offset_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
+    let offset_val = unsafe { null_to_unbound(offset_ptr) };
     let offset = match offset_val {
         CelValue::Int(i) => i,
         ref v => return no_such_overload(&format!("math.bitShiftRight(_, {})", v.type_name())),
@@ -485,7 +486,7 @@ pub unsafe extern "C" fn cel_math_bit_shift_right(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_sqrt(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { *Box::from_raw(val_ptr) };
+    let val = unsafe { null_to_unbound(val_ptr) };
     let type_name = val.type_name();
     let d = match val {
         CelValue::Int(i) => i as f64,

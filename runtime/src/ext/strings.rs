@@ -4,6 +4,7 @@
 //! `charAt`, `indexOf`, `lastIndexOf`, `lowerAscii`, `upperAscii`, `replace`,
 //! `split`, `substring`, `trim`, `reverse`, `format`, and `strings.quote`.
 
+use crate::error::null_to_unbound;
 use crate::types::{CelMapKey, CelValue};
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -404,8 +405,8 @@ pub unsafe extern "C" fn cel_string_char_at(
     string_ptr: *mut CelValue,
     index_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let index_val = unsafe { *Box::from_raw(index_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let index_val = unsafe { null_to_unbound(index_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -453,9 +454,9 @@ pub unsafe extern "C" fn cel_string_index_of_offset(
     sub_ptr: *mut CelValue,
     offset_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let sub_val = unsafe { *Box::from_raw(sub_ptr) };
-    let offset_val = unsafe { *Box::from_raw(offset_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let sub_val = unsafe { null_to_unbound(sub_ptr) };
+    let offset_val = unsafe { null_to_unbound(offset_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -509,9 +510,9 @@ pub unsafe extern "C" fn cel_string_last_index_of_offset(
     sub_ptr: *mut CelValue,
     offset_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let sub_val = unsafe { *Box::from_raw(sub_ptr) };
-    let offset_val = unsafe { *Box::from_raw(offset_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let sub_val = unsafe { null_to_unbound(sub_ptr) };
+    let offset_val = unsafe { null_to_unbound(offset_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -561,7 +562,7 @@ pub unsafe extern "C" fn cel_string_last_index_of_offset(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_lower_ascii(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -583,7 +584,7 @@ pub unsafe extern "C" fn cel_string_lower_ascii(string_ptr: *mut CelValue) -> *m
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_upper_ascii(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -609,9 +610,9 @@ pub unsafe extern "C" fn cel_string_replace(
     old_ptr: *mut CelValue,
     new_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let old_val = unsafe { *Box::from_raw(old_ptr) };
-    let new_val = unsafe { *Box::from_raw(new_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let old_val = unsafe { null_to_unbound(old_ptr) };
+    let new_val = unsafe { null_to_unbound(new_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -655,10 +656,10 @@ pub unsafe extern "C" fn cel_string_replace_n(
     new_ptr: *mut CelValue,
     n_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let old_val = unsafe { *Box::from_raw(old_ptr) };
-    let new_val = unsafe { *Box::from_raw(new_ptr) };
-    let n_val = unsafe { *Box::from_raw(n_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let old_val = unsafe { null_to_unbound(old_ptr) };
+    let new_val = unsafe { null_to_unbound(new_ptr) };
+    let n_val = unsafe { null_to_unbound(n_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -715,8 +716,8 @@ pub unsafe extern "C" fn cel_string_split(
     string_ptr: *mut CelValue,
     sep_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let sep_val = unsafe { *Box::from_raw(sep_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let sep_val = unsafe { null_to_unbound(sep_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -753,9 +754,9 @@ pub unsafe extern "C" fn cel_string_split_n(
     sep_ptr: *mut CelValue,
     n_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let sep_val = unsafe { *Box::from_raw(sep_ptr) };
-    let n_val = unsafe { *Box::from_raw(n_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let sep_val = unsafe { null_to_unbound(sep_ptr) };
+    let n_val = unsafe { null_to_unbound(n_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -810,8 +811,8 @@ pub unsafe extern "C" fn cel_string_substring(
     string_ptr: *mut CelValue,
     start_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let start_val = unsafe { *Box::from_raw(start_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let start_val = unsafe { null_to_unbound(start_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -857,9 +858,9 @@ pub unsafe extern "C" fn cel_string_substring_range(
     start_ptr: *mut CelValue,
     end_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let start_val = unsafe { *Box::from_raw(start_ptr) };
-    let end_val = unsafe { *Box::from_raw(end_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let start_val = unsafe { null_to_unbound(start_ptr) };
+    let end_val = unsafe { null_to_unbound(end_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -915,7 +916,7 @@ pub unsafe extern "C" fn cel_string_substring_range(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_trim(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -936,7 +937,7 @@ pub unsafe extern "C" fn cel_string_trim(string_ptr: *mut CelValue) -> *mut CelV
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_reverse(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -958,7 +959,7 @@ pub unsafe extern "C" fn cel_string_reverse(string_ptr: *mut CelValue) -> *mut C
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_strings_quote(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -1003,8 +1004,8 @@ pub unsafe extern "C" fn cel_string_format(
     string_ptr: *mut CelValue,
     args_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { *Box::from_raw(string_ptr) };
-    let args_val = unsafe { *Box::from_raw(args_ptr) };
+    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let args_val = unsafe { null_to_unbound(args_ptr) };
     let fmt = match string_val {
         CelValue::String(s) => s,
         _ => {

@@ -3,6 +3,7 @@
 //! Provides the host import declaration and fixed-arity wrappers that compiled
 //! CEL programs use to call host-provided extension functions.
 
+use crate::error::null_to_unbound;
 use crate::memory::cel_malloc;
 use crate::serialization::encode_ptr_len;
 use crate::types::CelValue;
@@ -111,7 +112,7 @@ pub unsafe extern "C" fn cel_ext_call_1(
 ) -> *mut CelValue {
     let namespace = read_optional_str(ns_ptr, ns_len);
     let function = read_str(method_ptr, method_len);
-    let a0 = unsafe { *Box::from_raw(arg0) };
+    let a0 = unsafe { null_to_unbound(arg0) };
     unsafe { call_extension_impl(namespace, function, vec![a0]) }
 }
 
@@ -132,8 +133,8 @@ pub unsafe extern "C" fn cel_ext_call_2(
 ) -> *mut CelValue {
     let namespace = read_optional_str(ns_ptr, ns_len);
     let function = read_str(method_ptr, method_len);
-    let a0 = unsafe { *Box::from_raw(arg0) };
-    let a1 = unsafe { *Box::from_raw(arg1) };
+    let a0 = unsafe { null_to_unbound(arg0) };
+    let a1 = unsafe { null_to_unbound(arg1) };
     unsafe { call_extension_impl(namespace, function, vec![a0, a1]) }
 }
 
@@ -155,9 +156,9 @@ pub unsafe extern "C" fn cel_ext_call_3(
 ) -> *mut CelValue {
     let namespace = read_optional_str(ns_ptr, ns_len);
     let function = read_str(method_ptr, method_len);
-    let a0 = unsafe { *Box::from_raw(arg0) };
-    let a1 = unsafe { *Box::from_raw(arg1) };
-    let a2 = unsafe { *Box::from_raw(arg2) };
+    let a0 = unsafe { null_to_unbound(arg0) };
+    let a1 = unsafe { null_to_unbound(arg1) };
+    let a2 = unsafe { null_to_unbound(arg2) };
     unsafe { call_extension_impl(namespace, function, vec![a0, a1, a2]) }
 }
 
@@ -180,10 +181,10 @@ pub unsafe extern "C" fn cel_ext_call_4(
 ) -> *mut CelValue {
     let namespace = read_optional_str(ns_ptr, ns_len);
     let function = read_str(method_ptr, method_len);
-    let a0 = unsafe { *Box::from_raw(arg0) };
-    let a1 = unsafe { *Box::from_raw(arg1) };
-    let a2 = unsafe { *Box::from_raw(arg2) };
-    let a3 = unsafe { *Box::from_raw(arg3) };
+    let a0 = unsafe { null_to_unbound(arg0) };
+    let a1 = unsafe { null_to_unbound(arg1) };
+    let a2 = unsafe { null_to_unbound(arg2) };
+    let a3 = unsafe { null_to_unbound(arg3) };
     unsafe { call_extension_impl(namespace, function, vec![a0, a1, a2, a3]) }
 }
 
