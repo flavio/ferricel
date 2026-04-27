@@ -44,6 +44,7 @@ pub enum RuntimeFunction {
     // Globals
     InitBindings,
     GetVariable,
+    UnboundVariableError,
 
     // Field Access
     GetField,
@@ -346,6 +347,7 @@ impl RuntimeFunction {
 
             Self::InitBindings => "cel_init_bindings",
             Self::GetVariable => "cel_get_variable",
+            Self::UnboundVariableError => "cel_unbound_variable_error",
 
             Self::GetField => "cel_get_field",
             Self::HasField => "cel_has_field",

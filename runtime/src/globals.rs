@@ -77,6 +77,30 @@ pub unsafe extern "C" fn cel_get_variable(name_ptr: *const u8, name_len: i32) ->
     }
 }
 
+/// Return a `CelValue::Error("no such attribute: <name>")` for an unbound variable.
+///
+/// Called by the compiler after the full lookup chain finds no binding for a variable.
+///
+/// # Parameters
+/// - `name_ptr`: Pointer to UTF-8 string containing the variable name
+/// - `name_len`: Length of the variable name in bytes
+///
+/// # Returns
+/// - Owned pointer to a `CelValue::Error` — never null
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_unbound_variable_error(
+    name_ptr: *const u8,
+    name_len: i32,
+) -> *mut CelValue {
+    unsafe {
+        let name_slice = std::slice::from_raw_parts(name_ptr, name_len as usize);
+        let name = std::str::from_utf8(name_slice).unwrap_or("<invalid utf-8>");
+        let msg = format!("no such attribute: {name}");
+        Box::into_raw(Box::new(CelValue::Error(msg)))
+    }
+}
+
 /// Reset global variables to null.
 ///
 /// # Safety

@@ -98,9 +98,11 @@ pub fn variable_candidates(name: &str, container: &Option<String>) -> Vec<String
 /// Emit WASM code that tries each candidate variable name in order, returning the
 /// first non-null result. Leaves a `*mut CelValue` (i32) on the stack.
 ///
-/// If none of the candidates resolves, the result is a null pointer. Callers that
-/// need a non-null result should chain this with a field-access fallback.
-fn emit_variable_lookup_chain(
+/// If none of the candidates resolves, the result is a **null pointer**. Use this
+/// only when the caller needs the null as a "not found" sentinel (e.g. `compile_select`
+/// which falls back to field access). For `compile_ident`, use
+/// `emit_variable_lookup_chain` which converts null to a runtime error.
+fn emit_variable_lookup_chain_raw(
     candidates: &[String],
     body: &mut InstrSeqBuilder,
     env: &CompilerEnv,
@@ -108,17 +110,6 @@ fn emit_variable_lookup_chain(
 ) -> Result<walrus::LocalId, anyhow::Error> {
     let memory_id = get_memory_id(module)?;
     let result_local = module.locals.add(ValType::I32);
-
-    // Emit the first (most specific) candidate unconditionally, then wrap each
-    // successive fallback in an if-null branch.
-    //
-    // For candidates [A, B, C] we generate (innermost-first):
-    //   result = get_var(A)
-    //   if result == 0: result = get_var(B)
-    //     if result == 0: result = get_var(C)
-
-    // Emit all candidates into a flat list of instructions, then nest them.
-    // We build from the last candidate inward.
 
     // Helper: emit `cel_get_variable(name)` and store into result_local.
     let emit_get = |name: &str,
@@ -155,7 +146,6 @@ fn emit_variable_lookup_chain(
     };
 
     if candidates.is_empty() {
-        // Edge case: no candidates — push null
         body.i32_const(0).local_set(result_local);
         body.local_get(result_local);
         return Ok(result_local);
@@ -167,15 +157,141 @@ fn emit_variable_lookup_chain(
         return Ok(result_local);
     }
 
-    // Multiple candidates: try first, then if null try rest recursively.
-    // We build it iteratively from last to first using a stack of closures is awkward
-    // in Rust, so instead we use walrus dangling sequences.
-    //
-    // Emit: get(candidates[0]); if result==0 { get(candidates[1]); if result==0 { ... } }
     emit_get(&candidates[0], body, module)?;
-
-    // Build the chain for candidates[1..] using nested dangling sequences
     build_fallback_chain(&candidates[1..], result_local, body, env, module, memory_id)?;
+
+    body.local_get(result_local);
+    Ok(result_local)
+}
+
+/// Emit `cel_unbound_variable_error(name_ptr, name_len)` and store result into `result_local`.
+fn emit_unbound_error(
+    name: &str,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+    memory_id: walrus::MemoryId,
+) -> Result<walrus::LocalId, anyhow::Error> {
+    let result_local = module.locals.add(ValType::I32);
+    let name_bytes = name.as_bytes();
+    let name_len = name_bytes.len() as i32;
+    let ptr_local = module.locals.add(ValType::I32);
+
+    body.i32_const(name_len)
+        .call(env.get(RuntimeFunction::Malloc))
+        .local_set(ptr_local);
+
+    for (offset, &byte) in name_bytes.iter().enumerate() {
+        body.local_get(ptr_local);
+        body.i32_const(byte as i32);
+        body.store(
+            memory_id,
+            walrus::ir::StoreKind::I32_8 { atomic: false },
+            walrus::ir::MemArg {
+                align: 1,
+                offset: offset as u64,
+            },
+        );
+    }
+
+    body.local_get(ptr_local)
+        .i32_const(name_len)
+        .call(env.get(RuntimeFunction::UnboundVariableError))
+        .local_set(result_local);
+
+    Ok(result_local)
+}
+
+/// After the lookup chain, if `result_local` is still null emit `cel_unbound_variable_error`
+/// and store its result back into `result_local`.
+fn emit_null_to_unbound_error(
+    name: &str,
+    result_local: walrus::LocalId,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+    memory_id: walrus::MemoryId,
+) -> Result<(), anyhow::Error> {
+    body.local_get(result_local)
+        .unop(walrus::ir::UnaryOp::I32Eqz);
+
+    let then_seq = body.dangling_instr_seq(None);
+    let then_id = then_seq.id();
+    let else_seq = body.dangling_instr_seq(None);
+    let else_id = else_seq.id();
+
+    body.instr(walrus::ir::IfElse {
+        consequent: then_id,
+        alternative: else_id,
+    });
+
+    // Then branch (null): emit error and store into result_local
+    {
+        let mut then_body = body.instr_seq(then_id);
+        let name_bytes = name.as_bytes();
+        let name_len = name_bytes.len() as i32;
+        let ptr_local = module.locals.add(ValType::I32);
+
+        then_body
+            .i32_const(name_len)
+            .call(env.get(RuntimeFunction::Malloc))
+            .local_set(ptr_local);
+
+        for (offset, &byte) in name_bytes.iter().enumerate() {
+            then_body.local_get(ptr_local);
+            then_body.i32_const(byte as i32);
+            then_body.store(
+                memory_id,
+                walrus::ir::StoreKind::I32_8 { atomic: false },
+                walrus::ir::MemArg {
+                    align: 1,
+                    offset: offset as u64,
+                },
+            );
+        }
+
+        then_body
+            .local_get(ptr_local)
+            .i32_const(name_len)
+            .call(env.get(RuntimeFunction::UnboundVariableError))
+            .local_set(result_local);
+    }
+
+    // Else branch: result already valid, nothing to do
+
+    Ok(())
+}
+
+/// Emit WASM code that tries each candidate variable name in order, returning the
+/// first non-null result. If no candidate resolves, emits a call to
+/// `cel_unbound_variable_error` with the bare (last) candidate name so the result
+/// is always a valid (non-null) `*mut CelValue`. Leaves an i32 on the stack.
+///
+/// Callers that need a null sentinel for "not found" (e.g. `compile_select`) must
+/// use `emit_variable_lookup_chain_raw` instead.
+fn emit_variable_lookup_chain(
+    candidates: &[String],
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+) -> Result<walrus::LocalId, anyhow::Error> {
+    let memory_id = get_memory_id(module)?;
+
+    if candidates.is_empty() {
+        // No candidates at all — emit an error directly with an empty name
+        let result_local = emit_unbound_error("", body, env, module, memory_id)?;
+        body.local_get(result_local);
+        return Ok(result_local);
+    }
+
+    // Run the raw lookup chain (may leave null in result_local on miss)
+    let result_local = emit_variable_lookup_chain_raw(candidates, body, env, module)?;
+    // Pop the value left on the stack by the raw chain — we'll put it back after the check
+    body.local_set(result_local);
+
+    // If null, replace with a proper error value naming the variable
+    let bare_name = candidates.last().unwrap().as_str();
+    emit_null_to_unbound_error(bare_name, result_local, body, env, module, memory_id)?;
 
     body.local_get(result_local);
     Ok(result_local)
@@ -381,8 +497,8 @@ pub fn compile_select(
             let memory_id = get_memory_id(module)?;
             let result_local = module.locals.add(ValType::I32);
 
-            // Try all candidates
-            emit_variable_lookup_chain(&candidates, body, env, module)?;
+            // Try all candidates (raw — returns null if not found, for field-access fallback)
+            emit_variable_lookup_chain_raw(&candidates, body, env, module)?;
             body.local_set(result_local);
 
             // if result != null: use it; else: do field access
