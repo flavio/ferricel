@@ -123,7 +123,7 @@ impl Default for Builder {
 
 /// An immutable CEL-to-WASM compiler.
 ///
-/// Construct via [`CompilerBuilder`].  The parsed `ProtoSchema` (if any) is
+/// Construct via [`Builder`].  The parsed `ProtoSchema` (if any) is
 /// ready at construction time and reused across every call to [`compile`](Self::compile).
 pub struct Compiler {
     schema: Option<ProtoSchema>,

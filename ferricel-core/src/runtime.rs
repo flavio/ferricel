@@ -72,7 +72,7 @@ struct HostState {
 /// ```
 ///
 /// The same [`ferricel_types::extensions::ExtensionDecl`] must also be passed to
-/// [`crate::compiler::CompilerOptions::extensions`] at compile time so the compiler
+/// [`crate::compiler::Builder::with_extension`] at compile time so the compiler
 /// can validate call sites (arity, call style).
 ///
 /// # Log level
@@ -114,8 +114,8 @@ impl CelEngine {
     ///
     /// The `decl` is used to derive the `(namespace, function)` key for dispatch
     /// at runtime. For compile-time arity/style validation, pass `decl` to
-    /// [`crate::compiler::CompilerOptions::extensions`] when calling
-    /// [`crate::compiler::compile_cel_to_wasm`].
+    /// [`crate::compiler::Builder::with_extension`] when calling
+    /// [`crate::compiler::Builder::build`].
     pub fn register_extension(
         &mut self,
         decl: ExtensionDecl,
