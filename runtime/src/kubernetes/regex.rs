@@ -7,7 +7,7 @@
 //!
 //! Reference: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-regex-library>
 
-use crate::error::{null_to_unbound, create_error_value};
+use crate::error::{create_error_value, null_to_unbound};
 use crate::types::CelValue;
 use regex_lite::Regex;
 use slog::error;

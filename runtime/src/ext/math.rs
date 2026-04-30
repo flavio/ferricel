@@ -102,9 +102,7 @@ pub unsafe extern "C" fn cel_math_greatest(val_ptr: *mut CelValue) -> *mut CelVa
     let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Array(ref arr) => greatest_in_list(arr),
-        CelValue::Int(_) | CelValue::UInt(_) | CelValue::Double(_) => {
-            Box::into_raw(Box::new(val))
-        }
+        CelValue::Int(_) | CelValue::UInt(_) | CelValue::Double(_) => Box::into_raw(Box::new(val)),
         _ => no_such_overload("math.@max"),
     }
 }
@@ -123,9 +121,7 @@ pub unsafe extern "C" fn cel_math_least(val_ptr: *mut CelValue) -> *mut CelValue
     let val = unsafe { null_to_unbound(val_ptr) };
     match val {
         CelValue::Array(ref arr) => least_in_list(arr),
-        CelValue::Int(_) | CelValue::UInt(_) | CelValue::Double(_) => {
-            Box::into_raw(Box::new(val))
-        }
+        CelValue::Int(_) | CelValue::UInt(_) | CelValue::Double(_) => Box::into_raw(Box::new(val)),
         _ => no_such_overload("math.@min"),
     }
 }
@@ -327,10 +323,7 @@ pub unsafe extern "C" fn cel_math_bit_or(
     match (lhs, rhs) {
         (CelValue::Int(a), CelValue::Int(b)) => Box::into_raw(Box::new(CelValue::Int(a | b))),
         (CelValue::UInt(a), CelValue::UInt(b)) => Box::into_raw(Box::new(CelValue::UInt(a | b))),
-        _ => no_such_overload(&format!(
-            "math.bitOr({}, {})",
-            type_names.0, type_names.1
-        )),
+        _ => no_such_overload(&format!("math.bitOr({}, {})", type_names.0, type_names.1)),
     }
 }
 
@@ -350,10 +343,7 @@ pub unsafe extern "C" fn cel_math_bit_and(
     match (lhs, rhs) {
         (CelValue::Int(a), CelValue::Int(b)) => Box::into_raw(Box::new(CelValue::Int(a & b))),
         (CelValue::UInt(a), CelValue::UInt(b)) => Box::into_raw(Box::new(CelValue::UInt(a & b))),
-        _ => no_such_overload(&format!(
-            "math.bitAnd({}, {})",
-            type_names.0, type_names.1
-        )),
+        _ => no_such_overload(&format!("math.bitAnd({}, {})", type_names.0, type_names.1)),
     }
 }
 
@@ -373,10 +363,7 @@ pub unsafe extern "C" fn cel_math_bit_xor(
     match (lhs, rhs) {
         (CelValue::Int(a), CelValue::Int(b)) => Box::into_raw(Box::new(CelValue::Int(a ^ b))),
         (CelValue::UInt(a), CelValue::UInt(b)) => Box::into_raw(Box::new(CelValue::UInt(a ^ b))),
-        _ => no_such_overload(&format!(
-            "math.bitXor({}, {})",
-            type_names.0, type_names.1
-        )),
+        _ => no_such_overload(&format!("math.bitXor({}, {})", type_names.0, type_names.1)),
     }
 }
 
@@ -424,11 +411,19 @@ pub unsafe extern "C" fn cel_math_bit_shift_left(
     let val_type_name = val.type_name();
     match val {
         CelValue::Int(i) => {
-            let result = if shift >= 64 { 0i64 } else { i.wrapping_shl(shift) };
+            let result = if shift >= 64 {
+                0i64
+            } else {
+                i.wrapping_shl(shift)
+            };
             Box::into_raw(Box::new(CelValue::Int(result)))
         }
         CelValue::UInt(u) => {
-            let result = if shift >= 64 { 0u64 } else { u.wrapping_shl(shift) };
+            let result = if shift >= 64 {
+                0u64
+            } else {
+                u.wrapping_shl(shift)
+            };
             Box::into_raw(Box::new(CelValue::UInt(result)))
         }
         _ => no_such_overload(&format!("math.bitShiftLeft({}, int)", val_type_name)),
@@ -462,7 +457,11 @@ pub unsafe extern "C" fn cel_math_bit_shift_right(
     match val {
         CelValue::Int(i) => {
             // Logical (unsigned) right shift: cast to u64, shift, cast back.
-            let result = if shift >= 64 { 0i64 } else { ((i as u64) >> shift) as i64 };
+            let result = if shift >= 64 {
+                0i64
+            } else {
+                ((i as u64) >> shift) as i64
+            };
             Box::into_raw(Box::new(CelValue::Int(result)))
         }
         CelValue::UInt(u) => {
@@ -526,8 +525,7 @@ mod tests {
         a: CelValue,
         b: CelValue,
     ) -> CelValue {
-        let result_ptr =
-            unsafe { f(Box::into_raw(Box::new(a)), Box::into_raw(Box::new(b))) };
+        let result_ptr = unsafe { f(Box::into_raw(Box::new(a)), Box::into_raw(Box::new(b))) };
         let result = unsafe { (*result_ptr).clone() };
         unsafe { cel_free_value(result_ptr) };
         result
@@ -681,8 +679,7 @@ mod tests {
 
     #[test]
     fn test_bit_shift_left_negative_offset_is_error() {
-        let result =
-            unsafe { call2(cel_math_bit_shift_left, CelValue::Int(1), CelValue::Int(-1)) };
+        let result = unsafe { call2(cel_math_bit_shift_left, CelValue::Int(1), CelValue::Int(-1)) };
         assert!(is_error(&result));
         assert!(!error_msg(&result).contains("no such overload"));
     }
@@ -794,8 +791,7 @@ mod tests {
 
     #[test]
     fn test_bit_or_type_mismatch_error_contains_type_names() {
-        let result =
-            unsafe { call2(cel_math_bit_or, CelValue::Double(1.0), CelValue::Int(1)) };
+        let result = unsafe { call2(cel_math_bit_or, CelValue::Double(1.0), CelValue::Int(1)) };
         let msg = error_msg(&result);
         assert!(msg.contains("double"), "expected 'double' in: {msg}");
         assert!(msg.contains("int"), "expected 'int' in: {msg}");

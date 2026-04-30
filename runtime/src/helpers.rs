@@ -171,13 +171,6 @@ pub unsafe extern "C" fn cel_create_error(
     }
 }
 
-/// Internal helper: Extracts bool from CelValue or panics with type error.
-/// This is not exported - it's used by logical operations.
-pub(crate) fn extract_bool(ptr: *mut CelValue) -> bool {
-    let log = crate::logging::get_logger();
-    extract_bool_with_log(ptr, &log)
-}
-
 /// Test-only helper: Extracts i64 from a CelValue::Int pointer, or aborts.
 #[cfg(test)]
 pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
@@ -185,150 +178,6 @@ pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
         match &*ptr {
             CelValue::Int(i) => *i,
             other => crate::error::abort_with_error(&format!("expected Int, got {:?}", other)),
-        }
-    }
-}
-
-/// Internal helper with logger: Extracts bool from CelValue or aborts with structured error.
-pub(crate) fn extract_bool_with_log(ptr: *mut CelValue, log: &slog::Logger) -> bool {
-    unsafe {
-        if ptr.is_null() {
-            error!(log, "Null pointer in extract operation";
-                "function" => "extract_bool",
-                "pointer" => "null");
-            abort_with_error("no such overload");
-        }
-        match &*ptr {
-            CelValue::Bool(b) => *b,
-            other => {
-                error!(log, "Type mismatch in extraction";
-                    "function" => "extract_bool",
-                    "expected" => "Bool",
-                    "actual" => format!("{:?}", other));
-                abort_with_error("no such overload");
-            }
-        }
-    }
-}
-
-/// Internal helper: Extracts (seconds, nanos) from CelValue::Duration or panics with type error.
-/// This is not exported - it's used by temporal operations.
-pub(crate) fn extract_duration(ptr: *mut CelValue) -> (i64, i32) {
-    let log = crate::logging::get_logger();
-    extract_duration_with_log(ptr, &log)
-}
-
-/// Internal helper with logger: Extracts (seconds, nanos) from CelValue::Duration.
-pub(crate) fn extract_duration_with_log(ptr: *mut CelValue, log: &slog::Logger) -> (i64, i32) {
-    unsafe {
-        if ptr.is_null() {
-            error!(log, "Null pointer in extract operation";
-                "function" => "extract_duration",
-                "pointer" => "null");
-            abort_with_error("no such overload");
-        }
-        match &*ptr {
-            CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(d),
-            other => {
-                error!(log, "Type mismatch in extraction";
-                    "function" => "extract_duration",
-                    "expected" => "Duration",
-                    "actual" => format!("{:?}", other));
-                abort_with_error("no such overload");
-            }
-        }
-    }
-}
-
-/// Internal helper: Extracts DateTime<FixedOffset> directly from CelValue::Timestamp.
-/// This is not exported - it's used by temporal accessor operations.
-pub(crate) fn extract_datetime(ptr: *mut CelValue) -> chrono::DateTime<chrono::FixedOffset> {
-    let log = crate::logging::get_logger();
-    extract_datetime_with_log(ptr, &log)
-}
-
-/// Internal helper with logger: Extracts DateTime<FixedOffset> from CelValue::Timestamp.
-pub(crate) fn extract_datetime_with_log(
-    ptr: *mut CelValue,
-    log: &slog::Logger,
-) -> chrono::DateTime<chrono::FixedOffset> {
-    unsafe {
-        if ptr.is_null() {
-            error!(log, "Null pointer in extract operation";
-                "function" => "extract_datetime",
-                "pointer" => "null");
-            abort_with_error("no such overload");
-        }
-        match &*ptr {
-            CelValue::Timestamp(dt) => *dt,
-            other => {
-                error!(log, "Type mismatch in extraction";
-                    "function" => "extract_datetime",
-                    "expected" => "Timestamp",
-                    "actual" => format!("{:?}", other));
-                abort_with_error("no such overload");
-            }
-        }
-    }
-}
-
-/// Internal helper: Extracts String from CelValue::String.
-/// This is not exported - it's used by timezone-aware temporal operations.
-pub(crate) fn extract_string(ptr: *mut CelValue) -> String {
-    let log = crate::logging::get_logger();
-    extract_string_with_log(ptr, &log)
-}
-
-/// Internal helper with logger: Extracts String from CelValue::String.
-pub(crate) fn extract_string_with_log(ptr: *mut CelValue, log: &slog::Logger) -> String {
-    unsafe {
-        if ptr.is_null() {
-            error!(log, "Null pointer in extract operation";
-                "function" => "extract_string",
-                "pointer" => "null");
-            abort_with_error("no such overload");
-        }
-        match &*ptr {
-            CelValue::String(s) => s.clone(),
-            other => {
-                error!(log, "Type mismatch in extraction";
-                    "function" => "extract_string",
-                    "expected" => "String",
-                    "actual" => format!("{:?}", other));
-                abort_with_error("no such overload");
-            }
-        }
-    }
-}
-
-/// Internal helper: Extracts chrono::Duration directly from CelValue::Duration.
-/// This is not exported - it's used by temporal arithmetic operations.
-pub(crate) fn extract_duration_chrono(ptr: *mut CelValue) -> chrono::Duration {
-    let log = crate::logging::get_logger();
-    extract_duration_chrono_with_log(ptr, &log)
-}
-
-/// Internal helper with logger: Extracts chrono::Duration from CelValue::Duration.
-pub(crate) fn extract_duration_chrono_with_log(
-    ptr: *mut CelValue,
-    log: &slog::Logger,
-) -> chrono::Duration {
-    unsafe {
-        if ptr.is_null() {
-            error!(log, "Null pointer in extract operation";
-                "function" => "extract_duration_chrono",
-                "pointer" => "null");
-            abort_with_error("no such overload");
-        }
-        match &*ptr {
-            CelValue::Duration(d) => *d,
-            other => {
-                error!(log, "Type mismatch in extraction";
-                    "function" => "extract_duration_chrono",
-                    "expected" => "Duration",
-                    "actual" => format!("{:?}", other));
-                abort_with_error("no such overload");
-            }
         }
     }
 }
@@ -391,9 +240,7 @@ fn value_add(a: CelValue, b: CelValue) -> CelValue {
         (CelValue::Duration(dur), CelValue::Timestamp(ts)) => {
             temporal::timestamp_add_duration_inner(ts, dur)
         }
-        (CelValue::Duration(d1), CelValue::Duration(d2)) => {
-            temporal::duration_add_inner(d1, d2)
-        }
+        (CelValue::Duration(d1), CelValue::Duration(d2)) => temporal::duration_add_inner(d1, d2),
         (a, b) => {
             error!(log, "Cannot add incompatible types";
                 "left_type" => format!("{:?}", a),
@@ -452,9 +299,7 @@ fn value_sub(a: CelValue, b: CelValue) -> CelValue {
         (CelValue::Timestamp(ts1), CelValue::Timestamp(ts2)) => {
             temporal::timestamp_diff_inner(ts1, ts2)
         }
-        (CelValue::Duration(d1), CelValue::Duration(d2)) => {
-            temporal::duration_sub_inner(d1, d2)
-        }
+        (CelValue::Duration(d1), CelValue::Duration(d2)) => temporal::duration_sub_inner(d1, d2),
         (a, b) => {
             error!(log, "Cannot subtract incompatible types";
                 "left_type" => format!("{:?}", a),
@@ -498,7 +343,9 @@ fn value_mul(a: CelValue, b: CelValue) -> CelValue {
                 CelValue::Error("return error for overflow".into())
             }
         },
-        (CelValue::Double(a), CelValue::Double(b)) => CelValue::Double(arithmetic::double_mul(a, b)),
+        (CelValue::Double(a), CelValue::Double(b)) => {
+            CelValue::Double(arithmetic::double_mul(a, b))
+        }
         (a, b) => {
             error!(log, "Cannot multiply incompatible types";
                 "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
@@ -545,7 +392,9 @@ fn value_div(a: CelValue, b: CelValue) -> CelValue {
             }
             CelValue::UInt(a / b)
         }
-        (CelValue::Double(a), CelValue::Double(b)) => CelValue::Double(arithmetic::double_div(a, b)),
+        (CelValue::Double(a), CelValue::Double(b)) => {
+            CelValue::Double(arithmetic::double_div(a, b))
+        }
         (a, b) => {
             error!(log, "Cannot divide incompatible types";
                 "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
@@ -1114,12 +963,10 @@ fn value_index(container: CelValue, index: CelValue) -> CelValue {
             }
         }
         // Array indexing with UInt
-        (CelValue::Array(vec), CelValue::UInt(idx)) => {
-            match vec.into_iter().nth(idx as usize) {
-                Some(v) => v,
-                None => CelValue::Error("index out of bounds".into()),
-            }
-        }
+        (CelValue::Array(vec), CelValue::UInt(idx)) => match vec.into_iter().nth(idx as usize) {
+            Some(v) => v,
+            None => CelValue::Error("index out of bounds".into()),
+        },
         // Array indexing with Double (whole numbers only)
         (CelValue::Array(vec), CelValue::Double(idx)) => {
             if idx.fract() != 0.0 || idx < 0.0 {
@@ -1169,6 +1016,15 @@ mod tests {
     use super::*;
     use crate::deserialization::cel_free_value;
     use rstest::rstest;
+
+    fn extract_bool(ptr: *mut CelValue) -> bool {
+        unsafe {
+            match &*ptr {
+                CelValue::Bool(b) => *b,
+                other => panic!("expected Bool, got {:?}", other),
+            }
+        }
+    }
 
     #[test]
     fn test_create_int() {

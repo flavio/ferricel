@@ -8,7 +8,7 @@
 //! - Time cost for lists: O(n×m) where n is list size, m is element size
 //! - Time cost for maps: O(1) expected (implementation may vary)
 
-use crate::error::{null_to_unbound, abort_with_error};
+use crate::error::{abort_with_error, null_to_unbound};
 use crate::helpers::cel_equals;
 use crate::types::CelValue;
 use slog::{debug, error, info};

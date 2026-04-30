@@ -6,11 +6,8 @@
 //! - Timestamp accessors (getFullYear, getMonth, etc.)
 //! - Overflow checking for valid timestamp range
 
-use crate::error::{null_to_unbound, abort_with_error};
-use crate::helpers::{
-    cel_create_duration, extract_datetime, extract_duration, extract_duration_chrono,
-    extract_string,
-};
+use crate::error::{abort_with_error, null_to_unbound};
+use crate::helpers::cel_create_duration;
 use crate::types::CelValue;
 use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
 
@@ -100,10 +97,7 @@ pub(crate) fn timestamp_diff_inner(
 }
 
 /// duration + duration = duration (pure Rust, no pointers)
-pub(crate) fn duration_add_inner(
-    d1: chrono::Duration,
-    d2: chrono::Duration,
-) -> CelValue {
+pub(crate) fn duration_add_inner(d1: chrono::Duration, d2: chrono::Duration) -> CelValue {
     let secs1 = d1.num_seconds();
     let nanos1 = d1.subsec_nanos();
     let secs2 = d2.num_seconds();
@@ -116,10 +110,7 @@ pub(crate) fn duration_add_inner(
 }
 
 /// duration - duration = duration (pure Rust, no pointers)
-pub(crate) fn duration_sub_inner(
-    d1: chrono::Duration,
-    d2: chrono::Duration,
-) -> CelValue {
+pub(crate) fn duration_sub_inner(d1: chrono::Duration, d2: chrono::Duration) -> CelValue {
     let secs1 = d1.num_seconds();
     let nanos1 = d1.subsec_nanos();
     let secs2 = d2.num_seconds();
@@ -136,7 +127,7 @@ pub(crate) fn duration_negate_inner(d: chrono::Duration) -> CelValue {
     let secs = d.num_seconds();
     let nanos = d.subsec_nanos();
     let neg_secs = secs.checked_neg().expect("duration negation overflow");
-    let neg_nanos = -(nanos as i32);
+    let neg_nanos = -nanos;
     let (final_secs, final_nanos) = normalize_duration(neg_secs, neg_nanos);
     validate_duration(final_secs, final_nanos);
     make_duration(final_secs, final_nanos)
@@ -144,7 +135,10 @@ pub(crate) fn duration_negate_inner(d: chrono::Duration) -> CelValue {
 
 /// Construct a CelValue::Duration from (seconds, nanos).
 fn make_duration(seconds: i64, nanos: i32) -> CelValue {
-    CelValue::Duration(crate::chrono_helpers::parts_to_duration(seconds, nanos as i64))
+    CelValue::Duration(crate::chrono_helpers::parts_to_duration(
+        seconds,
+        nanos as i64,
+    ))
 }
 
 // ============================================================================
@@ -334,92 +328,6 @@ pub unsafe fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut CelValue {
     let (final_secs, final_nanos) = normalize_duration(neg_secs, neg_nanos);
     validate_duration(final_secs, final_nanos);
     cel_create_duration(final_secs, final_nanos as i64)
-}
-
-// ============================================================================
-// Duration Converter Methods
-// ============================================================================
-// These convert the entire duration to a single unit (truncated to integer).
-// Unlike timestamp accessors which extract components, these return total units.
-
-/// duration.getHours() -> int
-/// Converts the entire duration to hours (truncated).
-/// Example: duration('10000s').getHours() returns 2 (not 2.77...)
-///
-/// Consuming: takes ownership of `dur_ptr`.
-///
-/// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_duration_get_hours(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let d = null_to_unbound(dur_ptr);
-    let (secs, _nanos) = match d {
-        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
-        _ => abort_with_error("cel_duration_get_hours: expected Duration"),
-    };
-    // Convert seconds to hours, truncating fractional part
-    let hours = secs / 3600;
-    Box::into_raw(Box::new(CelValue::Int(hours)))
-}
-
-/// duration.getMinutes() -> int
-/// Converts the entire duration to minutes (truncated).
-/// Example: duration('3730s').getMinutes() returns 62 (not 62.16...)
-///
-/// Consuming: takes ownership of `dur_ptr`.
-///
-/// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_duration_get_minutes(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let d = null_to_unbound(dur_ptr);
-    let (secs, _nanos) = match d {
-        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
-        _ => abort_with_error("cel_duration_get_minutes: expected Duration"),
-    };
-    // Convert seconds to minutes, truncating fractional part
-    let minutes = secs / 60;
-    Box::into_raw(Box::new(CelValue::Int(minutes)))
-}
-
-/// duration.getSeconds() -> int
-/// Returns the total seconds in the duration.
-/// Example: duration('3730s').getSeconds() returns 3730
-///
-/// Consuming: takes ownership of `dur_ptr`.
-///
-/// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_duration_get_seconds(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let d = null_to_unbound(dur_ptr);
-    let (secs, _nanos) = match d {
-        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
-        _ => abort_with_error("cel_duration_get_seconds: expected Duration"),
-    };
-    Box::into_raw(Box::new(CelValue::Int(secs)))
-}
-
-/// duration.getMilliseconds() -> int
-/// Returns the milliseconds component of the nanoseconds part of the duration.
-/// Per CEL spec this is NOT the total duration converted to milliseconds —
-/// it is the nanoseconds sub-second component expressed in whole milliseconds.
-/// Example: duration('123.321456789s').getMilliseconds() returns 321
-///
-/// Consuming: takes ownership of `dur_ptr`.
-///
-/// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_duration_get_milliseconds(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let d = null_to_unbound(dur_ptr);
-    let (_secs, nanos) = match d {
-        CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
-        _ => abort_with_error("cel_duration_get_milliseconds: expected Duration"),
-    };
-    // Return the millisecond component of the nanoseconds field only.
-    let millis = nanos as i64 / 1_000_000;
-    Box::into_raw(Box::new(CelValue::Int(millis)))
 }
 
 /// Validates that a DateTime is within the valid CEL range.
@@ -1305,7 +1213,10 @@ mod tests {
             let sum_ptr = cel_duration_add(dur1_ptr, dur2_ptr);
 
             // Verify result (should be 5400s + 800_000_000ns = 1h 30m 0.8s)
-            let (secs, nanos) = extract_duration(sum_ptr);
+            let (secs, nanos) = match unsafe { &*sum_ptr } {
+                CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(d),
+                other => panic!("expected Duration, got {:?}", other),
+            };
             assert_eq!(secs, 5400);
             assert_eq!(nanos, 800_000_000);
         }

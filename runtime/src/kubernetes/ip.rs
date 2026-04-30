@@ -19,7 +19,7 @@
 //!   - IP addresses with zones (e.g. `fe80::1%eth0`) are NOT allowed.
 //!   - Leading zeros in IPv4 octets (e.g. `010.0.0.1`) are NOT allowed.
 
-use crate::error::{null_to_unbound, create_error_value};
+use crate::error::{create_error_value, null_to_unbound};
 use crate::types::CelValue;
 use slog::error;
 use std::net::IpAddr;

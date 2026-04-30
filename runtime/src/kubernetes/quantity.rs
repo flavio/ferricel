@@ -44,7 +44,7 @@
 //!   - Trailing zeros are stripped.
 //!   - The suffix is chosen to keep the coefficient reasonably short.
 
-use crate::error::{null_to_unbound, create_error_value};
+use crate::error::{create_error_value, null_to_unbound};
 use crate::types::CelValue;
 use slog::error;
 

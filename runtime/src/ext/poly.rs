@@ -2,9 +2,9 @@
 //! - `indexOf` / `lastIndexOf`: `String` → substring search; `Array` → element search
 //! - `reverse`: `String` → character reversal; `Array` → element reversal
 
-use crate::error::null_to_unbound;
 use super::lists::list_reverse_impl;
 use super::strings::{find_index_of, find_last_index_of, string_reverse_impl};
+use crate::error::null_to_unbound;
 use crate::helpers::cel_equals;
 use crate::types::CelValue;
 
@@ -255,9 +255,8 @@ mod tests {
     #[case::unicode("héllo", "olléh")]
     fn test_reverse_poly_string(#[case] input: &str, #[case] expected: &str) {
         unsafe {
-            let result_ptr = cel_reverse_poly(Box::into_raw(Box::new(CelValue::String(
-                input.to_string(),
-            ))));
+            let result_ptr =
+                cel_reverse_poly(Box::into_raw(Box::new(CelValue::String(input.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
             cel_free_value(result_ptr);
         }
@@ -271,8 +270,7 @@ mod tests {
     )]
     fn test_reverse_poly_list(#[case] input: Vec<CelValue>, #[case] expected: Vec<CelValue>) {
         unsafe {
-            let result_ptr =
-                cel_reverse_poly(Box::into_raw(Box::new(CelValue::Array(input))));
+            let result_ptr = cel_reverse_poly(Box::into_raw(Box::new(CelValue::Array(input))));
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
             cel_free_value(result_ptr);
         }
@@ -281,8 +279,7 @@ mod tests {
     #[test]
     fn test_reverse_poly_wrong_type_returns_error() {
         unsafe {
-            let result_ptr =
-                cel_reverse_poly(Box::into_raw(Box::new(CelValue::Int(42))));
+            let result_ptr = cel_reverse_poly(Box::into_raw(Box::new(CelValue::Int(42))));
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
             cel_free_value(result_ptr);
         }

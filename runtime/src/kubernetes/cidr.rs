@@ -18,7 +18,7 @@
 //!   - Leading zeros in IPv4 octets are NOT allowed.
 //!   - Host bits in the address part do NOT need to be zero (masked() zeroes them).
 
-use crate::error::{null_to_unbound, create_error_value};
+use crate::error::{create_error_value, null_to_unbound};
 use crate::types::CelValue;
 use slog::error;
 use std::net::IpAddr;

@@ -2,7 +2,7 @@
 //! These functions extract values from CelValue pointers and panic on type mismatches.
 //! Also provides CEL type conversion functions (uint(), int(), double(), string(), timestamp(), duration()).
 
-use crate::error::{null_to_unbound, abort_with_error};
+use crate::error::{abort_with_error, null_to_unbound};
 use crate::helpers::cel_create_duration;
 use crate::types::CelValue;
 use slog::{debug, error};
@@ -128,7 +128,7 @@ fn convert_int(value: CelValue) -> CelValue {
             }
             const MAX_SAFE_INT_AS_F64: f64 = 9223372036854774784.0;
             const MIN_SAFE_INT_AS_F64: f64 = -9223372036854774784.0;
-            if d < MIN_SAFE_INT_AS_F64 || d > MAX_SAFE_INT_AS_F64 {
+            if !(MIN_SAFE_INT_AS_F64..=MAX_SAFE_INT_AS_F64).contains(&d) {
                 error!(log, "Value out of range for int"; "value" => d);
                 abort_with_error("no such overload");
             }

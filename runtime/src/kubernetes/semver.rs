@@ -23,7 +23,7 @@
 //!   5. Pad with `"0"` until 3 parts
 //!   6. Rejoin and parse with `semver::Version::parse`
 
-use crate::error::{null_to_unbound, create_error_value};
+use crate::error::{create_error_value, null_to_unbound};
 use crate::types::CelValue;
 use semver::Version;
 use slog::error;
@@ -397,7 +397,9 @@ pub unsafe extern "C" fn cel_k8s_semver_is_less_than(
         }
     };
 
-    Box::into_raw(Box::new(CelValue::Bool(semver_is_less_than_inner(&lhs, &rhs))))
+    Box::into_raw(Box::new(CelValue::Bool(semver_is_less_than_inner(
+        &lhs, &rhs,
+    ))))
 }
 
 /// Returns `true` if `self` > `other` (precedence comparison, ignoring build metadata).
@@ -435,7 +437,9 @@ pub unsafe extern "C" fn cel_k8s_semver_is_greater_than(
         }
     };
 
-    Box::into_raw(Box::new(CelValue::Bool(semver_is_greater_than_inner(&lhs, &rhs))))
+    Box::into_raw(Box::new(CelValue::Bool(semver_is_greater_than_inner(
+        &lhs, &rhs,
+    ))))
 }
 
 /// Returns `-1`, `0`, or `1` comparing `self` to `other` by precedence (ignoring build metadata).
