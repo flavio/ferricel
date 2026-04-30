@@ -22,22 +22,6 @@ impl CompilerEnv {
     }
 }
 
-/// Options for CEL compilation
-pub struct CompilerOptions {
-    /// Optional Protocol Buffer schema for proper wrapper type semantics
-    /// This should be a FileDescriptorSet binary (output of `protoc --descriptor_set_out`)
-    pub proto_descriptor: Option<Vec<u8>>,
-    /// Optional container (namespace) for type name resolution
-    /// Example: "google.protobuf" allows using "Timestamp" instead of "google.protobuf.Timestamp"
-    /// Follows CEL-go hierarchical resolution: tries container.name, parent.name, ..., name
-    pub container: Option<String>,
-    /// Logger for compilation warnings and errors
-    pub logger: slog::Logger,
-    /// Extension function declarations for compile-time validation.
-    /// Defaults to an empty list (no extensions).
-    pub extensions: Vec<ExtensionDecl>,
-}
-
 /// Compilation context that holds state during expression compilation
 /// This includes local variable bindings for comprehensions and other scoped contexts
 pub struct CompilerContext {

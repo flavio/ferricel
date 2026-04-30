@@ -69,39 +69,38 @@ fn test_exists_one_two_var(#[case] expr: &str, #[case] expected: i64) {
 
 #[test]
 fn test_transform_list_empty() {
-    let r = compile_and_execute_json("[].transformList(i, v, i + v)").unwrap();
+    let r = compile_and_execute("[].transformList(i, v, i + v)").unwrap();
     assert_eq!(r, serde_json::json!([]));
 }
 
 #[test]
 fn test_transform_list_one() {
-    let r = compile_and_execute_json("[3].transformList(i, v, v * v + i)").unwrap();
+    let r = compile_and_execute("[3].transformList(i, v, v * v + i)").unwrap();
     assert_eq!(r, serde_json::json!([9]));
 }
 
 #[test]
 fn test_transform_list_many() {
-    let r = compile_and_execute_json("[2, 4, 6].transformList(i, v, v / 2 + i)").unwrap();
+    let r = compile_and_execute("[2, 4, 6].transformList(i, v, v / 2 + i)").unwrap();
     assert_eq!(r, serde_json::json!([1, 3, 5]));
 }
 
 #[test]
 fn test_transform_list_filter_empty() {
-    let r = compile_and_execute_json("[].transformList(i, v, i > 0, v)").unwrap();
+    let r = compile_and_execute("[].transformList(i, v, i > 0, v)").unwrap();
     assert_eq!(r, serde_json::json!([]));
 }
 
 #[test]
 fn test_transform_list_filter_one() {
-    let r =
-        compile_and_execute_json("[3].transformList(i, v, i == 0 && v == 3, v * v + i)").unwrap();
+    let r = compile_and_execute("[3].transformList(i, v, i == 0 && v == 3, v * v + i)").unwrap();
     assert_eq!(r, serde_json::json!([9]));
 }
 
 #[test]
 fn test_transform_list_filter_many() {
-    let r = compile_and_execute_json("[2, 4, 6].transformList(i, v, i != 1 && v != 4, v / 2 + i)")
-        .unwrap();
+    let r =
+        compile_and_execute("[2, 4, 6].transformList(i, v, i != 1 && v != 4, v / 2 + i)").unwrap();
     assert_eq!(r, serde_json::json!([1, 5]));
 }
 
@@ -109,35 +108,34 @@ fn test_transform_list_filter_many() {
 
 #[test]
 fn test_transform_map_empty() {
-    let r = compile_and_execute_json("{}.transformMap(k, v, k + v)").unwrap();
+    let r = compile_and_execute("{}.transformMap(k, v, k + v)").unwrap();
     assert_eq!(r, serde_json::json!({}));
 }
 
 #[test]
 fn test_transform_map_one() {
-    let r = compile_and_execute_json("{'foo': 'bar'}.transformMap(k, v, k + v)").unwrap();
+    let r = compile_and_execute("{'foo': 'bar'}.transformMap(k, v, k + v)").unwrap();
     assert_eq!(r, serde_json::json!({"foo": "foobar"}));
 }
 
 #[test]
 fn test_transform_map_filter_empty() {
-    let r = compile_and_execute_json("{}.transformMap(k, v, k == 'x', k + v)").unwrap();
+    let r = compile_and_execute("{}.transformMap(k, v, k == 'x', k + v)").unwrap();
     assert_eq!(r, serde_json::json!({}));
 }
 
 #[test]
 fn test_transform_map_filter_one() {
-    let r = compile_and_execute_json(
-        "{'foo': 'bar'}.transformMap(k, v, k == 'foo' && v == 'bar', k + v)",
-    )
-    .unwrap();
+    let r =
+        compile_and_execute("{'foo': 'bar'}.transformMap(k, v, k == 'foo' && v == 'bar', k + v)")
+            .unwrap();
     assert_eq!(r, serde_json::json!({"foo": "foobar"}));
 }
 
 // transformMap on list receiver: key = index (Int), value = transform result
 #[test]
 fn test_transform_map_from_list() {
-    let r = compile_and_execute_json(
+    let r = compile_and_execute(
         "[1, 2, 3].transformMap(indexVar, valueVar, (indexVar * valueVar) + valueVar)",
     )
     .unwrap();
@@ -148,14 +146,14 @@ fn test_transform_map_from_list() {
 
 #[test]
 fn test_transform_map_entry_empty_map() {
-    let r = compile_and_execute_json("{}.transformMapEntry(k, v, {v: k})").unwrap();
+    let r = compile_and_execute("{}.transformMapEntry(k, v, {v: k})").unwrap();
     assert_eq!(r, serde_json::json!({}));
 }
 
 #[test]
 fn test_transform_map_entry_key_value_swap() {
     // {'greeting': 'hello'}.transformMapEntry(k, v, {v: k}) → {'hello': 'greeting'}
-    let r = compile_and_execute_json(
+    let r = compile_and_execute(
         "{'greeting': 'hello'}.transformMapEntry(keyVar, valueVar, {valueVar: keyVar})",
     )
     .unwrap();
@@ -166,7 +164,7 @@ fn test_transform_map_entry_key_value_swap() {
 fn test_transform_map_entry_from_list_reverse_index() {
     // [1, 2, 3].transformMapEntry(i, v, {v: i}) → {1: 0, 2: 1, 3: 2}
     // Keys are integers from the list values
-    let r = compile_and_execute_json(
+    let r = compile_and_execute(
         "[1, 2, 3].transformMapEntry(indexVar, valueVar, {valueVar: indexVar})",
     )
     .unwrap();
@@ -178,7 +176,7 @@ fn test_transform_map_entry_from_list_reverse_index() {
 fn test_transform_map_entry_filter_keep_some() {
     // {'a': 1, 'b': 2, 'c': 3}.transformMapEntry(k, v, v > 1, {k + '_new': v * 10})
     // Only entries where v > 1 are transformed → {'b_new': 20, 'c_new': 30}
-    let r = compile_and_execute_json(
+    let r = compile_and_execute(
         "{'a': 1, 'b': 2, 'c': 3}.transformMapEntry(k, v, v > 1, {k + '_new': v * 10})",
     )
     .unwrap();
@@ -193,7 +191,7 @@ fn test_transform_map_entry_filter_keep_some() {
 fn test_transform_map_entry_duplicate_key_error() {
     // {'greeting': 'aloha', 'farewell': 'aloha'}.transformMapEntry(k, v, {v: k})
     // Both entries map to value key 'aloha' → duplicate key error
-    let result = compile_and_execute_json(
+    let result = compile_and_execute(
         "{'greeting': 'aloha', 'farewell': 'aloha'}.transformMapEntry(k, v, {v: k})",
     )
     .unwrap();
@@ -211,6 +209,6 @@ fn test_transform_map_entry_duplicate_key_error() {
 
 #[test]
 fn test_transform_map_entry_empty_list() {
-    let r = compile_and_execute_json("[].transformMapEntry(i, v, {'k': v})").unwrap();
+    let r = compile_and_execute("[].transformMapEntry(i, v, {'k': v})").unwrap();
     assert_eq!(r, serde_json::json!({}));
 }

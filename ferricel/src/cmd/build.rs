@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use ferricel_core::compiler::{self, CompilerOptions};
+use ferricel_core::compiler::Builder;
 use prost::Message;
 use prost_types::FileDescriptorSet;
 use slog::{Drain, Logger, o};
@@ -56,20 +56,22 @@ pub fn run(
         Some(buffer)
     };
 
-    // Compile the CEL expression to WASM bytes
     // Create a logger to stderr for compilation warnings
     let decorator = slog_term::PlainSyncDecorator::new(std::io::stderr());
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let logger = Logger::root(drain, o!());
 
-    let compiler_options = CompilerOptions {
-        proto_descriptor: merged_descriptor,
-        container,
-        logger,
-        extensions: vec![],
-    };
+    // Build the compiler using the builder API
+    let mut builder = Builder::new().with_logger(logger);
+    if let Some(bytes) = merged_descriptor {
+        builder = builder.with_proto_descriptor(bytes)?;
+    }
+    if let Some(c) = container {
+        builder = builder.with_container(c);
+    }
+    let compiler = builder.build();
 
-    let wasm_bytes = compiler::compile_cel_to_wasm(&cel_code, compiler_options)?;
+    let wasm_bytes = compiler.compile(&cel_code)?;
 
     // Write the WASM bytes to the output file
     fs::write(output_path, wasm_bytes)?;

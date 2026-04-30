@@ -23,7 +23,7 @@
 //   extension_tests.rs     — Extension function registration and invocation
 //   kubernetes_tests.rs    — Kubernetes list extension tests
 
-use ferricel_core::compiler::{CompilerOptions, compile_cel_to_wasm};
+use ferricel_core::compiler::Builder;
 use ferricel_core::runtime::CelEngine;
 use ferricel_types::LogLevel;
 use slog::{Drain, Logger, o};
@@ -38,52 +38,45 @@ pub(crate) fn create_test_logger() -> Logger {
     Logger::root(drain, o!())
 }
 
-/// Compile `cel_expr` and execute it, returning the result as `i64`.
+/// Compile `cel_expr` and execute it with no bindings, returning the result as
+/// a [`serde_json::Value`].
 ///
-/// Booleans are mapped to `1` (true) and `0` (false).
-pub(crate) fn compile_and_execute(cel_expr: &str) -> Result<i64, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: logger.clone(),
-        extensions: vec![],
-    };
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = CelEngine::new(logger)
-        .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, None)?;
-
-    // The JSON will be either an integer (e.g. "42") or boolean ("true"/"false").
-    let value: serde_json::Value = serde_json::from_str(&json_result)?;
-
-    match value {
-        serde_json::Value::Number(n) => n
-            .as_i64()
-            .ok_or_else(|| anyhow::anyhow!("Expected i64, got: {}", n)),
-        serde_json::Value::Bool(b) => Ok(if b { 1 } else { 0 }),
-        _ => anyhow::bail!("Unexpected JSON value type: {}", value),
-    }
+/// This is the base helper.  Use the typed wrappers below when a specific Rust
+/// type is more convenient.
+pub(crate) fn compile_and_execute(cel_expr: &str) -> Result<serde_json::Value, anyhow::Error> {
+    compile_and_execute_with_vars(cel_expr, None)
 }
 
-/// Compile `cel_expr` with optional `input` and `data` bindings and execute it,
-/// returning the result as `i64`.
+/// Compile `cel_expr` and execute it with an optional JSON bindings object,
+/// returning the result as a [`serde_json::Value`].
 ///
-/// Booleans are mapped to `1` (true) and `0` (false).
+/// The bindings string should be a JSON object whose keys are variable names,
+/// e.g. `r#"{"input": 42}"#`.
 pub(crate) fn compile_and_execute_with_vars(
+    cel_expr: &str,
+    bindings: Option<&str>,
+) -> Result<serde_json::Value, anyhow::Error> {
+    let logger = create_test_logger();
+    let wasm_bytes = Builder::new()
+        .with_logger(logger.clone())
+        .build()
+        .compile(cel_expr)?;
+    let json_result = CelEngine::new(logger)
+        .with_log_level(LogLevel::Info)
+        .execute(&wasm_bytes, bindings)?;
+    Ok(serde_json::from_str(&json_result)?)
+}
+
+/// Compile `cel_expr` with separate optional `input` and `data` JSON bindings
+/// and execute it, returning the result as a [`serde_json::Value`].
+///
+/// This is a convenience wrapper for the common test pattern where bindings are
+/// provided as two separate top-level variables.
+pub(crate) fn compile_and_execute_with_input_data(
     cel_expr: &str,
     input_json: Option<&str>,
     data_json: Option<&str>,
-) -> Result<i64, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: logger.clone(),
-        extensions: vec![],
-    };
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-
+) -> Result<serde_json::Value, anyhow::Error> {
     let mut bindings = serde_json::Map::new();
     if let Some(val_str) = input_json {
         let val: serde_json::Value = serde_json::from_str(val_str)?;
@@ -94,83 +87,24 @@ pub(crate) fn compile_and_execute_with_vars(
         bindings.insert("data".to_string(), val);
     }
     let bindings_str = serde_json::to_string(&bindings)?;
-    let json_result = CelEngine::new(logger)
-        .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, Some(&bindings_str))?;
-
-    let value: serde_json::Value = serde_json::from_str(&json_result)?;
-
-    match value {
-        serde_json::Value::Number(n) => n
-            .as_i64()
-            .ok_or_else(|| anyhow::anyhow!("Expected i64, got: {}", n)),
-        serde_json::Value::Bool(b) => Ok(if b { 1 } else { 0 }),
-        _ => anyhow::bail!("Unexpected JSON value type: {}", value),
-    }
+    compile_and_execute_with_vars(cel_expr, Some(&bindings_str))
 }
 
 /// Compile `cel_expr` and execute it, returning the result as `f64`.
 pub(crate) fn compile_and_execute_double(cel_expr: &str) -> Result<f64, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: logger.clone(),
-        extensions: vec![],
-    };
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = CelEngine::new(logger)
-        .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, None)?;
-
-    let value: serde_json::Value = serde_json::from_str(&json_result)?;
-
-    match value {
-        serde_json::Value::Number(n) => n
-            .as_f64()
-            .ok_or_else(|| anyhow::anyhow!("Expected f64, got: {}", n)),
-        _ => anyhow::bail!("Unexpected JSON value type: {}", value),
-    }
+    let value = compile_and_execute(cel_expr)?;
+    value
+        .as_f64()
+        .ok_or_else(|| anyhow::anyhow!("expected f64, got: {}", value))
 }
 
 /// Compile `cel_expr` and execute it, returning the result as a `String`.
 pub(crate) fn compile_and_execute_string(cel_expr: &str) -> Result<String, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: logger.clone(),
-        extensions: vec![],
-    };
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = CelEngine::new(logger)
-        .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, None)?;
-
-    let value: serde_json::Value = serde_json::from_str(&json_result)?;
-
+    let value = compile_and_execute(cel_expr)?;
     match value {
         serde_json::Value::String(s) => Ok(s),
-        _ => anyhow::bail!("Expected string, got: {}", value),
+        other => anyhow::bail!("expected string, got: {}", other),
     }
-}
-
-/// Compile `cel_expr` and execute it, returning the raw JSON result value.
-///
-/// Useful for tests that need to inspect structured output (e.g. structs/maps).
-pub(crate) fn compile_and_execute_json(cel_expr: &str) -> Result<serde_json::Value, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: logger.clone(),
-        extensions: vec![],
-    };
-    let wasm_bytes = compile_cel_to_wasm(cel_expr, compiler_options)?;
-    let json_result = CelEngine::new(logger)
-        .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, None)?;
-    Ok(serde_json::from_str(&json_result)?)
 }
 
 /// Compile `cel_expr` with an optional container name and proto descriptor,
@@ -180,21 +114,22 @@ pub(crate) fn compile_with_container(
     container: Option<&str>,
     proto_descriptor: Option<Vec<u8>>,
 ) -> Result<Vec<u8>, anyhow::Error> {
-    let logger = create_test_logger();
-    let compiler_options = CompilerOptions {
-        proto_descriptor,
-        container: container.map(|s| s.to_string()),
-        logger,
-        extensions: vec![],
-    };
-    compile_cel_to_wasm(cel_expr, compiler_options)
+    let mut builder = Builder::new().with_logger(create_test_logger());
+    if let Some(bytes) = proto_descriptor {
+        builder = builder.with_proto_descriptor(bytes)?;
+    }
+    if let Some(c) = container {
+        builder = builder.with_container(c);
+    }
+    builder.build().compile(cel_expr)
 }
 
 /// Build a [`CelEngine`] pre-loaded with a single extension function that
 /// returns the sum of all integer arguments.
 ///
 /// Returns both the engine (for `execute`) and the [`ExtensionDecl`] (for
-/// passing to `compile_cel_to_wasm` via [`CompilerOptions`]).
+/// passing to [`compiler::Builder`](ferricel_core::compiler::Builder) via
+/// [`with_extension`](ferricel_core::compiler::Builder::with_extension)).
 pub(crate) fn make_engine_with_sum(
     namespace: Option<&str>,
     function: &str,
@@ -218,13 +153,11 @@ pub(crate) fn make_engine_with_sum(
     (engine, decl)
 }
 
-/// Build [`CompilerOptions`] with a single extension declaration and no other
+/// Build a [`Compiler`] with a single extension declaration and no other
 /// customisation.
-pub(crate) fn options_with_ext(decl: ExtensionDecl) -> CompilerOptions {
-    CompilerOptions {
-        proto_descriptor: None,
-        container: None,
-        logger: create_test_logger(),
-        extensions: vec![decl],
-    }
+pub(crate) fn options_with_ext(decl: ExtensionDecl) -> ferricel_core::compiler::Compiler {
+    Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl)
+        .build()
 }

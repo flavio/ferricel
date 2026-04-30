@@ -16,8 +16,8 @@ use rstest::rstest;
 #[case(r#"{"name": "Alice"}"#, "has(input.email)", 0)]
 #[case(r#"{}"#, "has(input.anything)", 0)]
 fn test_has_macro_basic(#[case] input_json: &str, #[case] expr: &str, #[case] expected: i64) {
-    let result =
-        compile_and_execute_with_vars(expr, Some(input_json), None).expect("Failed to execute");
+    let result = compile_and_execute_with_input_data(expr, Some(input_json), None)
+        .expect("Failed to execute");
     assert_eq!(
         result, expected,
         "Expression '{}' with input {} should evaluate to {}",
@@ -32,8 +32,8 @@ fn test_has_macro_basic(#[case] input_json: &str, #[case] expr: &str, #[case] ex
 #[case(r#"{"a": {"b": {"c": 42}}}"#, "has(input.a.b.c)", 1)]
 #[case(r#"{"a": {"b": {}}}"#, "has(input.a.b.c)", 0)]
 fn test_has_macro_nested(#[case] input_json: &str, #[case] expr: &str, #[case] expected: i64) {
-    let result =
-        compile_and_execute_with_vars(expr, Some(input_json), None).expect("Failed to execute");
+    let result = compile_and_execute_with_input_data(expr, Some(input_json), None)
+        .expect("Failed to execute");
     assert_eq!(
         result, expected,
         "Expression '{}' with input {} should evaluate to {}",
@@ -44,7 +44,7 @@ fn test_has_macro_nested(#[case] input_json: &str, #[case] expr: &str, #[case] e
 #[test]
 fn test_has_macro_with_data_variable() {
     let data_json = r#"{"config": {"enabled": true}}"#;
-    let result = compile_and_execute_with_vars("has(data.config)", None, Some(data_json))
+    let result = compile_and_execute_with_input_data("has(data.config)", None, Some(data_json))
         .expect("Failed to execute");
     assert_eq!(result, 1, "has(data.config) should return true");
 }
@@ -53,7 +53,7 @@ fn test_has_macro_with_data_variable() {
 fn test_has_macro_with_null_value() {
     // Field exists but value is null - should return true
     let input_json = r#"{"nullable": null}"#;
-    let result = compile_and_execute_with_vars("has(input.nullable)", Some(input_json), None)
+    let result = compile_and_execute_with_input_data("has(input.nullable)", Some(input_json), None)
         .expect("Failed to execute");
     assert_eq!(
         result, 1,
@@ -73,8 +73,8 @@ fn test_has_macro_in_expressions(
     #[case] expr: &str,
     #[case] expected: i64,
 ) {
-    let result =
-        compile_and_execute_with_vars(expr, Some(input_json), None).expect("Failed to execute");
+    let result = compile_and_execute_with_input_data(expr, Some(input_json), None)
+        .expect("Failed to execute");
     assert_eq!(
         result, expected,
         "Expression '{}' with input {} should evaluate to {}",
@@ -100,8 +100,8 @@ fn test_has_macro_multiple_fields(
     #[case] expr: &str,
     #[case] expected: i64,
 ) {
-    let result =
-        compile_and_execute_with_vars(expr, Some(input_json), None).expect("Failed to execute");
+    let result = compile_and_execute_with_input_data(expr, Some(input_json), None)
+        .expect("Failed to execute");
     assert_eq!(
         result, expected,
         "Expression '{}' with input {} should evaluate to {}",

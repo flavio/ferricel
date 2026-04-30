@@ -13,10 +13,10 @@
 //! ## Example
 //!
 //! ```rust,ignore
-//! use ferricel_core::{CelEngine, compile_cel_to_wasm, CompilerOptions};
+//! use ferricel_core::{CelEngine, compiler::Builder};
 //!
 //! // Compile a CEL expression to WASM
-//! let wasm_bytes = compile_cel_to_wasm("x + y", CompilerOptions::default())?;
+//! let wasm_bytes = Builder::new().build().compile("x + y")?;
 //!
 //! // Execute the WASM module with variable bindings
 //! let engine = CelEngine::new(logger);
@@ -30,6 +30,6 @@ pub mod runtime;
 pub mod schema;
 
 // Re-export commonly used types for convenience
-pub use compiler::{CompilerOptions, ExtensionKey, compile_cel_to_wasm};
+pub use compiler::{Compiler, ExtensionKey};
 pub use runtime::CelEngine;
 pub use schema::ProtoSchema;

@@ -12,7 +12,7 @@ use rstest::rstest;
 #[test]
 fn test_struct_empty() {
     // Empty struct should compile and create a map with just __type__ field
-    let result = compile_and_execute_json("TestAllTypes{}");
+    let result = compile_and_execute("TestAllTypes{}");
     assert!(result.is_ok(), "Empty struct should compile successfully");
     let json = result.unwrap();
     assert!(
@@ -30,7 +30,7 @@ fn test_struct_empty() {
 #[test]
 fn test_struct_wrapper_bool() {
     // google.protobuf.BoolValue wrapper type
-    let result = compile_and_execute_json("google.protobuf.BoolValue{value: true}");
+    let result = compile_and_execute("google.protobuf.BoolValue{value: true}");
     assert!(
         result.is_ok(),
         "BoolValue struct should compile successfully"
@@ -45,7 +45,7 @@ fn test_struct_wrapper_bool() {
 #[test]
 fn test_struct_wrapper_int32() {
     // google.protobuf.Int32Value wrapper type
-    let result = compile_and_execute_json("google.protobuf.Int32Value{value: 123}");
+    let result = compile_and_execute("google.protobuf.Int32Value{value: 123}");
     assert!(
         result.is_ok(),
         "Int32Value struct should compile successfully"
@@ -59,8 +59,7 @@ fn test_struct_wrapper_int32() {
 #[test]
 fn test_struct_multiple_fields() {
     // Struct with multiple fields
-    let result =
-        compile_and_execute_json("TestAllTypes{single_int64: 1234, single_string: '1234'}");
+    let result = compile_and_execute("TestAllTypes{single_int64: 1234, single_string: '1234'}");
     assert!(
         result.is_ok(),
         "Multi-field struct should compile successfully"

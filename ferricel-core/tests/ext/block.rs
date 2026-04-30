@@ -24,7 +24,7 @@ use rstest::rstest;
 #[case::boolean_slot("cel.block([1 == 1], cel.index(0)) == true")]
 #[case::null_slot("cel.block([null], cel.index(0) == null)")]
 fn test_cel_block(#[case] expr: &str) {
-    let result = compile_and_execute_json(expr).expect("Failed to compile and execute");
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
     assert_eq!(
         result,
         serde_json::Value::Bool(true),
@@ -100,8 +100,7 @@ fn test_cel_block_slot_reuse() {
 
 #[test]
 fn test_cel_block_in_ternary() {
-    let result =
-        compile_and_execute_json("cel.block([1 > 0], cel.index(0) ? 'yes' : 'no') == 'yes'")
-            .expect("should succeed");
+    let result = compile_and_execute("cel.block([1 > 0], cel.index(0) ? 'yes' : 'no') == 'yes'")
+        .expect("should succeed");
     assert_eq!(result, serde_json::Value::Bool(true));
 }

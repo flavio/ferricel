@@ -60,7 +60,7 @@ fn test_replace(#[case] expr: &str, #[case] expected: &str) {
 #[case::single_part(r#""abc".split("x")"#, r#"["abc"]"#)]
 #[case::with_limit(r#""a,b,c".split(",", 2)"#, r#"["a","b,c"]"#)]
 fn test_split(#[case] expr: &str, #[case] expected_json: &str) {
-    let result = compile_and_execute_json(expr).expect("Failed to compile and execute");
+    let result = compile_and_execute(expr).expect("Failed to compile and execute");
     let expected: serde_json::Value = serde_json::from_str(expected_json).unwrap();
     assert_eq!(
         result, expected,

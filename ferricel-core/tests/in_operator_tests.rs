@@ -57,7 +57,7 @@ fn test_in_operator_maps_with_data(
     #[case] data_json: &str,
     #[case] expected: i64,
 ) {
-    let result = compile_and_execute_with_vars(expr, None, Some(data_json))
+    let result = compile_and_execute_with_input_data(expr, None, Some(data_json))
         .expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
@@ -90,12 +90,12 @@ fn test_in_operator_with_input_and_logical_ops() {
     let input = r#"{"items": [1, 2, 3, 4, 5]}"#;
 
     // Single membership test
-    let result = compile_and_execute_with_vars(r#"3 in input.items"#, Some(input), None)
+    let result = compile_and_execute_with_input_data(r#"3 in input.items"#, Some(input), None)
         .expect("Execution failed");
     assert_eq!(result, 1, "3 should be in input.items");
 
     // Combined with AND
-    let result = compile_and_execute_with_vars(
+    let result = compile_and_execute_with_input_data(
         r#"(2 in input.items) && (6 in input.items)"#,
         Some(input),
         None,
@@ -107,7 +107,7 @@ fn test_in_operator_with_input_and_logical_ops() {
     );
 
     // Combined with OR
-    let result = compile_and_execute_with_vars(
+    let result = compile_and_execute_with_input_data(
         r#"(2 in input.items) || (6 in input.items)"#,
         Some(input),
         None,
