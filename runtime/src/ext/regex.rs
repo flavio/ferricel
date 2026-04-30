@@ -8,7 +8,7 @@
 //!
 //! Reference: <https://pkg.go.dev/github.com/google/cel-go/ext#Regex>
 
-use crate::error::null_to_unbound;
+use crate::error::read_ptr;
 use regex_lite::Regex;
 use slog::error;
 
@@ -76,8 +76,6 @@ fn cel_replacement_to_regex_lite(cel_repl: &str) -> Result<String, String> {
 /// invalid, or the replacement string contains an invalid escape.
 ///
 /// # Safety
-/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
-/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_regex_replace(
@@ -92,9 +90,9 @@ pub unsafe extern "C" fn cel_regex_replace(
         return create_error_value("no such overload");
     }
 
-    let target_val = unsafe { null_to_unbound(target_ptr) };
-    let pattern_val = unsafe { null_to_unbound(pattern_ptr) };
-    let replacement_val = unsafe { null_to_unbound(replacement_ptr) };
+    let target_val = unsafe { read_ptr(target_ptr) };
+    let pattern_val = unsafe { read_ptr(pattern_ptr) };
+    let replacement_val = unsafe { read_ptr(replacement_ptr) };
 
     let (target, pattern, replacement) = match (target_val, pattern_val, replacement_val) {
         (CelValue::String(t), CelValue::String(p), CelValue::String(r)) => (t, p, r),
@@ -142,8 +140,6 @@ pub unsafe extern "C" fn cel_regex_replace(
 /// - `count > 0`: replaces at most `count` matches.
 ///
 /// # Safety
-/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
-/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_regex_replace_n(
@@ -163,10 +159,10 @@ pub unsafe extern "C" fn cel_regex_replace_n(
         return create_error_value("no such overload");
     }
 
-    let target_val = unsafe { null_to_unbound(target_ptr) };
-    let pattern_val = unsafe { null_to_unbound(pattern_ptr) };
-    let replacement_val = unsafe { null_to_unbound(replacement_ptr) };
-    let count_val = unsafe { null_to_unbound(count_ptr) };
+    let target_val = unsafe { read_ptr(target_ptr) };
+    let pattern_val = unsafe { read_ptr(pattern_ptr) };
+    let replacement_val = unsafe { read_ptr(replacement_ptr) };
+    let count_val = unsafe { read_ptr(count_ptr) };
 
     let (target, pattern, replacement) = match (target_val, pattern_val, replacement_val) {
         (CelValue::String(t), CelValue::String(p), CelValue::String(r)) => (t, p, r),
@@ -239,8 +235,6 @@ pub unsafe extern "C" fn cel_regex_replace_n(
 /// either argument is not a String, or if the regex is invalid.
 ///
 /// # Safety
-/// Caller must transfer ownership of both pointer arguments (heap-allocated `CelValue`s)
-/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_regex_extract(
@@ -254,8 +248,8 @@ pub unsafe extern "C" fn cel_regex_extract(
         return create_error_value("no such overload");
     }
 
-    let target_val = unsafe { null_to_unbound(target_ptr) };
-    let pattern_val = unsafe { null_to_unbound(pattern_ptr) };
+    let target_val = unsafe { read_ptr(target_ptr) };
+    let pattern_val = unsafe { read_ptr(pattern_ptr) };
 
     let (target, pattern) = match (target_val, pattern_val) {
         (CelValue::String(t), CelValue::String(p)) => (t, p),
@@ -316,8 +310,6 @@ pub unsafe extern "C" fn cel_regex_extract(
 /// either argument is not a String, or if the regex is invalid.
 ///
 /// # Safety
-/// Caller must transfer ownership of both pointer arguments (heap-allocated `CelValue`s)
-/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_regex_extract_all(
@@ -331,8 +323,8 @@ pub unsafe extern "C" fn cel_regex_extract_all(
         return create_error_value("no such overload");
     }
 
-    let target_val = unsafe { null_to_unbound(target_ptr) };
-    let pattern_val = unsafe { null_to_unbound(pattern_ptr) };
+    let target_val = unsafe { read_ptr(target_ptr) };
+    let pattern_val = unsafe { read_ptr(pattern_ptr) };
 
     let (target, pattern) = match (target_val, pattern_val) {
         (CelValue::String(t), CelValue::String(p)) => (t, p),

@@ -4,7 +4,7 @@
 //! `charAt`, `indexOf`, `lastIndexOf`, `lowerAscii`, `upperAscii`, `replace`,
 //! `split`, `substring`, `trim`, `reverse`, `format`, and `strings.quote`.
 
-use crate::error::null_to_unbound;
+use crate::error::read_ptr;
 use crate::types::{CelMapKey, CelValue};
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -405,8 +405,8 @@ pub unsafe extern "C" fn cel_string_char_at(
     string_ptr: *mut CelValue,
     index_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
-    let index_val = unsafe { null_to_unbound(index_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
+    let index_val = unsafe { read_ptr(index_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -454,9 +454,9 @@ pub unsafe extern "C" fn cel_string_index_of_offset(
     sub_ptr: *mut CelValue,
     offset_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
-    let sub_val = unsafe { null_to_unbound(sub_ptr) };
-    let offset_val = unsafe { null_to_unbound(offset_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
+    let sub_val = unsafe { read_ptr(sub_ptr) };
+    let offset_val = unsafe { read_ptr(offset_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -510,9 +510,9 @@ pub unsafe extern "C" fn cel_string_last_index_of_offset(
     sub_ptr: *mut CelValue,
     offset_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
-    let sub_val = unsafe { null_to_unbound(sub_ptr) };
-    let offset_val = unsafe { null_to_unbound(offset_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
+    let sub_val = unsafe { read_ptr(sub_ptr) };
+    let offset_val = unsafe { read_ptr(offset_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -562,7 +562,7 @@ pub unsafe extern "C" fn cel_string_last_index_of_offset(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_lower_ascii(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -584,7 +584,7 @@ pub unsafe extern "C" fn cel_string_lower_ascii(string_ptr: *mut CelValue) -> *m
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_upper_ascii(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -610,9 +610,9 @@ pub unsafe extern "C" fn cel_string_replace(
     old_ptr: *mut CelValue,
     new_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
-    let old_val = unsafe { null_to_unbound(old_ptr) };
-    let new_val = unsafe { null_to_unbound(new_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
+    let old_val = unsafe { read_ptr(old_ptr) };
+    let new_val = unsafe { read_ptr(new_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -656,10 +656,10 @@ pub unsafe extern "C" fn cel_string_replace_n(
     new_ptr: *mut CelValue,
     n_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
-    let old_val = unsafe { null_to_unbound(old_ptr) };
-    let new_val = unsafe { null_to_unbound(new_ptr) };
-    let n_val = unsafe { null_to_unbound(n_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
+    let old_val = unsafe { read_ptr(old_ptr) };
+    let new_val = unsafe { read_ptr(new_ptr) };
+    let n_val = unsafe { read_ptr(n_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -716,8 +716,8 @@ pub unsafe extern "C" fn cel_string_split(
     string_ptr: *mut CelValue,
     sep_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
-    let sep_val = unsafe { null_to_unbound(sep_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
+    let sep_val = unsafe { read_ptr(sep_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -754,9 +754,9 @@ pub unsafe extern "C" fn cel_string_split_n(
     sep_ptr: *mut CelValue,
     n_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
-    let sep_val = unsafe { null_to_unbound(sep_ptr) };
-    let n_val = unsafe { null_to_unbound(n_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
+    let sep_val = unsafe { read_ptr(sep_ptr) };
+    let n_val = unsafe { read_ptr(n_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -811,8 +811,8 @@ pub unsafe extern "C" fn cel_string_substring(
     string_ptr: *mut CelValue,
     start_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
-    let start_val = unsafe { null_to_unbound(start_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
+    let start_val = unsafe { read_ptr(start_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -858,9 +858,9 @@ pub unsafe extern "C" fn cel_string_substring_range(
     start_ptr: *mut CelValue,
     end_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
-    let start_val = unsafe { null_to_unbound(start_ptr) };
-    let end_val = unsafe { null_to_unbound(end_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
+    let start_val = unsafe { read_ptr(start_ptr) };
+    let end_val = unsafe { read_ptr(end_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -916,7 +916,7 @@ pub unsafe extern "C" fn cel_string_substring_range(
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_trim(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -937,7 +937,7 @@ pub unsafe extern "C" fn cel_string_trim(string_ptr: *mut CelValue) -> *mut CelV
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_reverse(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -959,7 +959,7 @@ pub unsafe extern "C" fn cel_string_reverse(string_ptr: *mut CelValue) -> *mut C
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_strings_quote(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -1004,8 +1004,8 @@ pub unsafe extern "C" fn cel_string_format(
     string_ptr: *mut CelValue,
     args_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
-    let args_val = unsafe { null_to_unbound(args_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
+    let args_val = unsafe { read_ptr(args_ptr) };
     let fmt = match string_val {
         CelValue::String(s) => s,
         _ => {
@@ -1032,7 +1032,6 @@ pub unsafe extern "C" fn cel_string_format(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::deserialization::cel_free_value;
     use rstest::rstest;
 
     // ── pure helpers ──────────────────────────────────────────────────────────
@@ -1097,7 +1096,6 @@ mod tests {
             );
             let result = &*result_ptr;
             assert_eq!(result, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1109,7 +1107,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1121,7 +1118,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(-1))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1143,7 +1139,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(offset))),
             );
             assert_eq!(&*result_ptr, &CelValue::Int(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1156,7 +1151,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(-1))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1169,7 +1163,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1191,7 +1184,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(offset))),
             );
             assert_eq!(&*result_ptr, &CelValue::Int(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1204,7 +1196,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(-1))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1217,7 +1208,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1233,7 +1223,6 @@ mod tests {
             let result_ptr =
                 cel_string_lower_ascii(Box::into_raw(Box::new(CelValue::String(s.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1247,7 +1236,6 @@ mod tests {
             let result_ptr =
                 cel_string_upper_ascii(Box::into_raw(Box::new(CelValue::String(s.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1265,7 +1253,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::String(new.to_string()))),
             );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1288,7 +1275,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(n))),
             );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1309,7 +1295,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::String(sep.to_string()))),
             );
             assert_eq!(&*result_ptr, &CelValue::Array(expected_cel));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1334,7 +1319,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(n))),
             );
             assert_eq!(&*result_ptr, &CelValue::Array(expected_cel));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1351,7 +1335,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(start))),
             );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1363,7 +1346,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1384,7 +1366,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(end))),
             );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1397,7 +1378,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(1))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1410,7 +1390,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1426,7 +1405,6 @@ mod tests {
             let result_ptr =
                 cel_string_trim(Box::into_raw(Box::new(CelValue::String(s.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1442,7 +1420,6 @@ mod tests {
             let result_ptr =
                 cel_string_reverse(Box::into_raw(Box::new(CelValue::String(s.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1460,7 +1437,6 @@ mod tests {
             let result_ptr =
                 cel_strings_quote(Box::into_raw(Box::new(CelValue::String(s.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1479,7 +1455,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Array(args))),
             );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1491,7 +1466,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Array(vec![CelValue::Double(3.14159)]))),
             );
             assert_eq!(&*result_ptr, &CelValue::String("pi: 3.14".to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1505,7 +1479,6 @@ mod tests {
                 )]))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 }

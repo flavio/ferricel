@@ -15,7 +15,7 @@ enum ReceiverKind {
     Other,
 }
 
-/// Inspect the receiver type without consuming the pointer.
+/// Inspect the receiver type without moving the pointee.
 ///
 /// # Safety
 /// `ptr` must be a valid, non-null pointer to a `CelValue`.

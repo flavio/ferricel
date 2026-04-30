@@ -2,7 +2,7 @@
 //! These functions extract values from CelValue pointers and panic on type mismatches.
 //! Also provides CEL type conversion functions (uint(), int(), double(), string(), timestamp(), duration()).
 
-use crate::error::{abort_with_error, null_to_unbound};
+use crate::error::{abort_with_error, read_ptr};
 use crate::helpers::cel_create_duration;
 use crate::types::CelValue;
 use slog::{debug, error};
@@ -12,7 +12,7 @@ use slog::{debug, error};
 // ---------------------------------------------------------------------------
 
 /// Extract bool from a CelValue pointer, returned as i64 (0 or 1).
-/// Does NOT consume the pointer (used by compiler control flow).
+/// Borrows the pointee in-place (used by compiler control flow).
 ///
 /// # Safety
 /// `ptr` must be a valid, non-null pointer to an initialized CelValue.
@@ -46,14 +46,14 @@ pub unsafe extern "C" fn cel_value_to_bool(ptr: *mut CelValue) -> i64 {
 // Consuming CEL type-conversion functions
 // ---------------------------------------------------------------------------
 
-/// CEL uint() function. Consumes the operand.
+/// CEL uint() function.
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_uint(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
+    let value = unsafe { read_ptr(ptr) };
     Box::into_raw(Box::new(convert_uint(value)))
 }
 
@@ -98,14 +98,14 @@ fn convert_uint(value: CelValue) -> CelValue {
     }
 }
 
-/// CEL int() function. Consumes the operand.
+/// CEL int() function.
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_int(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
+    let value = unsafe { read_ptr(ptr) };
     Box::into_raw(Box::new(convert_int(value)))
 }
 
@@ -152,14 +152,14 @@ fn convert_int(value: CelValue) -> CelValue {
     }
 }
 
-/// CEL double() function. Consumes the operand.
+/// CEL double() function.
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_double(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
+    let value = unsafe { read_ptr(ptr) };
     Box::into_raw(Box::new(convert_double(value)))
 }
 
@@ -184,14 +184,14 @@ fn convert_double(value: CelValue) -> CelValue {
     }
 }
 
-/// CEL timestamp() function. Consumes the operand.
+/// CEL timestamp() function.
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
+    let value = unsafe { read_ptr(ptr) };
     Box::into_raw(Box::new(convert_timestamp(value)))
 }
 
@@ -230,14 +230,14 @@ fn convert_timestamp(value: CelValue) -> CelValue {
     }
 }
 
-/// CEL duration() function. Consumes the operand.
+/// CEL duration() function.
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_duration(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
+    let value = unsafe { read_ptr(ptr) };
     convert_duration_ptr(value)
 }
 
@@ -266,14 +266,14 @@ fn convert_duration_ptr(value: CelValue) -> *mut CelValue {
     }
 }
 
-/// CEL bytes() function. Consumes the operand.
+/// CEL bytes() function.
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bytes(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
+    let value = unsafe { read_ptr(ptr) };
     Box::into_raw(Box::new(convert_bytes(value)))
 }
 
@@ -290,14 +290,14 @@ fn convert_bytes(value: CelValue) -> CelValue {
     }
 }
 
-/// CEL bool() function. Consumes the operand.
+/// CEL bool() function.
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bool(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
+    let value = unsafe { read_ptr(ptr) };
     Box::into_raw(Box::new(convert_bool(value)))
 }
 
@@ -324,14 +324,14 @@ fn convert_bool(value: CelValue) -> CelValue {
     }
 }
 
-/// CEL string() function. Consumes the operand.
+/// CEL string() function.
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
+    let value = unsafe { read_ptr(ptr) };
     Box::into_raw(Box::new(convert_string(value)))
 }
 
@@ -370,14 +370,14 @@ fn convert_string(value: CelValue) -> CelValue {
     }
 }
 
-/// CEL type() function. Consumes the operand.
+/// CEL type() function.
 ///
 /// # Safety
-/// Pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be a valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_type(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
+    let value = unsafe { read_ptr(ptr) };
     let type_name = value.type_name().to_string();
     Box::into_raw(Box::new(CelValue::Type(type_name)))
 }

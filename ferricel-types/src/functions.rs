@@ -7,7 +7,6 @@ use strum::IntoEnumIterator;
 pub enum RuntimeFunction {
     // Memory
     Malloc,
-    Free,
 
     // Arithmetic (Polymorphic)
     ValueAdd,
@@ -316,7 +315,6 @@ impl RuntimeFunction {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Malloc => "cel_malloc",
-            Self::Free => "cel_free",
 
             Self::ValueAdd => "cel_value_add",
             Self::ValueSub => "cel_value_sub",
@@ -580,7 +578,7 @@ impl RuntimeFunction {
 
     /// Returns true if this function should be exported in the final WASM module
     pub fn is_exported(&self) -> bool {
-        matches!(self, Self::Malloc | Self::Free)
+        matches!(self, Self::Malloc)
     }
 
     /// Iterates over all variants

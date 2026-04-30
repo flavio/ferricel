@@ -6,7 +6,7 @@
 //! - Timestamp accessors (getFullYear, getMonth, etc.)
 //! - Overflow checking for valid timestamp range
 
-use crate::error::{abort_with_error, null_to_unbound};
+use crate::error::{abort_with_error, read_ptr};
 use crate::helpers::cel_create_duration;
 use crate::types::CelValue;
 use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
@@ -149,10 +149,9 @@ fn make_duration(seconds: i64, nanos: i32) -> CelValue {
 /// timestamp + duration = timestamp
 /// Preserves the timezone of the original timestamp.
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `dur_ptr`.
 ///
 /// # Safety
-/// - Both pointers must be valid, non-null, uniquely-owned CelValue pointers
+/// - Both pointers must be valid, non-null CelValue pointers
 /// - First must be Timestamp, second must be Duration
 ///
 /// # Panics
@@ -162,8 +161,8 @@ pub unsafe fn cel_timestamp_add_duration(
     ts_ptr: *mut CelValue,
     dur_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let dur = null_to_unbound(dur_ptr);
+    let ts = read_ptr(ts_ptr);
+    let dur = read_ptr(dur_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_add_duration: expected Timestamp"),
@@ -187,17 +186,16 @@ pub unsafe fn cel_timestamp_add_duration(
 /// timestamp - duration = timestamp
 /// Preserves the timezone of the original timestamp.
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `dur_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_timestamp_sub_duration(
     ts_ptr: *mut CelValue,
     dur_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let dur = null_to_unbound(dur_ptr);
+    let ts = read_ptr(ts_ptr);
+    let dur = read_ptr(dur_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_sub_duration: expected Timestamp"),
@@ -219,14 +217,13 @@ pub unsafe fn cel_timestamp_sub_duration(
 /// Computes the difference between two timestamps.
 /// timestamp - timestamp = duration
 ///
-/// Consuming: takes ownership of both `ts1_ptr` and `ts2_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue::Timestamp pointers.
+/// Both pointers must be valid, non-null CelValue::Timestamp pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_timestamp_diff(ts1_ptr: *mut CelValue, ts2_ptr: *mut CelValue) -> *mut CelValue {
-    let ts1 = null_to_unbound(ts1_ptr);
-    let ts2 = null_to_unbound(ts2_ptr);
+    let ts1 = read_ptr(ts1_ptr);
+    let ts2 = read_ptr(ts2_ptr);
     let dt1 = match ts1 {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_diff: expected Timestamp"),
@@ -254,14 +251,13 @@ pub unsafe fn cel_timestamp_diff(ts1_ptr: *mut CelValue, ts2_ptr: *mut CelValue)
 /// Adds two durations.
 /// duration + duration = duration
 ///
-/// Consuming: takes ownership of both `dur1_ptr` and `dur2_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue::Duration pointers.
+/// Both pointers must be valid, non-null CelValue::Duration pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_add(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue) -> *mut CelValue {
-    let d1 = null_to_unbound(dur1_ptr);
-    let d2 = null_to_unbound(dur2_ptr);
+    let d1 = read_ptr(dur1_ptr);
+    let d2 = read_ptr(dur2_ptr);
     let (secs1, nanos1) = match d1 {
         CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
         _ => abort_with_error("cel_duration_add: expected Duration"),
@@ -282,14 +278,13 @@ pub unsafe fn cel_duration_add(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue)
 /// Subtracts one duration from another.
 /// duration - duration = duration
 ///
-/// Consuming: takes ownership of both `dur1_ptr` and `dur2_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue::Duration pointers.
+/// Both pointers must be valid, non-null CelValue::Duration pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_sub(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue) -> *mut CelValue {
-    let d1 = null_to_unbound(dur1_ptr);
-    let d2 = null_to_unbound(dur2_ptr);
+    let d1 = read_ptr(dur1_ptr);
+    let d2 = read_ptr(dur2_ptr);
     let (secs1, nanos1) = match d1 {
         CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
         _ => abort_with_error("cel_duration_sub: expected Duration"),
@@ -310,13 +305,12 @@ pub unsafe fn cel_duration_sub(dur1_ptr: *mut CelValue, dur2_ptr: *mut CelValue)
 /// Negates a duration.
 /// -duration = duration
 ///
-/// Consuming: takes ownership of `dur_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Duration pointer.
+/// The pointer must be a valid, non-null CelValue::Duration pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_duration_negate(dur_ptr: *mut CelValue) -> *mut CelValue {
-    let d = null_to_unbound(dur_ptr);
+    let d = read_ptr(dur_ptr);
     let (secs, nanos) = match d {
         CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(&d),
         _ => abort_with_error("cel_duration_negate: expected Duration"),
@@ -363,14 +357,13 @@ fn validate_duration(seconds: i64, _nanos: i32) {
 /// timestamp.getFullYear() -> int
 /// Returns the year in UTC (per CEL spec default)
 ///
-/// Consuming: takes ownership of `ts_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
+/// The pointer must be a valid, non-null CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_full_year(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
+    let ts = read_ptr(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_full_year: expected Timestamp"),
@@ -382,18 +375,17 @@ pub unsafe extern "C" fn cel_timestamp_get_full_year(ts_ptr: *mut CelValue) -> *
 /// timestamp.getFullYear(timezone) -> int
 /// Returns the year in the specified timezone
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_full_year_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let tz_val = null_to_unbound(tz_ptr);
+    let ts = read_ptr(ts_ptr);
+    let tz_val = read_ptr(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_full_year_tz: expected Timestamp"),
@@ -417,14 +409,13 @@ pub unsafe extern "C" fn cel_timestamp_get_full_year_tz(
 /// timestamp.getMonth() -> int
 /// Returns the month (0-based: 0=January, 11=December) in UTC
 ///
-/// Consuming: takes ownership of `ts_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
+/// The pointer must be a valid, non-null CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_month(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
+    let ts = read_ptr(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_month: expected Timestamp"),
@@ -436,18 +427,17 @@ pub unsafe extern "C" fn cel_timestamp_get_month(ts_ptr: *mut CelValue) -> *mut 
 /// timestamp.getMonth(timezone) -> int
 /// Returns the month (0-based) in the specified timezone
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_month_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let tz_val = null_to_unbound(tz_ptr);
+    let ts = read_ptr(ts_ptr);
+    let tz_val = read_ptr(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_month_tz: expected Timestamp"),
@@ -471,14 +461,13 @@ pub unsafe extern "C" fn cel_timestamp_get_month_tz(
 /// timestamp.getDate() -> int
 /// Returns the day of month (1-based: 1-31) in UTC
 ///
-/// Consuming: takes ownership of `ts_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
+/// The pointer must be a valid, non-null CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_date(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
+    let ts = read_ptr(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_date: expected Timestamp"),
@@ -490,18 +479,17 @@ pub unsafe extern "C" fn cel_timestamp_get_date(ts_ptr: *mut CelValue) -> *mut C
 /// timestamp.getDate(timezone) -> int
 /// Returns the day of month in the specified timezone
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_date_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let tz_val = null_to_unbound(tz_ptr);
+    let ts = read_ptr(ts_ptr);
+    let tz_val = read_ptr(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_date_tz: expected Timestamp"),
@@ -525,14 +513,13 @@ pub unsafe extern "C" fn cel_timestamp_get_date_tz(
 /// timestamp.getDayOfMonth() -> int
 /// Returns the day of month (0-based: 0-30) in UTC
 ///
-/// Consuming: takes ownership of `ts_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
+/// The pointer must be a valid, non-null CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_month(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
+    let ts = read_ptr(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_month: expected Timestamp"),
@@ -544,18 +531,17 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_month(ts_ptr: *mut CelValue) -
 /// timestamp.getDayOfMonth(timezone) -> int
 /// Returns the day of month (0-based) in the specified timezone
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_month_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let tz_val = null_to_unbound(tz_ptr);
+    let ts = read_ptr(ts_ptr);
+    let tz_val = read_ptr(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_month_tz: expected Timestamp"),
@@ -579,14 +565,13 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_month_tz(
 /// timestamp.getDayOfWeek() -> int
 /// Returns day of week (0=Sunday, 1=Monday, ..., 6=Saturday) in UTC
 ///
-/// Consuming: takes ownership of `ts_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
+/// The pointer must be a valid, non-null CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_week(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
+    let ts = read_ptr(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_week: expected Timestamp"),
@@ -599,18 +584,17 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_week(ts_ptr: *mut CelValue) ->
 /// timestamp.getDayOfWeek(timezone) -> int
 /// Returns day of week in the specified timezone
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_week_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let tz_val = null_to_unbound(tz_ptr);
+    let ts = read_ptr(ts_ptr);
+    let tz_val = read_ptr(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_week_tz: expected Timestamp"),
@@ -638,14 +622,13 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_week_tz(
 /// timestamp.getDayOfYear() -> int
 /// Returns day of year (0-based: 0-365) in UTC
 ///
-/// Consuming: takes ownership of `ts_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue::Timestamp pointer.
+/// The pointer must be a valid, non-null CelValue::Timestamp pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_year(ts_ptr: *mut CelValue) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
+    let ts = read_ptr(ts_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_year: expected Timestamp"),
@@ -658,18 +641,17 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_year(ts_ptr: *mut CelValue) ->
 /// timestamp.getDayOfYear(timezone) -> int
 /// Returns day of year (0-based) in the specified timezone
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_day_of_year_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let tz_val = null_to_unbound(tz_ptr);
+    let ts = read_ptr(ts_ptr);
+    let tz_val = read_ptr(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_day_of_year_tz: expected Timestamp"),
@@ -694,15 +676,14 @@ pub unsafe extern "C" fn cel_timestamp_get_day_of_year_tz(
 /// - timestamp.getHours() -> Returns hour component (0-23) in UTC
 /// - duration.getHours() -> Converts total duration to hours (truncated)
 ///
-/// Consuming: takes ownership of `value_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue pointer
+/// The pointer must be a valid, non-null CelValue pointer
 /// (either Timestamp or Duration).
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_hours(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = null_to_unbound(value_ptr);
+    let value = read_ptr(value_ptr);
     match value {
         CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
@@ -719,18 +700,17 @@ pub unsafe extern "C" fn cel_timestamp_get_hours(value_ptr: *mut CelValue) -> *m
 /// timestamp.getHours(timezone) -> int
 /// Returns hour component in the specified timezone
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_hours_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let tz_val = null_to_unbound(tz_ptr);
+    let ts = read_ptr(ts_ptr);
+    let tz_val = read_ptr(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_hours_tz: expected Timestamp"),
@@ -755,15 +735,14 @@ pub unsafe extern "C" fn cel_timestamp_get_hours_tz(
 /// - timestamp.getMinutes() -> Returns minutes component (0-59) in UTC
 /// - duration.getMinutes() -> Converts total duration to minutes (truncated)
 ///
-/// Consuming: takes ownership of `value_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue pointer
+/// The pointer must be a valid, non-null CelValue pointer
 /// (either Timestamp or Duration).
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_minutes(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = null_to_unbound(value_ptr);
+    let value = read_ptr(value_ptr);
     match value {
         CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
@@ -780,18 +759,17 @@ pub unsafe extern "C" fn cel_timestamp_get_minutes(value_ptr: *mut CelValue) -> 
 /// timestamp.getMinutes(timezone) -> int
 /// Returns minutes component in the specified timezone
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_minutes_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let tz_val = null_to_unbound(tz_ptr);
+    let ts = read_ptr(ts_ptr);
+    let tz_val = read_ptr(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_minutes_tz: expected Timestamp"),
@@ -816,15 +794,14 @@ pub unsafe extern "C" fn cel_timestamp_get_minutes_tz(
 /// - timestamp.getSeconds() -> Returns seconds component (0-59) in UTC
 /// - duration.getSeconds() -> Returns total seconds in the duration
 ///
-/// Consuming: takes ownership of `value_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue pointer
+/// The pointer must be a valid, non-null CelValue pointer
 /// (either Timestamp or Duration).
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_seconds(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = null_to_unbound(value_ptr);
+    let value = read_ptr(value_ptr);
     match value {
         CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
@@ -841,18 +818,17 @@ pub unsafe extern "C" fn cel_timestamp_get_seconds(value_ptr: *mut CelValue) -> 
 /// timestamp.getSeconds(timezone) -> int
 /// Returns seconds component in the specified timezone
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_seconds_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let tz_val = null_to_unbound(tz_ptr);
+    let ts = read_ptr(ts_ptr);
+    let tz_val = read_ptr(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_seconds_tz: expected Timestamp"),
@@ -880,14 +856,13 @@ pub unsafe extern "C" fn cel_timestamp_get_seconds_tz(
 /// Also handles a Duration that arrived through the JSON bridge as a
 /// CelValue::Object with __type__ == "google.protobuf.Duration".
 ///
-/// Consuming: takes ownership of `value_ptr`.
 ///
 /// # Safety
-/// The pointer must be a valid, non-null, uniquely-owned CelValue pointer.
+/// The pointer must be a valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_milliseconds(value_ptr: *mut CelValue) -> *mut CelValue {
-    let value = null_to_unbound(value_ptr);
+    let value = read_ptr(value_ptr);
     match value {
         CelValue::Timestamp(dt) => {
             let utc_dt = dt.with_timezone(&Utc);
@@ -921,18 +896,17 @@ pub unsafe extern "C" fn cel_timestamp_get_milliseconds(value_ptr: *mut CelValue
 /// timestamp.getMilliseconds(timezone) -> int
 /// Returns milliseconds component in the specified timezone
 ///
-/// Consuming: takes ownership of both `ts_ptr` and `tz_ptr`.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_timestamp_get_milliseconds_tz(
     ts_ptr: *mut CelValue,
     tz_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let ts = null_to_unbound(ts_ptr);
-    let tz_val = null_to_unbound(tz_ptr);
+    let ts = read_ptr(ts_ptr);
+    let tz_val = read_ptr(tz_ptr);
     let dt = match ts {
         CelValue::Timestamp(dt) => dt,
         _ => abort_with_error("cel_timestamp_get_milliseconds_tz: expected Timestamp"),

@@ -18,7 +18,7 @@
 //!   - Leading zeros in IPv4 octets are NOT allowed.
 //!   - Host bits in the address part do NOT need to be zero (masked() zeroes them).
 
-use crate::error::{create_error_value, null_to_unbound};
+use crate::error::{create_error_value, read_ptr};
 use crate::types::CelValue;
 use slog::error;
 use std::net::IpAddr;
@@ -163,7 +163,7 @@ pub unsafe extern "C" fn cel_k8s_cidr_parse(str_ptr: *mut CelValue) -> *mut CelV
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(str_ptr) };
+    let val = unsafe { read_ptr(str_ptr) };
     let s = match val {
         CelValue::String(ref s) => s.clone(),
         other => {
@@ -199,7 +199,7 @@ pub unsafe extern "C" fn cel_k8s_is_cidr(str_ptr: *mut CelValue) -> *mut CelValu
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(str_ptr) };
+    let val = unsafe { read_ptr(str_ptr) };
     let s = match val {
         CelValue::String(ref s) => s.clone(),
         other => {
@@ -230,7 +230,7 @@ pub unsafe extern "C" fn cel_k8s_cidr_ip(cidr_ptr: *mut CelValue) -> *mut CelVal
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(cidr_ptr) };
+    let val = unsafe { read_ptr(cidr_ptr) };
     match val {
         CelValue::Cidr(addr, _) => Box::into_raw(Box::new(CelValue::IpAddr(addr))),
         other => {
@@ -258,7 +258,7 @@ pub unsafe extern "C" fn cel_k8s_cidr_masked(cidr_ptr: *mut CelValue) -> *mut Ce
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(cidr_ptr) };
+    let val = unsafe { read_ptr(cidr_ptr) };
     match val {
         CelValue::Cidr(addr, prefix_len) => {
             let network = apply_mask(addr, prefix_len);
@@ -289,7 +289,7 @@ pub unsafe extern "C" fn cel_k8s_cidr_prefix_length(cidr_ptr: *mut CelValue) -> 
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(cidr_ptr) };
+    let val = unsafe { read_ptr(cidr_ptr) };
     match val {
         CelValue::Cidr(_, prefix_len) => Box::into_raw(Box::new(CelValue::Int(prefix_len as i64))),
         other => {
@@ -323,8 +323,8 @@ pub unsafe extern "C" fn cel_k8s_cidr_contains_ip_obj(
         return create_error_value("no such overload");
     }
 
-    let cidr_val = unsafe { null_to_unbound(cidr_ptr) };
-    let ip_val = unsafe { null_to_unbound(ip_ptr) };
+    let cidr_val = unsafe { read_ptr(cidr_ptr) };
+    let ip_val = unsafe { read_ptr(ip_ptr) };
 
     let (cidr_addr, prefix_len) = match cidr_val {
         CelValue::Cidr(a, p) => (a, p),
@@ -381,8 +381,8 @@ pub unsafe extern "C" fn cel_k8s_cidr_contains_cidr_obj(
         return create_error_value("no such overload");
     }
 
-    let cidr_val = unsafe { null_to_unbound(cidr_ptr) };
-    let other_val = unsafe { null_to_unbound(other_ptr) };
+    let cidr_val = unsafe { read_ptr(cidr_ptr) };
+    let other_val = unsafe { read_ptr(other_ptr) };
 
     let (cidr_addr, prefix_len) = match cidr_val {
         CelValue::Cidr(a, p) => (a, p),

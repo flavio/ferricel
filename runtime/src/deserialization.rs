@@ -30,7 +30,7 @@ pub fn decode_ptr_len(encoded: i64) -> (i32, i32) {
 /// - Null pointer (0) if encoded is 0 or parsing fails
 ///
 /// # Safety
-/// - The returned pointer must be freed with `cel_free_value`
+/// - The returned pointer is valid until the WASM instance is dropped
 /// - Caller must ensure the memory region [ptr, ptr+len) is valid
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
@@ -100,7 +100,7 @@ pub unsafe extern "C" fn cel_deserialize_json(encoded: i64) -> *mut CelValue {
 /// - Aborts on malformed proto input
 ///
 /// # Safety
-/// - The returned pointer must be freed with `cel_free_value`
+/// - The returned pointer is valid until the WASM instance is dropped
 /// - Caller must ensure the memory region [ptr, ptr+len) is valid
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
@@ -246,22 +246,6 @@ fn decode_any_to_cel_value(any: &prost_types::Any) -> CelValue {
         }
         // Unknown type URL — abort with a descriptive error.
         _ => abort_with_error(&format!("unsupported binding type URL: {}", any.type_url)),
-    }
-}
-
-/// Free a CelValue that was allocated by `cel_deserialize_json` or `cel_deserialize_proto`.
-///
-/// # Safety
-/// - `ptr` must be a valid pointer returned from `cel_deserialize_json`
-/// - `ptr` must not be used after calling this function
-/// - Calling with null pointer is safe (no-op)
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_free_value(ptr: *mut CelValue) {
-    if !ptr.is_null() {
-        // Reconstruct the Box and let it drop
-        // SAFETY: ptr is valid and was created by cel_deserialize_json
-        let _boxed = unsafe { Box::from_raw(ptr) };
-        // Box is dropped here, freeing the memory
     }
 }
 

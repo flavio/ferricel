@@ -1,4 +1,8 @@
-//! Memory allocation and deallocation for WASM linear memory.
+//! Memory allocation for WASM linear memory.
+//!
+//! Under the arena allocator (`lol_alloc::LeakingAllocator`), all allocations
+//! are bump-pointer advances and `dealloc` is a no-op. Memory is released when
+//! the host drops the WASM instance.
 
 use std::mem;
 
@@ -8,7 +12,7 @@ use std::mem;
 /// # Safety
 ///
 /// This function is unsafe because it returns a raw pointer. The caller must ensure:
-/// - The returned pointer must be freed using `cel_free` with the same length
+/// - The returned pointer is only used within the lifetime of the WASM instance
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_malloc(len: usize) -> *mut u8 {
@@ -16,20 +20,4 @@ pub extern "C" fn cel_malloc(len: usize) -> *mut u8 {
     let ptr = buf.as_mut_ptr();
     mem::forget(buf);
     ptr
-}
-
-/// Deallocates memory previously allocated with cel_malloc.
-///
-/// # Safety
-/// The pointer must have been allocated by `cel_malloc` with the same length.
-#[allow(unsafe_op_in_unsafe_fn)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_free(ptr: *mut u8, len: usize) {
-    if !ptr.is_null() && len > 0 {
-        // SAFETY: Caller ensures ptr was allocated by cel_malloc with the same length
-        unsafe {
-            let _ = Vec::from_raw_parts(ptr, len, len);
-            // Vec will be dropped here, freeing the memory
-        }
-    }
 }

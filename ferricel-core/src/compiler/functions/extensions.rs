@@ -42,10 +42,6 @@ pub fn emit_unknown_function_error(
     body.local_get(ptr_local);
     body.i32_const(msg_len);
     body.call(env.get(RuntimeFunction::CreateError));
-    // Free the temporary message buffer
-    body.local_get(ptr_local);
-    body.i32_const(msg_len);
-    body.call(env.get(RuntimeFunction::Free));
     Ok(())
 }
 

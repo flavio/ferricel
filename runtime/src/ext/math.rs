@@ -7,7 +7,7 @@
 //!
 //! See: <https://pkg.go.dev/github.com/google/cel-go/ext#Math>
 
-use crate::error::null_to_unbound;
+use crate::error::read_ptr;
 use crate::types::CelValue;
 
 // ---------------------------------------------------------------------------
@@ -95,11 +95,10 @@ fn least_in_list(arr: &[CelValue]) -> *mut CelValue {
 /// before invoking this function.
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_greatest(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Array(ref arr) => greatest_in_list(arr),
         CelValue::Int(_) | CelValue::UInt(_) | CelValue::Double(_) => Box::into_raw(Box::new(val)),
@@ -114,11 +113,10 @@ pub unsafe extern "C" fn cel_math_greatest(val_ptr: *mut CelValue) -> *mut CelVa
 /// before invoking this function.
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_least(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Array(ref arr) => least_in_list(arr),
         CelValue::Int(_) | CelValue::UInt(_) | CelValue::Double(_) => Box::into_raw(Box::new(val)),
@@ -133,11 +131,10 @@ pub unsafe extern "C" fn cel_math_least(val_ptr: *mut CelValue) -> *mut CelValue
 /// `math.ceil(double) -> double`
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_ceil(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Double(d.ceil()))),
         _ => no_such_overload("math.ceil(double)"),
@@ -147,11 +144,10 @@ pub unsafe extern "C" fn cel_math_ceil(val_ptr: *mut CelValue) -> *mut CelValue 
 /// `math.floor(double) -> double`
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_floor(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Double(d.floor()))),
         _ => no_such_overload("math.floor(double)"),
@@ -164,11 +160,10 @@ pub unsafe extern "C" fn cel_math_floor(val_ptr: *mut CelValue) -> *mut CelValue
 /// Rust's `f64::round()` already uses this convention.
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_round(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Double(d.round()))),
         _ => no_such_overload("math.round(double)"),
@@ -180,11 +175,10 @@ pub unsafe extern "C" fn cel_math_round(val_ptr: *mut CelValue) -> *mut CelValue
 /// Truncates the fractional portion (rounds toward zero).
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_trunc(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Double(d.trunc()))),
         _ => no_such_overload("math.trunc(double)"),
@@ -202,11 +196,10 @@ pub unsafe extern "C" fn cel_math_trunc(val_ptr: *mut CelValue) -> *mut CelValue
 /// For NaN inputs the output is NaN.
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_abs(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Int(i) => match i.checked_abs() {
             Some(v) => Box::into_raw(Box::new(CelValue::Int(v))),
@@ -224,11 +217,10 @@ pub unsafe extern "C" fn cel_math_abs(val_ptr: *mut CelValue) -> *mut CelValue {
 /// For double NaN the output is NaN. Does not differentiate +0.0 and -0.0.
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_sign(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Int(i) => Box::into_raw(Box::new(CelValue::Int(i.signum()))),
         CelValue::UInt(u) => {
@@ -259,11 +251,10 @@ pub unsafe extern "C" fn cel_math_sign(val_ptr: *mut CelValue) -> *mut CelValue 
 /// Returns true if the value is positive or negative infinity.
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_is_inf(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Bool(d.is_infinite()))),
         _ => no_such_overload("math.isInf(double)"),
@@ -275,11 +266,10 @@ pub unsafe extern "C" fn cel_math_is_inf(val_ptr: *mut CelValue) -> *mut CelValu
 /// Returns true if the value is NaN.
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_is_nan(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Bool(d.is_nan()))),
         _ => no_such_overload("math.isNaN(double)"),
@@ -292,11 +282,10 @@ pub unsafe extern "C" fn cel_math_is_nan(val_ptr: *mut CelValue) -> *mut CelValu
 /// Equivalent to `!math.isNaN(d) && !math.isInf(d)`.
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_is_finite(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     match val {
         CelValue::Double(d) => Box::into_raw(Box::new(CelValue::Bool(d.is_finite()))),
         _ => no_such_overload("math.isFinite(double)"),
@@ -310,15 +299,14 @@ pub unsafe extern "C" fn cel_math_is_finite(val_ptr: *mut CelValue) -> *mut CelV
 /// `math.bitOr(int, int) -> int` / `math.bitOr(uint, uint) -> uint`
 ///
 /// # Safety
-/// Caller must transfer ownership of both pointers (heap-allocated `CelValue`s) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_bit_or(
     lhs_ptr: *mut CelValue,
     rhs_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let lhs = unsafe { null_to_unbound(lhs_ptr) };
-    let rhs = unsafe { null_to_unbound(rhs_ptr) };
+    let lhs = unsafe { read_ptr(lhs_ptr) };
+    let rhs = unsafe { read_ptr(rhs_ptr) };
     let type_names = (lhs.type_name(), rhs.type_name());
     match (lhs, rhs) {
         (CelValue::Int(a), CelValue::Int(b)) => Box::into_raw(Box::new(CelValue::Int(a | b))),
@@ -330,15 +318,14 @@ pub unsafe extern "C" fn cel_math_bit_or(
 /// `math.bitAnd(int, int) -> int` / `math.bitAnd(uint, uint) -> uint`
 ///
 /// # Safety
-/// Caller must transfer ownership of both pointers (heap-allocated `CelValue`s) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_bit_and(
     lhs_ptr: *mut CelValue,
     rhs_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let lhs = unsafe { null_to_unbound(lhs_ptr) };
-    let rhs = unsafe { null_to_unbound(rhs_ptr) };
+    let lhs = unsafe { read_ptr(lhs_ptr) };
+    let rhs = unsafe { read_ptr(rhs_ptr) };
     let type_names = (lhs.type_name(), rhs.type_name());
     match (lhs, rhs) {
         (CelValue::Int(a), CelValue::Int(b)) => Box::into_raw(Box::new(CelValue::Int(a & b))),
@@ -350,15 +337,14 @@ pub unsafe extern "C" fn cel_math_bit_and(
 /// `math.bitXor(int, int) -> int` / `math.bitXor(uint, uint) -> uint`
 ///
 /// # Safety
-/// Caller must transfer ownership of both pointers (heap-allocated `CelValue`s) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_bit_xor(
     lhs_ptr: *mut CelValue,
     rhs_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let lhs = unsafe { null_to_unbound(lhs_ptr) };
-    let rhs = unsafe { null_to_unbound(rhs_ptr) };
+    let lhs = unsafe { read_ptr(lhs_ptr) };
+    let rhs = unsafe { read_ptr(rhs_ptr) };
     let type_names = (lhs.type_name(), rhs.type_name());
     match (lhs, rhs) {
         (CelValue::Int(a), CelValue::Int(b)) => Box::into_raw(Box::new(CelValue::Int(a ^ b))),
@@ -372,11 +358,10 @@ pub unsafe extern "C" fn cel_math_bit_xor(
 /// Performs a bitwise-NOT (one's complement).
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_bit_not(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     let type_name = val.type_name();
     match val {
         CelValue::Int(i) => Box::into_raw(Box::new(CelValue::Int(!i))),
@@ -391,15 +376,14 @@ pub unsafe extern "C" fn cel_math_bit_not(val_ptr: *mut CelValue) -> *mut CelVal
 /// A negative offset is a runtime error.
 ///
 /// # Safety
-/// Caller must transfer ownership of both pointers (heap-allocated `CelValue`s) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_bit_shift_left(
     val_ptr: *mut CelValue,
     offset_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
-    let offset_val = unsafe { null_to_unbound(offset_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
+    let offset_val = unsafe { read_ptr(offset_ptr) };
     let offset = match offset_val {
         CelValue::Int(i) => i,
         ref v => return no_such_overload(&format!("math.bitShiftLeft(_, {})", v.type_name())),
@@ -436,15 +420,14 @@ pub unsafe extern "C" fn cel_math_bit_shift_left(
 /// If `offset >= 64` the result is 0. A negative offset is a runtime error.
 ///
 /// # Safety
-/// Caller must transfer ownership of both pointers (heap-allocated `CelValue`s) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_bit_shift_right(
     val_ptr: *mut CelValue,
     offset_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
-    let offset_val = unsafe { null_to_unbound(offset_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
+    let offset_val = unsafe { read_ptr(offset_ptr) };
     let offset = match offset_val {
         CelValue::Int(i) => i,
         ref v => return no_such_overload(&format!("math.bitShiftRight(_, {})", v.type_name())),
@@ -481,11 +464,10 @@ pub unsafe extern "C" fn cel_math_bit_shift_right(
 /// Returns the square root as a double. For negative inputs returns NaN.
 ///
 /// # Safety
-/// Caller must transfer ownership of the pointer (a heap-allocated `CelValue`) to this function.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_math_sqrt(val_ptr: *mut CelValue) -> *mut CelValue {
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     let type_name = val.type_name();
     let d = match val {
         CelValue::Int(i) => i as f64,
@@ -503,7 +485,6 @@ pub unsafe extern "C" fn cel_math_sqrt(val_ptr: *mut CelValue) -> *mut CelValue 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::deserialization::cel_free_value;
     use rstest::rstest;
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -515,7 +496,6 @@ mod tests {
     ) -> CelValue {
         let result_ptr = unsafe { f(Box::into_raw(Box::new(v))) };
         let result = unsafe { (*result_ptr).clone() };
-        unsafe { cel_free_value(result_ptr) };
         result
     }
 
@@ -527,7 +507,6 @@ mod tests {
     ) -> CelValue {
         let result_ptr = unsafe { f(Box::into_raw(Box::new(a)), Box::into_raw(Box::new(b))) };
         let result = unsafe { (*result_ptr).clone() };
-        unsafe { cel_free_value(result_ptr) };
         result
     }
 

@@ -106,23 +106,29 @@ conformance-%: $(RUNTIME_TARGET)
 			echo "Error: Unknown conformance test suite '$*'"; \
 			echo ""; \
 			echo "Available conformance test suites:"; \
-			echo "  conformance-basic       - Basic CEL features (literals, operators, variables)"; \
-			echo "  conformance-comparisons - Comparison operators (==, !=, <, >, <=, >=)"; \
-			echo "  conformance-conversions - Type conversions (int(), uint(), double(), etc.)"; \
-			echo "  conformance-fp-math     - Floating point math operations"; \
-			echo "  conformance-int-math    - Integer math operations"; \
-			echo "  conformance-lists       - List operations (indexing, size, in, etc.)"; \
-			echo "  conformance-logic       - Logical operators (&&, ||, !, ? :)"; \
-			echo "  conformance-string      - String operations (size, contains, matches, etc.)"; \
-			echo "  conformance-string-ext  - Extended string operations (charAt, indexOf, split, etc.)"; \
-			echo "  conformance-network-ext - Kubernetes network extension (IP address library)"; \
-			echo "  conformance-timestamps  - Timestamp and duration operations"; \
-			echo "  conformance-optionals   - CEL optional type support"; \
-			echo "  conformance-encoders-ext - Base64 encoder/decoder extension"; \
-			echo "  conformance-math-ext    - Math extension (greatest, least, ceil, abs, bitwise, etc.)"; \
-		echo "  conformance-bindings-ext - Bindings extension (cel.bind variable binding)"; \
-			echo "  conformance-all         - Run all conformance tests"; \
-			echo "  conformance-list        - Show this list"; \
+			echo "  conformance-basic          - Basic CEL features (literals, operators, variables)"; \
+			echo "  conformance-comparisons    - Comparison operators (==, !=, <, >, <=, >=)"; \
+			echo "  conformance-conversions    - Type conversions (int(), uint(), double(), etc.)"; \
+			echo "  conformance-fp-math        - Floating point math operations"; \
+			echo "  conformance-int-math       - Integer math operations"; \
+			echo "  conformance-lists          - List operations (indexing, size, in, etc.)"; \
+			echo "  conformance-logic          - Logical operators (&&, ||, !, ? :)"; \
+			echo "  conformance-string         - String operations (size, contains, matches, etc.)"; \
+			echo "  conformance-string-ext     - Extended string operations (charAt, indexOf, split, etc.)"; \
+			echo "  conformance-network-ext    - Kubernetes network extension (IP address library)"; \
+			echo "  conformance-timestamps     - Timestamp and duration operations"; \
+			echo "  conformance-optionals      - CEL optional type support"; \
+			echo "  conformance-macros         - CEL macros (has, all, exists, exists_one, map, filter)"; \
+			echo "  conformance-macros2        - Additional CEL macros"; \
+			echo "  conformance-encoders-ext   - Base64 encoder/decoder extension"; \
+			echo "  conformance-math-ext       - Math extension (greatest, least, ceil, abs, bitwise, etc.)"; \
+			echo "  conformance-bindings-ext   - Bindings extension (cel.bind variable binding)"; \
+			echo "  conformance-block-ext      - Block extension (cel.@block)"; \
+			echo "  conformance-namespace      - Namespace resolution"; \
+			echo "  conformance-parse          - CEL parser conformance (literals, escapes, etc.)"; \
+			echo "  conformance-type-deduction - Type deduction and inference"; \
+			echo "  conformance-all            - Run all conformance tests"; \
+			echo "  conformance-list           - Show this list"; \
 			echo ""; \
 			echo "Examples:"; \
 			echo "  make conformance-basic"; \
@@ -183,21 +189,27 @@ conformance-sections-%: $(RUNTIME_TARGET)
 			echo "Error: Unknown conformance test suite '$*'"; \
 			echo ""; \
 			echo "Available conformance test suites:"; \
-			echo "  conformance-sections-basic       - List sections in basic suite"; \
-			echo "  conformance-sections-comparisons - List sections in comparisons suite"; \
-			echo "  conformance-sections-conversions - List sections in conversions suite"; \
-			echo "  conformance-sections-fp-math     - List sections in fp-math suite"; \
-			echo "  conformance-sections-int-math    - List sections in int-math suite"; \
-			echo "  conformance-sections-lists       - List sections in lists suite"; \
-			echo "  conformance-sections-logic       - List sections in logic suite"; \
-			echo "  conformance-sections-string      - List sections in string suite"; \
-			echo "  conformance-sections-string-ext  - List sections in string-ext suite"; \
-			echo "  conformance-sections-network-ext - List sections in network-ext suite"; \
-			echo "  conformance-sections-timestamps  - List sections in timestamps suite"; \
-			echo "  conformance-sections-optionals   - List sections in optionals suite"; \
-			echo "  conformance-sections-encoders-ext - List sections in encoders-ext suite"; \
-			echo "  conformance-sections-math-ext    - List sections in math-ext suite"; \
-		echo "  conformance-sections-bindings-ext - List sections in bindings-ext suite"; \
+			echo "  conformance-sections-basic          - List sections in basic suite"; \
+			echo "  conformance-sections-comparisons    - List sections in comparisons suite"; \
+			echo "  conformance-sections-conversions    - List sections in conversions suite"; \
+			echo "  conformance-sections-fp-math        - List sections in fp-math suite"; \
+			echo "  conformance-sections-int-math       - List sections in int-math suite"; \
+			echo "  conformance-sections-lists          - List sections in lists suite"; \
+			echo "  conformance-sections-logic          - List sections in logic suite"; \
+			echo "  conformance-sections-string         - List sections in string suite"; \
+			echo "  conformance-sections-string-ext     - List sections in string-ext suite"; \
+			echo "  conformance-sections-network-ext    - List sections in network-ext suite"; \
+			echo "  conformance-sections-timestamps     - List sections in timestamps suite"; \
+			echo "  conformance-sections-optionals      - List sections in optionals suite"; \
+			echo "  conformance-sections-macros         - List sections in macros suite"; \
+			echo "  conformance-sections-macros2        - List sections in macros2 suite"; \
+			echo "  conformance-sections-encoders-ext   - List sections in encoders-ext suite"; \
+			echo "  conformance-sections-math-ext       - List sections in math-ext suite"; \
+			echo "  conformance-sections-bindings-ext   - List sections in bindings-ext suite"; \
+			echo "  conformance-sections-block-ext      - List sections in block-ext suite"; \
+			echo "  conformance-sections-namespace      - List sections in namespace suite"; \
+			echo "  conformance-sections-parse          - List sections in parse suite"; \
+			echo "  conformance-sections-type-deduction - List sections in type-deduction suite"; \
 			echo ""; \
 			echo "To list tests in a specific section, use:"; \
 			echo "  CONFORMANCE_SECTION=<section_name> make conformance-sections-<suite>"; \
@@ -212,20 +224,28 @@ conformance-sections-%: $(RUNTIME_TARGET)
 conformance-list:
 	@echo "Available conformance test suites:"
 	@echo ""
-	@echo "  conformance-basic       - Basic CEL features (literals, operators, variables)"
-	@echo "  conformance-comparisons - Comparison operators (==, !=, <, >, <=, >=)"
-	@echo "  conformance-conversions - Type conversions (int(), uint(), double(), etc.)"
-	@echo "  conformance-fp-math     - Floating point math operations"
-	@echo "  conformance-int-math    - Integer math operations"
-	@echo "  conformance-lists       - List operations (indexing, size, in, etc.)"
-	@echo "  conformance-logic       - Logical operators (&&, ||, !, ? :)"
-	@echo "  conformance-string      - String operations (size, contains, matches, etc.)"
-	@echo "  conformance-string-ext  - Extended string operations (charAt, indexOf, split, etc.)"
-	@echo "  conformance-network-ext - Kubernetes network extension (IP address library)"
-	@echo "  conformance-timestamps  - Timestamp and duration operations"
-	@echo "  conformance-encoders-ext - Base64 encoder/decoder extension"
-	@echo "  conformance-math-ext    - Math extension (greatest, least, ceil, abs, bitwise, etc.)"
-	@echo "  conformance-all         - Run all conformance tests"
+	@echo "  conformance-basic          - Basic CEL features (literals, operators, variables)"
+	@echo "  conformance-comparisons    - Comparison operators (==, !=, <, >, <=, >=)"
+	@echo "  conformance-conversions    - Type conversions (int(), uint(), double(), etc.)"
+	@echo "  conformance-fp-math        - Floating point math operations"
+	@echo "  conformance-int-math       - Integer math operations"
+	@echo "  conformance-lists          - List operations (indexing, size, in, etc.)"
+	@echo "  conformance-logic          - Logical operators (&&, ||, !, ? :)"
+	@echo "  conformance-string         - String operations (size, contains, matches, etc.)"
+	@echo "  conformance-string-ext     - Extended string operations (charAt, indexOf, split, etc.)"
+	@echo "  conformance-network-ext    - Kubernetes network extension (IP address library)"
+	@echo "  conformance-timestamps     - Timestamp and duration operations"
+	@echo "  conformance-optionals      - CEL optional type support"
+	@echo "  conformance-macros         - CEL macros (has, all, exists, exists_one, map, filter)"
+	@echo "  conformance-macros2        - Additional CEL macros"
+	@echo "  conformance-encoders-ext   - Base64 encoder/decoder extension"
+	@echo "  conformance-math-ext       - Math extension (greatest, least, ceil, abs, bitwise, etc.)"
+	@echo "  conformance-bindings-ext   - Bindings extension (cel.bind variable binding)"
+	@echo "  conformance-block-ext      - Block extension (cel.@block)"
+	@echo "  conformance-namespace      - Namespace resolution"
+	@echo "  conformance-parse          - CEL parser conformance (literals, escapes, etc.)"
+	@echo "  conformance-type-deduction - Type deduction and inference"
+	@echo "  conformance-all            - Run all conformance tests"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make conformance-basic    # Run all tests in basic suite"

@@ -14,7 +14,7 @@
 //!
 //! Reference: CEL spec optional types extension.
 
-use crate::error::{create_error_value, null_to_unbound};
+use crate::error::{create_error_value, read_ptr};
 use crate::types::{CelMapKey, CelValue};
 use slog::error;
 
@@ -90,7 +90,7 @@ pub extern "C" fn cel_optional_none() -> *mut CelValue {
 /// `optional.of(x)` → Optional(Some(x))
 ///
 /// Wraps any value in an optional, including null and zero values.
-/// Consumes `val_ptr`.
+/// Reads `val_ptr`.
 ///
 /// # Safety
 /// `val_ptr` must be a valid, non-null pointer to a `CelValue`.
@@ -102,13 +102,13 @@ pub unsafe extern "C" fn cel_optional_of(val_ptr: *mut CelValue) -> *mut CelValu
         error!(log, "null pointer"; "function" => "cel_optional_of");
         return create_error_value("no such overload");
     }
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     Box::into_raw(Box::new(CelValue::Optional(Some(Box::new(val)))))
 }
 
 /// `optional.ofNonZeroValue(x)` → Optional(Some(x)) if x is non-zero, else Optional(None)
 ///
-/// Consumes `val_ptr`.
+/// Reads `val_ptr`.
 ///
 /// # Safety
 /// `val_ptr` must be a valid, non-null pointer to a `CelValue`.
@@ -120,7 +120,7 @@ pub unsafe extern "C" fn cel_optional_of_non_zero_value(val_ptr: *mut CelValue) 
         error!(log, "null pointer"; "function" => "cel_optional_of_non_zero_value");
         return create_error_value("no such overload");
     }
-    let val = unsafe { null_to_unbound(val_ptr) };
+    let val = unsafe { read_ptr(val_ptr) };
     if is_zero_value(&val) {
         Box::into_raw(Box::new(CelValue::Optional(None)))
     } else {
@@ -155,7 +155,7 @@ pub unsafe extern "C" fn cel_optional_has_value(opt_ptr: *mut CelValue) -> *mut 
 
 /// `<opt>.value()` → inner value or Error
 ///
-/// Unwraps the optional. Returns an error if empty. Consumes `opt_ptr`.
+/// Unwraps the optional. Returns an error if empty. Reads `opt_ptr`.
 ///
 /// # Safety
 /// `opt_ptr` must be a valid, non-null pointer to a `CelValue::Optional`.
@@ -167,7 +167,7 @@ pub unsafe extern "C" fn cel_optional_value(opt_ptr: *mut CelValue) -> *mut CelV
         error!(log, "null pointer"; "function" => "cel_optional_value");
         return create_error_value("no such overload");
     }
-    let val = unsafe { null_to_unbound(opt_ptr) };
+    let val = unsafe { read_ptr(opt_ptr) };
     match val {
         CelValue::Optional(Some(inner)) => Box::into_raw(inner),
         CelValue::Optional(None) => {
@@ -183,7 +183,7 @@ pub unsafe extern "C" fn cel_optional_value(opt_ptr: *mut CelValue) -> *mut CelV
 
 /// `<opt>.orValue(default)` → inner value if present, else default
 ///
-/// Consumes both `opt_ptr` and `default_ptr`.
+/// Reads both `opt_ptr` and `default_ptr`.
 ///
 /// # Safety
 /// `opt_ptr` must be a valid, non-null pointer to a `CelValue::Optional`.
@@ -199,8 +199,8 @@ pub unsafe extern "C" fn cel_optional_or_value(
         error!(log, "null pointer"; "function" => "cel_optional_or_value");
         return create_error_value("no such overload");
     }
-    let opt = unsafe { null_to_unbound(opt_ptr) };
-    let default = unsafe { null_to_unbound(default_ptr) };
+    let opt = unsafe { read_ptr(opt_ptr) };
+    let default = unsafe { read_ptr(default_ptr) };
     match opt {
         CelValue::Optional(Some(inner)) => Box::into_raw(inner),
         CelValue::Optional(None) => Box::into_raw(Box::new(default)),
@@ -214,7 +214,7 @@ pub unsafe extern "C" fn cel_optional_or_value(
 /// `<opt>.or(other_opt)` → first optional with a value, or the second
 ///
 /// If `opt` has a value, returns `opt`. Otherwise returns `other_opt`.
-/// Consumes both `opt_ptr` and `other_ptr`.
+/// Reads both `opt_ptr` and `other_ptr`.
 ///
 /// # Safety
 /// Both pointers must be valid, non-null pointers to `CelValue`.
@@ -229,8 +229,8 @@ pub unsafe extern "C" fn cel_optional_or(
         error!(log, "null pointer"; "function" => "cel_optional_or");
         return create_error_value("no such overload");
     }
-    let opt = unsafe { null_to_unbound(opt_ptr) };
-    let other = unsafe { null_to_unbound(other_ptr) };
+    let opt = unsafe { read_ptr(opt_ptr) };
+    let other = unsafe { read_ptr(other_ptr) };
     Box::into_raw(Box::new(match opt {
         CelValue::Optional(Some(_)) => opt,
         CelValue::Optional(None) => other,
@@ -250,7 +250,7 @@ pub unsafe extern "C" fn cel_optional_or(
 /// - `Object(map)?.field` → `Optional(Some(map[field]))` or `Optional(None)` if absent
 /// - anything else → error ("no such key")
 ///
-/// Consumes `receiver_ptr`. The `i32` params are raw WASM memory addresses.
+/// Reads `receiver_ptr`. The `i32` params are raw WASM memory addresses.
 ///
 /// # Safety
 /// `receiver_ptr` must be a valid non-null pointer to a `CelValue`.
@@ -278,7 +278,7 @@ pub unsafe extern "C" fn cel_optional_select(
         }
     };
 
-    let receiver = unsafe { null_to_unbound(receiver_ptr) };
+    let receiver = unsafe { read_ptr(receiver_ptr) };
 
     fn select_from_map(
         map: &std::collections::HashMap<CelMapKey, CelValue>,
@@ -312,7 +312,7 @@ pub unsafe extern "C" fn cel_optional_select(
 /// - `Array[?i]` → `Optional(Some(array[i]))` or `Optional(None)` if out of bounds
 /// - `Object(map)[?key]` → `Optional(Some(map[key]))` or `Optional(None)` if absent
 ///
-/// Consumes both `container_ptr` and `key_ptr`.
+/// Reads both `container_ptr` and `key_ptr`.
 ///
 /// # Safety
 /// Both pointers must be valid and non-null.
@@ -329,8 +329,8 @@ pub unsafe extern "C" fn cel_optional_index(
         return Box::into_raw(Box::new(CelValue::Optional(None)));
     }
 
-    let container = unsafe { null_to_unbound(container_ptr) };
-    let key = unsafe { null_to_unbound(key_ptr) };
+    let container = unsafe { read_ptr(container_ptr) };
+    let key = unsafe { read_ptr(key_ptr) };
 
     fn index_array(arr: &[CelValue], key: &CelValue) -> *mut CelValue {
         let idx = match key {

@@ -19,7 +19,7 @@
 //!   - IP addresses with zones (e.g. `fe80::1%eth0`) are NOT allowed.
 //!   - Leading zeros in IPv4 octets (e.g. `010.0.0.1`) are NOT allowed.
 
-use crate::error::{create_error_value, null_to_unbound};
+use crate::error::{create_error_value, read_ptr};
 use crate::types::CelValue;
 use slog::error;
 use std::net::IpAddr;
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn cel_k8s_ip_parse(str_ptr: *mut CelValue) -> *mut CelVal
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(str_ptr) };
+    let val = unsafe { read_ptr(str_ptr) };
     let s = match val {
         CelValue::String(ref s) => s.clone(),
         other => {
@@ -137,7 +137,7 @@ pub unsafe extern "C" fn cel_k8s_is_ip(str_ptr: *mut CelValue) -> *mut CelValue 
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(str_ptr) };
+    let val = unsafe { read_ptr(str_ptr) };
     let s = match val {
         CelValue::String(ref s) => s.clone(),
         other => {
@@ -174,7 +174,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_canonical(str_ptr: *mut CelValue) -> *mut
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(str_ptr) };
+    let val = unsafe { read_ptr(str_ptr) };
     let s = match val {
         CelValue::String(ref s) => s.clone(),
         other => {
@@ -210,7 +210,7 @@ pub unsafe extern "C" fn cel_k8s_ip_family(ip_ptr: *mut CelValue) -> *mut CelVal
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(ip_ptr) };
+    let val = unsafe { read_ptr(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => {
             let family: i64 = if addr.is_ipv4() { 4 } else { 6 };
@@ -242,7 +242,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_unspecified(ip_ptr: *mut CelValue) -> *mu
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(ip_ptr) };
+    let val = unsafe { read_ptr(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => Box::into_raw(Box::new(CelValue::Bool(addr.is_unspecified()))),
         other => {
@@ -271,7 +271,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_loopback(ip_ptr: *mut CelValue) -> *mut C
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(ip_ptr) };
+    let val = unsafe { read_ptr(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => Box::into_raw(Box::new(CelValue::Bool(addr.is_loopback()))),
         other => {
@@ -302,7 +302,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_link_local_multicast(
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(ip_ptr) };
+    let val = unsafe { read_ptr(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => {
             // IPv4 link-local multicast: 224.0.0.0/24 (i.e. 224.0.0.x)
@@ -343,7 +343,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_link_local_unicast(ip_ptr: *mut CelValue)
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(ip_ptr) };
+    let val = unsafe { read_ptr(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => {
             let result = match addr {
@@ -387,7 +387,7 @@ pub unsafe extern "C" fn cel_k8s_ip_is_global_unicast(ip_ptr: *mut CelValue) -> 
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(ip_ptr) };
+    let val = unsafe { read_ptr(ip_ptr) };
     match val {
         CelValue::IpAddr(addr) => {
             // Matches Go's net.IP.IsGlobalUnicast():

@@ -44,7 +44,7 @@
 //!   - Trailing zeros are stripped.
 //!   - The suffix is chosen to keep the coefficient reasonably short.
 
-use crate::error::{create_error_value, null_to_unbound};
+use crate::error::{create_error_value, read_ptr};
 use crate::types::CelValue;
 use slog::error;
 
@@ -525,7 +525,7 @@ pub unsafe extern "C" fn cel_k8s_quantity_parse(str_ptr: *mut CelValue) -> *mut 
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(str_ptr) };
+    let val = unsafe { read_ptr(str_ptr) };
     let s = match val {
         CelValue::String(s) => s,
         other => {
@@ -557,7 +557,7 @@ pub unsafe extern "C" fn cel_k8s_is_quantity(str_ptr: *mut CelValue) -> *mut Cel
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(str_ptr) };
+    let val = unsafe { read_ptr(str_ptr) };
     let s = match val {
         CelValue::String(s) => s,
         other => {
@@ -571,7 +571,7 @@ pub unsafe extern "C" fn cel_k8s_is_quantity(str_ptr: *mut CelValue) -> *mut Cel
 }
 
 /// Helper to parse a Quantity CelValue into a QuantityAmount, returning an error CelValue on failure.
-/// Consumes (takes ownership of) the pointed-to value.
+///
 unsafe fn parse_quantity_cel(
     ptr: *mut CelValue,
     fn_name: &str,
@@ -581,7 +581,7 @@ unsafe fn parse_quantity_cel(
         error!(log, "null pointer"; "function" => fn_name);
         return Err(create_error_value("no such overload"));
     }
-    let val = unsafe { null_to_unbound(ptr) };
+    let val = unsafe { read_ptr(ptr) };
     match val {
         CelValue::Quantity(s) => parse_quantity_full(&s).map_err(|e| {
             error!(log, "invalid quantity"; "function" => fn_name, "error" => &e);
@@ -753,7 +753,7 @@ pub unsafe extern "C" fn cel_k8s_quantity_add_int(
         error!(log, "null pointer"; "function" => "cel_k8s_quantity_add_int");
         return create_error_value("no such overload");
     }
-    let int_val = unsafe { null_to_unbound(int_ptr) };
+    let int_val = unsafe { read_ptr(int_ptr) };
     let n = match int_val {
         CelValue::Int(n) => n,
         other => {
@@ -832,7 +832,7 @@ pub unsafe extern "C" fn cel_k8s_quantity_sub_int(
         error!(log, "null pointer"; "function" => "cel_k8s_quantity_sub_int");
         return create_error_value("no such overload");
     }
-    let int_val = unsafe { null_to_unbound(int_ptr) };
+    let int_val = unsafe { read_ptr(int_ptr) };
     let n = match int_val {
         CelValue::Int(n) => n,
         other => {

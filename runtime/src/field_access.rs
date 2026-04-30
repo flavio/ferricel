@@ -210,7 +210,6 @@ fn get_proto_field_default(
 /// - `obj_ptr` is a valid pointer to an initialized CelValue instance
 /// - `field_name_ptr` points to valid UTF-8 bytes in WASM memory
 /// - `field_name_len` is the correct length of the field name
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_has_field(

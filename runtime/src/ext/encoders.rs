@@ -2,7 +2,7 @@
 //!
 //! Implements `base64.encode(bytes) -> string` and `base64.decode(string) -> bytes`.
 
-use crate::error::null_to_unbound;
+use crate::error::read_ptr;
 use base64::{Engine as _, engine::general_purpose};
 
 use crate::types::CelValue;
@@ -10,13 +10,10 @@ use crate::types::CelValue;
 /// `base64.encode(b) -> string` — encodes bytes to a standard base64 string (with padding).
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_base64_encode(bytes_ptr: *mut CelValue) -> *mut CelValue {
-    let bytes_val = unsafe { null_to_unbound(bytes_ptr) };
+    let bytes_val = unsafe { read_ptr(bytes_ptr) };
     let bytes = match bytes_val {
         CelValue::Bytes(b) => b,
         _ => {
@@ -35,13 +32,10 @@ pub unsafe extern "C" fn cel_base64_encode(bytes_ptr: *mut CelValue) -> *mut Cel
 /// Returns an error value if the string is not valid base64.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_base64_decode(string_ptr: *mut CelValue) -> *mut CelValue {
-    let string_val = unsafe { null_to_unbound(string_ptr) };
+    let string_val = unsafe { read_ptr(string_ptr) };
     let s = match string_val {
         CelValue::String(s) => s,
         _ => {

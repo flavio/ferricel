@@ -116,19 +116,25 @@ pub fn create_error_value(message: &str) -> *mut crate::types::CelValue {
     Box::into_raw(Box::new(crate::types::CelValue::Error(message.to_string())))
 }
 
-/// Consume a raw `*mut CelValue` pointer, aborting hard if null.
+/// Read a `CelValue` from a raw pointer, aborting hard if null.
+///
+/// Reads a `CelValue` out of a raw pointer, aborting on null.
 ///
 /// A null pointer reaching an operator is a compiler or runtime bug — since
 /// `cel_get_variable` now returns a `CelValue::Error` (never null) for unbound
 /// variables, null should never appear here. If it does, abort loudly instead
 /// of silently producing a wrong error value.
 ///
+/// Under the arena allocator (`lol_alloc::LeakingAllocator`) dealloc is a no-op,
+/// so `ptr::read` is used to bitwise-move the value out of arena memory without
+/// cloning or freeing.
+///
 /// # Safety
-/// `ptr` must be a valid, uniquely-owned heap allocation of a `CelValue`.
+/// `ptr` must point to a valid, aligned `CelValue` in live memory.
 #[inline]
-pub unsafe fn null_to_unbound(ptr: *mut crate::types::CelValue) -> crate::types::CelValue {
+pub unsafe fn read_ptr(ptr: *mut crate::types::CelValue) -> crate::types::CelValue {
     if ptr.is_null() {
         abort_with_error("null CelValue pointer: this is a compiler or runtime bug");
     }
-    unsafe { *Box::from_raw(ptr) }
+    unsafe { std::ptr::read(ptr) }
 }

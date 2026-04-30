@@ -309,7 +309,6 @@ pub unsafe fn cel_bytes_gte(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::deserialization::cel_free_value;
     use rstest::rstest;
 
     #[test]
@@ -324,8 +323,6 @@ mod tests {
                 CelValue::Bytes(b) => assert_eq!(b, &test_bytes),
                 _ => panic!("Expected Bytes variant"),
             }
-
-            cel_free_value(result_ptr);
         }
     }
 
@@ -341,8 +338,6 @@ mod tests {
                 CelValue::Bytes(b) => assert_eq!(b, &test_bytes),
                 _ => panic!("Expected Bytes variant"),
             }
-
-            cel_free_value(result_ptr);
         }
     }
 
@@ -384,7 +379,6 @@ mod tests {
             let result = &*result_ptr;
 
             assert_eq!(result, &CelValue::Bool(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -401,7 +395,6 @@ mod tests {
             let result = &*result_ptr;
 
             assert_eq!(result, &CelValue::Bool(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -420,7 +413,6 @@ mod tests {
             let result = &*result_ptr;
 
             assert_eq!(result, &CelValue::Bool(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -438,7 +430,6 @@ mod tests {
             let result = &*result_ptr;
 
             assert_eq!(result, &CelValue::Bool(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -456,7 +447,6 @@ mod tests {
             let result = &*result_ptr;
 
             assert_eq!(result, &CelValue::Bool(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -474,7 +464,6 @@ mod tests {
             let result = &*result_ptr;
 
             assert_eq!(result, &CelValue::Bool(expected));
-            cel_free_value(result_ptr);
         }
     }
 }

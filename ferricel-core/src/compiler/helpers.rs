@@ -60,12 +60,6 @@ pub fn compile_string_to_local(
     let result_local = module.locals.add(ValType::I32);
     body.local_set(result_local);
 
-    // Free the temporary raw bytes buffer — cel_create_string already copied
-    // the data into an owned String, so the original allocation is no longer needed
-    body.local_get(data_ptr_local);
-    body.i32_const(len);
-    body.call(env.get(RuntimeFunction::Free));
-
     Ok(result_local)
 }
 

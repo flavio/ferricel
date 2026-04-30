@@ -2,7 +2,7 @@
 //! These are used internally by other runtime functions and exported for compiler use.
 //! Also includes polymorphic operators that dispatch to type-specific implementations.
 
-use crate::error::{abort_with_error, null_to_unbound};
+use crate::error::{abort_with_error, read_ptr};
 use crate::types::CelValue;
 use crate::{arithmetic, array, bytes, string, temporal};
 use slog::{debug, error};
@@ -12,7 +12,6 @@ use slog::{debug, error};
 /// # Safety
 ///
 /// This function is unsafe because it returns a raw pointer. The caller must ensure:
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_int(value: i64) -> *mut CelValue {
@@ -24,7 +23,6 @@ pub unsafe extern "C" fn cel_create_int(value: i64) -> *mut CelValue {
 /// # Safety
 ///
 /// This function is unsafe because it returns a raw pointer. The caller must ensure:
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_uint(value: u64) -> *mut CelValue {
@@ -37,7 +35,6 @@ pub unsafe extern "C" fn cel_create_uint(value: u64) -> *mut CelValue {
 /// # Safety
 ///
 /// This function is unsafe because it returns a raw pointer. The caller must ensure:
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_bool(value: i64) -> *mut CelValue {
@@ -49,7 +46,6 @@ pub unsafe extern "C" fn cel_create_bool(value: i64) -> *mut CelValue {
 /// # Safety
 ///
 /// This function is unsafe because it returns a raw pointer. The caller must ensure:
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_double(value: f64) -> *mut CelValue {
@@ -65,7 +61,6 @@ pub unsafe extern "C" fn cel_create_double(value: f64) -> *mut CelValue {
 /// # Safety
 ///
 /// This function is unsafe because it returns a raw pointer. The caller must ensure:
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_create_timestamp(seconds: i64, nanos: i64) -> *mut CelValue {
     let dt = crate::chrono_helpers::parts_to_datetime(seconds, nanos);
@@ -81,7 +76,6 @@ pub unsafe fn cel_create_timestamp(seconds: i64, nanos: i64) -> *mut CelValue {
 /// # Safety
 ///
 /// This function is unsafe because it returns a raw pointer. The caller must ensure:
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_create_duration(seconds: i64, nanos: i64) -> *mut CelValue {
     let duration = crate::chrono_helpers::parts_to_duration(seconds, nanos);
@@ -93,7 +87,6 @@ pub unsafe fn cel_create_duration(seconds: i64, nanos: i64) -> *mut CelValue {
 /// # Safety
 ///
 /// This function is unsafe because it returns a raw pointer. The caller must ensure:
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_null() -> *mut CelValue {
@@ -111,7 +104,6 @@ pub unsafe extern "C" fn cel_create_null() -> *mut CelValue {
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
 /// - `type_name_ptr` points to valid UTF-8 bytes in WASM memory
 /// - `type_name_len` is the correct length of the type name
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_type(
@@ -146,7 +138,6 @@ pub unsafe extern "C" fn cel_create_type(
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
 /// - `error_msg_ptr` points to valid bytes in WASM memory (if not null)
 /// - `error_msg_len` is the correct length of the error message
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_error(
@@ -182,24 +173,20 @@ pub(crate) fn extract_int(ptr: *mut CelValue) -> i64 {
     }
 }
 
-/// Polymorphic addition operator. Consumes both operands.
+/// Polymorphic addition operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_add(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
-    Box::into_raw(Box::new(value_add(a, b)))
-}
-
-fn value_add(a: CelValue, b: CelValue) -> CelValue {
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     let log = crate::logging::get_logger();
-    match (a, b) {
+    let result = match (a, b) {
         (CelValue::Error(e), _) => CelValue::Error(e),
         (_, CelValue::Error(e)) => CelValue::Error(e),
         (CelValue::Int(a), CelValue::Int(b)) => {
@@ -247,27 +234,24 @@ fn value_add(a: CelValue, b: CelValue) -> CelValue {
                 "right_type" => format!("{:?}", b));
             CelValue::Error("no such overload".into())
         }
-    }
+    };
+    Box::into_raw(Box::new(result))
 }
 
-/// Polymorphic subtraction operator. Consumes both operands.
+/// Polymorphic subtraction operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_sub(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
-    Box::into_raw(Box::new(value_sub(a, b)))
-}
-
-fn value_sub(a: CelValue, b: CelValue) -> CelValue {
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     let log = crate::logging::get_logger();
-    match (a, b) {
+    let result = match (a, b) {
         (CelValue::Error(e), _) => CelValue::Error(e),
         (_, CelValue::Error(e)) => CelValue::Error(e),
         (CelValue::Int(a), CelValue::Int(b)) => {
@@ -306,27 +290,24 @@ fn value_sub(a: CelValue, b: CelValue) -> CelValue {
                 "right_type" => format!("{:?}", b));
             CelValue::Error("no such overload".into())
         }
-    }
+    };
+    Box::into_raw(Box::new(result))
 }
 
-/// Polymorphic multiplication operator. Consumes both operands.
+/// Polymorphic multiplication operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_mul(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
-    Box::into_raw(Box::new(value_mul(a, b)))
-}
-
-fn value_mul(a: CelValue, b: CelValue) -> CelValue {
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     let log = crate::logging::get_logger();
-    match (a, b) {
+    let result = match (a, b) {
         (CelValue::Error(e), _) => CelValue::Error(e),
         (_, CelValue::Error(e)) => CelValue::Error(e),
         (CelValue::Int(a), CelValue::Int(b)) => match a.checked_mul(b) {
@@ -351,47 +332,43 @@ fn value_mul(a: CelValue, b: CelValue) -> CelValue {
                 "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
             CelValue::Error("no such overload".into())
         }
-    }
+    };
+    Box::into_raw(Box::new(result))
 }
 
-/// Polymorphic division operator. Consumes both operands.
+/// Polymorphic division operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_div(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
-    Box::into_raw(Box::new(value_div(a, b)))
-}
-
-fn value_div(a: CelValue, b: CelValue) -> CelValue {
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     let log = crate::logging::get_logger();
-    match (a, b) {
+    let result = match (a, b) {
         (CelValue::Error(e), _) => CelValue::Error(e),
         (_, CelValue::Error(e)) => CelValue::Error(e),
         (CelValue::Int(a), CelValue::Int(b)) => {
             if b == 0 {
-                return CelValue::Error("divide by zero".into());
-            }
-            match a.checked_div(b) {
-                Some(r) => CelValue::Int(r),
-                None => {
-                    error!(log, "Integer overflow in division"; "dividend" => a, "divisor" => b);
-                    CelValue::Error("return error for overflow".into())
+                CelValue::Error("divide by zero".into())
+            } else {
+                match a.checked_div(b) {
+                    Some(r) => CelValue::Int(r),
+                    None => {
+                        error!(log, "Integer overflow in division"; "dividend" => a, "divisor" => b);
+                        CelValue::Error("return error for overflow".into())
+                    }
                 }
             }
         }
-        (CelValue::UInt(a), CelValue::UInt(b)) => {
-            if b == 0 {
-                return CelValue::Error("divide by zero".into());
-            }
-            CelValue::UInt(a / b)
-        }
+        (CelValue::UInt(a), CelValue::UInt(b)) => match a.checked_div(b) {
+            Some(r) => CelValue::UInt(r),
+            None => CelValue::Error("divide by zero".into()),
+        },
         (CelValue::Double(a), CelValue::Double(b)) => {
             CelValue::Double(arithmetic::double_div(a, b))
         }
@@ -400,50 +377,50 @@ fn value_div(a: CelValue, b: CelValue) -> CelValue {
                 "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
             CelValue::Error("no such overload".into())
         }
-    }
+    };
+    Box::into_raw(Box::new(result))
 }
 
-/// Polymorphic modulo operator. Consumes both operands.
+/// Polymorphic modulo operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_mod(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
-    Box::into_raw(Box::new(value_mod(a, b)))
-}
-
-fn value_mod(a: CelValue, b: CelValue) -> CelValue {
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     let log = crate::logging::get_logger();
-    match (a, b) {
+    let result = match (a, b) {
         (CelValue::Error(e), _) => CelValue::Error(e),
         (_, CelValue::Error(e)) => CelValue::Error(e),
         (CelValue::Int(a), CelValue::Int(b)) => {
             if b == 0 {
-                return CelValue::Error("modulus by zero".into());
-            }
-            match a.checked_rem(b) {
-                Some(r) => CelValue::Int(r),
-                None => CelValue::Error("return error for overflow".into()),
+                CelValue::Error("modulus by zero".into())
+            } else {
+                match a.checked_rem(b) {
+                    Some(r) => CelValue::Int(r),
+                    None => CelValue::Error("return error for overflow".into()),
+                }
             }
         }
         (CelValue::UInt(a), CelValue::UInt(b)) => {
             if b == 0 {
-                return CelValue::Error("modulus by zero".into());
+                CelValue::Error("modulus by zero".into())
+            } else {
+                CelValue::UInt(a % b)
             }
-            CelValue::UInt(a % b)
         }
         (a, b) => {
             error!(log, "Modulo is only defined for int and uint";
                 "left_type" => format!("{:?}", a), "right_type" => format!("{:?}", b));
             CelValue::Error("no_such_overload".into())
         }
-    }
+    };
+    Box::into_raw(Box::new(result))
 }
 
 /// Internal helper function to check CEL equality between two CelValue references.
@@ -678,15 +655,15 @@ fn cel_map_keys_equal(a: &crate::types::CelMapKey, b: &crate::types::CelMapKey) 
     }
 }
 
-/// Polymorphic equality operator. Consumes both operands.
+/// Polymorphic equality operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     let result = match (&a, &b) {
         (CelValue::Error(_), _) => return Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => return Box::into_raw(Box::new(b)),
@@ -695,15 +672,15 @@ pub unsafe extern "C" fn cel_value_eq(a_ptr: *mut CelValue, b_ptr: *mut CelValue
     Box::into_raw(Box::new(CelValue::Bool(result)))
 }
 
-/// Polymorphic inequality operator. Consumes both operands.
+/// Polymorphic inequality operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     let result = match (&a, &b) {
         (CelValue::Error(_), _) => return Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => return Box::into_raw(Box::new(b)),
@@ -712,15 +689,15 @@ pub unsafe extern "C" fn cel_value_ne(a_ptr: *mut CelValue, b_ptr: *mut CelValue
     Box::into_raw(Box::new(CelValue::Bool(result)))
 }
 
-/// Polymorphic greater-than operator. Consumes both operands.
+/// Polymorphic greater-than operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     match (&a, &b) {
         (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
@@ -736,15 +713,15 @@ pub unsafe extern "C" fn cel_value_gt(a_ptr: *mut CelValue, b_ptr: *mut CelValue
     }
 }
 
-/// Polymorphic less-than operator. Consumes both operands.
+/// Polymorphic less-than operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_lt(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     match (&a, &b) {
         (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
@@ -799,18 +776,18 @@ pub(crate) fn cel_value_less_than(
     Ok(result)
 }
 
-/// Polymorphic greater-than-or-equal operator. Consumes both operands.
+/// Polymorphic greater-than-or-equal operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_gte(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     match (&a, &b) {
         (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
@@ -827,18 +804,18 @@ pub unsafe extern "C" fn cel_value_gte(
     }
 }
 
-/// Polymorphic less-than-or-equal operator. Consumes both operands.
+/// Polymorphic less-than-or-equal operator.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_lte(
     a_ptr: *mut CelValue,
     b_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     match (&a, &b) {
         (CelValue::Error(_), _) => Box::into_raw(Box::new(a)),
         (_, CelValue::Error(_)) => Box::into_raw(Box::new(b)),
@@ -863,7 +840,7 @@ pub unsafe extern "C" fn cel_value_lte(
 /// - Map: number of keys
 ///
 /// # Safety
-/// - `ptr` must be a valid, non-null, uniquely-owned CelValue pointer
+/// - `ptr` must be a valid, non-null CelValue pointer
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
@@ -891,20 +868,16 @@ pub unsafe extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
     }
 }
 
-/// Polymorphic negation operator. Consumes the operand.
+/// Polymorphic negation operator.
 ///
 /// # Safety
-/// Pointer must be valid, non-null, uniquely-owned CelValue pointer.
+/// Pointer must be valid, non-null CelValue pointer.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_negate(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
-    Box::into_raw(Box::new(value_negate(value)))
-}
-
-fn value_negate(value: CelValue) -> CelValue {
+    let value = unsafe { read_ptr(ptr) };
     let log = crate::logging::get_logger();
-    match value {
+    let result = match value {
         CelValue::Error(e) => CelValue::Error(e),
         CelValue::Int(i) => match i.checked_neg() {
             Some(r) => CelValue::Int(r),
@@ -917,26 +890,29 @@ fn value_negate(value: CelValue) -> CelValue {
                 "type" => format!("{:?}", other));
             CelValue::Error("no such overload".into())
         }
-    }
+    };
+    Box::into_raw(Box::new(result))
 }
 
-/// Index operator for arrays and maps. Consumes both operands.
+/// Index operator for arrays and maps.
 ///
 /// # Safety
-/// Both pointers must be valid, non-null, uniquely-owned CelValue pointers.
+/// Both pointers must be valid, non-null CelValue pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_index(
     container_ptr: *mut CelValue,
     index_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let container = unsafe { null_to_unbound(container_ptr) };
-    let index = unsafe { null_to_unbound(index_ptr) };
-    Box::into_raw(Box::new(value_index(container, index)))
+    let container = unsafe { read_ptr(container_ptr) };
+    let index = unsafe { read_ptr(index_ptr) };
+    let log = crate::logging::get_logger();
+    Box::into_raw(Box::new(index_value(&log, container, index)))
 }
 
-fn value_index(container: CelValue, index: CelValue) -> CelValue {
-    let log = crate::logging::get_logger();
+/// Recursive index logic, kept as a separate function because it calls itself
+/// for `Optional(Some(...))` containers.
+fn index_value(log: &slog::Logger, container: CelValue, index: CelValue) -> CelValue {
     match (container, index) {
         // Error propagation
         (CelValue::Error(e), _) => CelValue::Error(e),
@@ -944,7 +920,7 @@ fn value_index(container: CelValue, index: CelValue) -> CelValue {
         // Optional container
         (CelValue::Optional(None), _) => CelValue::Optional(None),
         (CelValue::Optional(Some(inner)), idx) => {
-            let result = value_index(*inner, idx);
+            let result = index_value(log, *inner, idx);
             match result {
                 CelValue::Error(_) => CelValue::Optional(None),
                 v => CelValue::Optional(Some(Box::new(v))),
@@ -1014,7 +990,6 @@ fn value_index(container: CelValue, index: CelValue) -> CelValue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::deserialization::cel_free_value;
     use rstest::rstest;
 
     fn extract_bool(ptr: *mut CelValue) -> bool {
@@ -1156,9 +1131,6 @@ mod tests {
             let result = &*result_ptr;
 
             assert_eq!(result, &expected);
-
-            // Clean up — inputs consumed by cel_value_add, only free result
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1211,9 +1183,6 @@ mod tests {
             let result = &*result_ptr;
 
             assert_eq!(result, &expected);
-
-            // Clean up — inputs consumed by cel_value_eq, only free result
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1240,9 +1209,6 @@ mod tests {
             let result = &*result_ptr;
 
             assert_eq!(result, &expected);
-
-            // Clean up — inputs consumed by cel_value_lt, only free result
-            cel_free_value(result_ptr);
         }
     }
 
@@ -1267,9 +1233,6 @@ mod tests {
             let result = &*result_ptr;
 
             assert_eq!(result, &expected);
-
-            // Clean up — inputs consumed by cel_value_gt, only free result
-            cel_free_value(result_ptr);
         }
     }
 }

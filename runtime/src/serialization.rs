@@ -1,7 +1,7 @@
 //! JSON serialization of CEL values with memory-encoded results.
 //! Returns i64 with pointer in low 32 bits, length in high 32 bits.
 
-use crate::error::null_to_unbound;
+use crate::error::read_ptr;
 use crate::memory::cel_malloc;
 use crate::types::CelValue;
 
@@ -36,8 +36,8 @@ fn serialize_to_json(value: &CelValue) -> i64 {
 ///
 /// # Safety
 ///
-/// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64. The caller must ensure:
-/// - The returned pointer (decoded from low 32 bits) must be freed using `cel_free` with the length (decoded from high 32 bits)
+/// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64.
+/// The returned bytes are valid for the lifetime of the WASM instance.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_serialize_int(value: i64) -> i64 {
     let cel_value = CelValue::Int(value);
@@ -49,8 +49,8 @@ pub unsafe fn cel_serialize_int(value: i64) -> i64 {
 ///
 /// # Safety
 ///
-/// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64. The caller must ensure:
-/// - The returned pointer (decoded from low 32 bits) must be freed using `cel_free` with the length (decoded from high 32 bits)
+/// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64.
+/// The returned bytes are valid for the lifetime of the WASM instance.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_serialize_bool(value: i64) -> i64 {
     let cel_value = CelValue::Bool(value != 0);
@@ -59,20 +59,18 @@ pub unsafe fn cel_serialize_bool(value: i64) -> i64 {
 
 /// Serialize a CelValue pointer to JSON.
 /// Serializes the CelValue to JSON and returns encoded (ptr, len) as i64.
-/// Consumes the input pointer.
 ///
 /// # Safety
 ///
-/// `value_ptr` must be a valid, non-null, uniquely-owned CelValue pointer.
-/// The returned pointer (decoded from low 32 bits) must be freed using `cel_free` with
-/// the length (decoded from high 32 bits).
+/// `value_ptr` must be a valid, non-null CelValue pointer.
+/// The returned bytes are valid for the lifetime of the WASM instance.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_serialize_value(value_ptr: *mut CelValue) -> i64 {
     if value_ptr.is_null() {
         panic!("Null pointer passed to cel_serialize_value");
     }
-    let value = unsafe { null_to_unbound(value_ptr) };
+    let value = unsafe { read_ptr(value_ptr) };
     serialize_to_json(&value)
 }
 

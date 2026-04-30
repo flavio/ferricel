@@ -94,14 +94,8 @@ fn compile_string_literal(
     body.i32_const(string_len); // Load length
     body.call(env.get(RuntimeFunction::CreateString)); // Returns *mut CelValue
 
-    // Save the CelValue pointer so we can free the raw buffer then restore it.
-    // cel_create_string copied the data into an owned String, so the original
-    // allocation is no longer needed.
     let cel_val_local = module.locals.add(ValType::I32);
     body.local_set(cel_val_local);
-    body.local_get(data_ptr_local);
-    body.i32_const(string_len);
-    body.call(env.get(RuntimeFunction::Free));
 
     Ok(cel_val_local)
 }
@@ -145,14 +139,8 @@ fn compile_bytes_literal(
     body.i32_const(bytes_len); // Load length
     body.call(env.get(RuntimeFunction::CreateBytes)); // Returns *mut CelValue
 
-    // Save the CelValue pointer so we can free the raw buffer then restore it.
-    // cel_create_bytes copied the data into an owned Vec<u8>, so the original
-    // allocation is no longer needed.
     let cel_val_local = module.locals.add(ValType::I32);
     body.local_set(cel_val_local);
-    body.local_get(data_ptr_local);
-    body.i32_const(bytes_len);
-    body.call(env.get(RuntimeFunction::Free));
 
     Ok(cel_val_local)
 }

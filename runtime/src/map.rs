@@ -11,8 +11,7 @@ use std::collections::HashMap;
 /// Create an empty CelValue map (Object).
 ///
 /// # Safety
-///
-/// The returned pointer must be freed using the appropriate cleanup function.
+/// No preconditions — always safe to call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_map() -> *mut CelValue {

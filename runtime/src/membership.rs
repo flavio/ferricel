@@ -8,7 +8,7 @@
 //! - Time cost for lists: O(n×m) where n is list size, m is element size
 //! - Time cost for maps: O(1) expected (implementation may vary)
 
-use crate::error::{abort_with_error, null_to_unbound};
+use crate::error::{abort_with_error, read_ptr};
 use crate::helpers::cel_equals;
 use crate::types::CelValue;
 use slog::{debug, error, info};
@@ -27,7 +27,6 @@ use slog::{debug, error, info};
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
 /// - Both pointer arguments are valid and properly aligned
 /// - Both pointers point to initialized CelValue instances
-/// - The returned pointer must be freed using the appropriate cleanup function
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_value_in(
@@ -49,8 +48,8 @@ pub unsafe extern "C" fn cel_value_in(
         abort_with_error("no such overload");
     }
 
-    let element = null_to_unbound(element_ptr);
-    let container = null_to_unbound(container_ptr);
+    let element = read_ptr(element_ptr);
+    let container = read_ptr(container_ptr);
 
     Box::into_raw(Box::new(value_in(element, container)))
 }

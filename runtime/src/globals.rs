@@ -105,7 +105,6 @@ pub unsafe extern "C" fn cel_unbound_variable_error(
 ///
 /// # Safety
 /// - Safe to call at any time
-/// - Does not free the pointed-to values (caller must handle cleanup)
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_reset_globals() {
     unsafe {

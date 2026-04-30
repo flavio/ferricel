@@ -4,7 +4,7 @@
 
 use super::lists::list_reverse_impl;
 use super::strings::{find_index_of, find_last_index_of, string_reverse_impl};
-use crate::error::null_to_unbound;
+use crate::error::read_ptr;
 use crate::helpers::cel_equals;
 use crate::types::CelValue;
 
@@ -13,13 +13,10 @@ use crate::types::CelValue;
 /// - If receiver is an `Array`, reverses the element order.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_reverse_poly(receiver_ptr: *mut CelValue) -> *mut CelValue {
-    let receiver = unsafe { null_to_unbound(receiver_ptr) };
+    let receiver = unsafe { read_ptr(receiver_ptr) };
     match receiver {
         CelValue::String(s) => Box::into_raw(Box::new(string_reverse_impl(s))),
         CelValue::Array(v) => Box::into_raw(Box::new(list_reverse_impl(v))),
@@ -34,17 +31,14 @@ pub unsafe extern "C" fn cel_reverse_poly(receiver_ptr: *mut CelValue) -> *mut C
 /// - If receiver is an `Array`, performs element search (returns element index or -1).
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
-/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_index_of_poly(
     receiver_ptr: *mut CelValue,
     arg_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let receiver = unsafe { null_to_unbound(receiver_ptr) };
-    let arg = unsafe { null_to_unbound(arg_ptr) };
+    let receiver = unsafe { read_ptr(receiver_ptr) };
+    let arg = unsafe { read_ptr(arg_ptr) };
     match receiver {
         CelValue::String(s) => {
             let sub = match arg {
@@ -77,17 +71,14 @@ pub unsafe extern "C" fn cel_index_of_poly(
 /// - If receiver is an `Array`, performs last element search (returns element index or -1).
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
-/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_last_index_of_poly(
     receiver_ptr: *mut CelValue,
     arg_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let receiver = unsafe { null_to_unbound(receiver_ptr) };
-    let arg = unsafe { null_to_unbound(arg_ptr) };
+    let receiver = unsafe { read_ptr(receiver_ptr) };
+    let arg = unsafe { read_ptr(arg_ptr) };
     match receiver {
         CelValue::String(s) => {
             let sub = match arg {
@@ -119,7 +110,6 @@ pub unsafe extern "C" fn cel_last_index_of_poly(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::deserialization::cel_free_value;
     use rstest::rstest;
 
     // ── cel_index_of_poly ─────────────────────────────────────────────────────
@@ -135,7 +125,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::String(sub.to_string()))),
             );
             assert_eq!(&*result_ptr, &CelValue::Int(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -151,7 +140,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(20))),
             );
             assert_eq!(&*result_ptr, &CelValue::Int(1));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -166,7 +154,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert_eq!(&*result_ptr, &CelValue::Int(-1));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -180,7 +167,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(1))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -197,7 +183,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::String(sub.to_string()))),
             );
             assert_eq!(&*result_ptr, &CelValue::Int(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -214,7 +199,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(10))),
             );
             assert_eq!(&*result_ptr, &CelValue::Int(2));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -229,7 +213,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(99))),
             );
             assert_eq!(&*result_ptr, &CelValue::Int(-1));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -243,7 +226,6 @@ mod tests {
                 Box::into_raw(Box::new(CelValue::Int(1))),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -258,7 +240,6 @@ mod tests {
             let result_ptr =
                 cel_reverse_poly(Box::into_raw(Box::new(CelValue::String(input.to_string()))));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -272,7 +253,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_reverse_poly(Box::into_raw(Box::new(CelValue::Array(input))));
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -281,7 +261,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_reverse_poly(Box::into_raw(Box::new(CelValue::Int(42))));
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 }

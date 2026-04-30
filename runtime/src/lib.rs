@@ -1,3 +1,11 @@
+// Use a bump-pointer allocator for WASM builds. `dealloc` is a no-op: all
+// memory is released when the host drops the WASM instance. This eliminates
+// double-frees, use-after-free, and memory leaks by design.
+#[cfg(target_arch = "wasm32")]
+#[global_allocator]
+static ALLOCATOR: lol_alloc::AssumeSingleThreaded<lol_alloc::LeakingAllocator> =
+    unsafe { lol_alloc::AssumeSingleThreaded::new(lol_alloc::LeakingAllocator::new()) };
+
 // Module declarations
 mod arithmetic;
 mod array;
@@ -30,7 +38,7 @@ mod types;
 pub use types::CelValue;
 
 // Re-export all WASM-callable functions
-pub use memory::{cel_free, cel_malloc};
+pub use memory::cel_malloc;
 
 pub use logical::{
     cel_bool_and, cel_bool_not, cel_bool_or, cel_is_error, cel_is_strictly_false,
@@ -39,7 +47,7 @@ pub use logical::{
 
 pub use serialization::{cel_serialize_bool, cel_serialize_int, cel_serialize_value};
 
-pub use deserialization::{cel_deserialize_json, cel_deserialize_proto, cel_free_value};
+pub use deserialization::{cel_deserialize_json, cel_deserialize_proto};
 
 pub use globals::{cel_get_variable, cel_init_bindings, cel_reset_globals};
 

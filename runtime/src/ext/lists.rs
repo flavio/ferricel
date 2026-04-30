@@ -10,20 +10,17 @@
 //! - `slice(start, end)` — sub-list by index range
 //! - `sort` — sort comparable elements
 
-use crate::error::null_to_unbound;
+use crate::error::read_ptr;
 use crate::helpers::{cel_equals, cel_value_less_than};
 use crate::types::CelValue;
 
 /// Joins a list of strings with no separator.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_join(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let list_val = unsafe { read_ptr(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -49,17 +46,14 @@ pub unsafe extern "C" fn cel_list_join(list_ptr: *mut CelValue) -> *mut CelValue
 /// Joins a list of strings with a separator.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
-/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_join_sep(
     list_ptr: *mut CelValue,
     sep_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_val = unsafe { null_to_unbound(list_ptr) };
-    let sep_val = unsafe { null_to_unbound(sep_ptr) };
+    let list_val = unsafe { read_ptr(list_ptr) };
+    let sep_val = unsafe { read_ptr(sep_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -100,13 +94,10 @@ pub unsafe extern "C" fn cel_list_join_sep(
 /// Uses `cel_equals` for element comparison (handles cross-type numeric equality).
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_distinct(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let list_val = unsafe { read_ptr(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -129,13 +120,10 @@ pub unsafe extern "C" fn cel_list_distinct(list_ptr: *mut CelValue) -> *mut CelV
 /// Non-list elements are kept as-is. Sub-lists are expanded into the output.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_flatten(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let list_val = unsafe { read_ptr(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -151,17 +139,14 @@ pub unsafe extern "C" fn cel_list_flatten(list_ptr: *mut CelValue) -> *mut CelVa
 /// Flattens a list to the given depth. Depth must be non-negative.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
-/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_flatten_depth(
     list_ptr: *mut CelValue,
     depth_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_val = unsafe { null_to_unbound(list_ptr) };
-    let depth_val = unsafe { null_to_unbound(depth_ptr) };
+    let list_val = unsafe { read_ptr(list_ptr) };
+    let depth_val = unsafe { read_ptr(depth_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -206,13 +191,10 @@ fn list_flatten_depth(list: &[CelValue], depth: i64) -> Vec<CelValue> {
 /// If `n <= 0`, returns an empty list.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_range(n_ptr: *mut CelValue) -> *mut CelValue {
-    let n_val = unsafe { null_to_unbound(n_ptr) };
+    let n_val = unsafe { read_ptr(n_ptr) };
     let n = match n_val {
         CelValue::Int(n) => n,
         _ => {
@@ -235,13 +217,10 @@ pub(crate) fn list_reverse_impl(list: Vec<CelValue>) -> CelValue {
 /// Returns the elements of a list in reverse order.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_reverse(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let list_val = unsafe { read_ptr(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -261,9 +240,6 @@ pub unsafe extern "C" fn cel_list_reverse(list_ptr: *mut CelValue) -> *mut CelVa
 /// - `end > len`
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
-/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_slice(
@@ -271,9 +247,9 @@ pub unsafe extern "C" fn cel_list_slice(
     start_ptr: *mut CelValue,
     end_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let list_val = unsafe { null_to_unbound(list_ptr) };
-    let start_val = unsafe { null_to_unbound(start_ptr) };
-    let end_val = unsafe { null_to_unbound(end_ptr) };
+    let list_val = unsafe { read_ptr(list_ptr) };
+    let start_val = unsafe { read_ptr(start_ptr) };
+    let end_val = unsafe { read_ptr(end_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -324,13 +300,10 @@ pub unsafe extern "C" fn cel_list_slice(
 /// types produce an error.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_sort(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let list_val = unsafe { read_ptr(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -381,17 +354,14 @@ pub unsafe extern "C" fn cel_list_sort(list_ptr: *mut CelValue) -> *mut CelValue
 /// This is the hidden runtime backing for `sortBy(e, keyExpr)`.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of all pointer arguments (heap-allocated `CelValue`s)
-/// to this function. The values will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
     values_ptr: *mut CelValue,
     keys_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let values_val = unsafe { null_to_unbound(values_ptr) };
-    let keys_val = unsafe { null_to_unbound(keys_ptr) };
+    let values_val = unsafe { read_ptr(values_ptr) };
+    let keys_val = unsafe { read_ptr(keys_ptr) };
     let values = match values_val {
         CelValue::Array(v) => v,
         _ => {
@@ -458,13 +428,10 @@ pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
 /// Returns an `optional` containing the first element of the list, or `optional.none()` if empty.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_first(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let list_val = unsafe { read_ptr(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -484,13 +451,10 @@ pub unsafe extern "C" fn cel_list_first(list_ptr: *mut CelValue) -> *mut CelValu
 /// Returns an `optional` containing the last element of the list, or `optional.none()` if empty.
 ///
 /// # Safety
-///
-/// Caller must transfer ownership of the pointer argument (a heap-allocated `CelValue`)
-/// to this function. The value will be consumed and must not be used after this call.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_list_last(list_ptr: *mut CelValue) -> *mut CelValue {
-    let list_val = unsafe { null_to_unbound(list_ptr) };
+    let list_val = unsafe { read_ptr(list_ptr) };
     let list = match list_val {
         CelValue::Array(v) => v,
         _ => {
@@ -509,7 +473,6 @@ pub unsafe extern "C" fn cel_list_last(list_ptr: *mut CelValue) -> *mut CelValue
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::deserialization::cel_free_value;
     use rstest::rstest;
 
     // ── join (no separator) ───────────────────────────────────────────────────
@@ -528,7 +491,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_list_join(Box::into_raw(Box::new(list_val)));
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -541,7 +503,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_list_join(Box::into_raw(Box::new(list_val)));
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -566,7 +527,6 @@ mod tests {
                 Box::into_raw(Box::new(sep_val)),
             );
             assert_eq!(&*result_ptr, &CelValue::String(expected.to_string()));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -583,7 +543,6 @@ mod tests {
                 Box::into_raw(Box::new(sep_val)),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -609,7 +568,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_list_distinct(Box::into_raw(Box::new(list)));
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -651,7 +609,6 @@ mod tests {
                 Box::into_raw(Box::new(depth_val)),
             );
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -674,7 +631,6 @@ mod tests {
                     CelValue::Array(vec![CelValue::Int(3), CelValue::Int(4)]),
                 ])
             );
-            cel_free_value(result_ptr);
         }
     }
 
@@ -688,7 +644,6 @@ mod tests {
                 Box::into_raw(Box::new(depth_val)),
             );
             assert!(matches!(&*result_ptr, CelValue::Error(e) if e.contains("non-negative")));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -704,7 +659,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_list_range(Box::into_raw(Box::new(n_val)));
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -726,7 +680,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_list_reverse(Box::into_raw(Box::new(list)));
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -755,7 +708,6 @@ mod tests {
                 Box::into_raw(Box::new(end_val)),
             );
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -785,7 +737,6 @@ mod tests {
                 msg,
                 &*result_ptr
             );
-            cel_free_value(result_ptr);
         }
     }
 
@@ -811,7 +762,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_list_sort(Box::into_raw(Box::new(list)));
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -821,7 +771,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_list_sort(Box::into_raw(Box::new(list)));
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -852,7 +801,6 @@ mod tests {
             let result_ptr = cel_list_first(Box::into_raw(Box::new(list)));
             let expected = CelValue::Optional(expected_inner.map(Box::new));
             assert_eq!(&*result_ptr, &expected);
-            cel_free_value(result_ptr);
         }
     }
 
@@ -862,7 +810,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_list_first(Box::into_raw(Box::new(val)));
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -893,7 +840,6 @@ mod tests {
             let result_ptr = cel_list_last(Box::into_raw(Box::new(list)));
             let expected = CelValue::Optional(expected_inner.map(Box::new));
             assert_eq!(&*result_ptr, &expected);
-            cel_free_value(result_ptr);
         }
     }
 
@@ -903,7 +849,6 @@ mod tests {
         unsafe {
             let result_ptr = cel_list_last(Box::into_raw(Box::new(val)));
             assert!(matches!(&*result_ptr, CelValue::Error(_)));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -944,7 +889,6 @@ mod tests {
                 Box::into_raw(Box::new(ks)),
             );
             assert_eq!(&*result_ptr, &CelValue::Array(expected));
-            cel_free_value(result_ptr);
         }
     }
 
@@ -962,7 +906,6 @@ mod tests {
                 "expected length-mismatch error, got {:?}",
                 &*result_ptr
             );
-            cel_free_value(result_ptr);
         }
     }
 
@@ -980,7 +923,6 @@ mod tests {
                 "expected error for mixed key types, got {:?}",
                 &*result_ptr
             );
-            cel_free_value(result_ptr);
         }
     }
 }

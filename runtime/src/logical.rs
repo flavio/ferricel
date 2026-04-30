@@ -1,13 +1,13 @@
 //! Boolean logic operations on CelValue::Bool pointers.
 
-use crate::error::null_to_unbound;
+use crate::error::read_ptr;
 use crate::types::CelValue;
 
 // ---------------------------------------------------------------------------
 // Consuming operator functions (ABI boundary — take ownership of inputs)
 // ---------------------------------------------------------------------------
 
-/// Boolean AND operator. Consumes both operands.
+/// Boolean AND operator.
 ///
 /// CEL AND semantics:
 /// - false && X => false  (type of X not checked)
@@ -19,12 +19,12 @@ use crate::types::CelValue;
 ///
 /// # Safety
 /// Both pointers must be valid (or null) CelValue pointers. Null is treated as
-/// an unbound variable error. Non-null pointers must be uniquely-owned.
+/// an unbound variable error.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bool_and(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     Box::into_raw(Box::new(bool_and(a, b)))
 }
 
@@ -50,7 +50,7 @@ fn bool_and(a: CelValue, b: CelValue) -> CelValue {
     }
 }
 
-/// Boolean OR operator. Consumes both operands.
+/// Boolean OR operator.
 ///
 /// CEL OR semantics:
 /// - true || X => true  (type of X not checked)
@@ -62,12 +62,12 @@ fn bool_and(a: CelValue, b: CelValue) -> CelValue {
 ///
 /// # Safety
 /// Both pointers must be valid (or null) CelValue pointers. Null is treated as
-/// an unbound variable error. Non-null pointers must be uniquely-owned.
+/// an unbound variable error.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bool_or(a_ptr: *mut CelValue, b_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
-    let b = unsafe { null_to_unbound(b_ptr) };
+    let a = unsafe { read_ptr(a_ptr) };
+    let b = unsafe { read_ptr(b_ptr) };
     Box::into_raw(Box::new(bool_or(a, b)))
 }
 
@@ -94,18 +94,18 @@ fn bool_or(a: CelValue, b: CelValue) -> CelValue {
 }
 
 // ---------------------------------------------------------------------------
-// Non-consuming query functions (called by compiler short-circuit control flow)
-// These BORROW the pointer — they do NOT take ownership.
+// Read-only query functions (called by compiler short-circuit control flow)
+// These borrow the pointee in-place — they do not move it.
 // ---------------------------------------------------------------------------
 
-/// Boolean NOT operator. Consumes the operand.
+/// Boolean NOT operator.
 ///
 /// # Safety
 /// Pointer must be a valid (or null) CelValue pointer. Null is treated as unbound error.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_bool_not(a_ptr: *mut CelValue) -> *mut CelValue {
-    let a = unsafe { null_to_unbound(a_ptr) };
+    let a = unsafe { read_ptr(a_ptr) };
     let result = match a {
         CelValue::Bool(b) => CelValue::Bool(!b),
         CelValue::Error(e) => CelValue::Error(e),
@@ -114,7 +114,7 @@ pub unsafe extern "C" fn cel_bool_not(a_ptr: *mut CelValue) -> *mut CelValue {
     Box::into_raw(Box::new(result))
 }
 
-/// @not_strictly_false operator. Consumes the operand.
+/// @not_strictly_false operator.
 /// Returns true for anything that is not CelValue::Bool(false).
 ///
 /// # Safety
@@ -122,21 +122,21 @@ pub unsafe extern "C" fn cel_bool_not(a_ptr: *mut CelValue) -> *mut CelValue {
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_not_strictly_false(ptr: *mut CelValue) -> *mut CelValue {
-    let value = unsafe { null_to_unbound(ptr) };
+    let value = unsafe { read_ptr(ptr) };
     let result = !matches!(value, CelValue::Bool(false));
     Box::into_raw(Box::new(CelValue::Bool(result)))
 }
 
 // ---------------------------------------------------------------------------
-// Non-consuming query functions (called by compiler short-circuit control flow)
-// These BORROW the pointer — they do NOT take ownership.
+// Read-only query functions (called by compiler short-circuit control flow)
+// These borrow the pointee in-place — they do not move it.
 // ---------------------------------------------------------------------------
 
 /// Check if a CelValue is strictly false. Returns 1 if Bool(false), 0 otherwise.
 /// Used by the compiler for && short-circuit control flow.
 ///
 /// # Safety
-/// Pointer must be a valid (possibly null) CelValue pointer. Does NOT consume.
+/// Pointer must be a valid (possibly null) CelValue pointer. Borrows the pointee in-place (does not move).
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_is_strictly_false(ptr: *mut CelValue) -> i32 {
@@ -153,7 +153,7 @@ pub unsafe extern "C" fn cel_is_strictly_false(ptr: *mut CelValue) -> i32 {
 /// Used by the compiler for || short-circuit control flow.
 ///
 /// # Safety
-/// Pointer must be a valid (possibly null) CelValue pointer. Does NOT consume.
+/// Pointer must be a valid (possibly null) CelValue pointer. Borrows the pointee in-place (does not move).
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_is_strictly_true(ptr: *mut CelValue) -> i32 {
@@ -170,7 +170,7 @@ pub unsafe extern "C" fn cel_is_strictly_true(ptr: *mut CelValue) -> i32 {
 /// Used by the compiler for conditional/ternary error propagation.
 ///
 /// # Safety
-/// Pointer must be a valid (possibly null) CelValue pointer. Does NOT consume.
+/// Pointer must be a valid (possibly null) CelValue pointer. Borrows the pointee in-place (does not move).
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_is_error(ptr: *mut CelValue) -> i32 {

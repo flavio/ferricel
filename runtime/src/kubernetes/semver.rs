@@ -23,7 +23,7 @@
 //!   5. Pad with `"0"` until 3 parts
 //!   6. Rejoin and parse with `semver::Version::parse`
 
-use crate::error::{create_error_value, null_to_unbound};
+use crate::error::{create_error_value, read_ptr};
 use crate::types::CelValue;
 use semver::Version;
 use slog::error;
@@ -143,7 +143,7 @@ pub unsafe extern "C" fn cel_k8s_is_semver(str_ptr: *mut CelValue) -> *mut CelVa
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(str_ptr) };
+    let val = unsafe { read_ptr(str_ptr) };
     let s = match val {
         CelValue::String(ref s) => s.clone(),
         other => {
@@ -174,8 +174,8 @@ pub unsafe extern "C" fn cel_k8s_is_semver_normalize(
         return create_error_value("no such overload");
     }
 
-    let str_val = unsafe { null_to_unbound(str_ptr) };
-    let norm_val = unsafe { null_to_unbound(normalize_ptr) };
+    let str_val = unsafe { read_ptr(str_ptr) };
+    let norm_val = unsafe { read_ptr(normalize_ptr) };
 
     let s = match str_val {
         CelValue::String(ref s) => s.clone(),
@@ -215,7 +215,7 @@ pub unsafe extern "C" fn cel_k8s_semver_parse(str_ptr: *mut CelValue) -> *mut Ce
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(str_ptr) };
+    let val = unsafe { read_ptr(str_ptr) };
     let s = match val {
         CelValue::String(ref s) => s.clone(),
         other => {
@@ -251,8 +251,8 @@ pub unsafe extern "C" fn cel_k8s_semver_parse_normalize(
         return create_error_value("no such overload");
     }
 
-    let str_val = unsafe { null_to_unbound(str_ptr) };
-    let norm_val = unsafe { null_to_unbound(normalize_ptr) };
+    let str_val = unsafe { read_ptr(str_ptr) };
+    let norm_val = unsafe { read_ptr(normalize_ptr) };
 
     let s = match str_val {
         CelValue::String(ref s) => s.clone(),
@@ -297,7 +297,7 @@ pub unsafe extern "C" fn cel_k8s_semver_major(semver_ptr: *mut CelValue) -> *mut
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(semver_ptr) };
+    let val = unsafe { read_ptr(semver_ptr) };
     match val {
         CelValue::Semver(v) => Box::into_raw(Box::new(CelValue::Int(v.major as i64))),
         other => {
@@ -321,7 +321,7 @@ pub unsafe extern "C" fn cel_k8s_semver_minor(semver_ptr: *mut CelValue) -> *mut
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(semver_ptr) };
+    let val = unsafe { read_ptr(semver_ptr) };
     match val {
         CelValue::Semver(v) => Box::into_raw(Box::new(CelValue::Int(v.minor as i64))),
         other => {
@@ -345,7 +345,7 @@ pub unsafe extern "C" fn cel_k8s_semver_patch(semver_ptr: *mut CelValue) -> *mut
         return create_error_value("no such overload");
     }
 
-    let val = unsafe { null_to_unbound(semver_ptr) };
+    let val = unsafe { read_ptr(semver_ptr) };
     match val {
         CelValue::Semver(v) => Box::into_raw(Box::new(CelValue::Int(v.patch as i64))),
         other => {
@@ -379,8 +379,8 @@ pub unsafe extern "C" fn cel_k8s_semver_is_less_than(
         return create_error_value("no such overload");
     }
 
-    let lhs_val = unsafe { null_to_unbound(lhs_ptr) };
-    let rhs_val = unsafe { null_to_unbound(rhs_ptr) };
+    let lhs_val = unsafe { read_ptr(lhs_ptr) };
+    let rhs_val = unsafe { read_ptr(rhs_ptr) };
 
     let lhs = match lhs_val {
         CelValue::Semver(v) => v,
@@ -419,8 +419,8 @@ pub unsafe extern "C" fn cel_k8s_semver_is_greater_than(
         return create_error_value("no such overload");
     }
 
-    let lhs_val = unsafe { null_to_unbound(lhs_ptr) };
-    let rhs_val = unsafe { null_to_unbound(rhs_ptr) };
+    let lhs_val = unsafe { read_ptr(lhs_ptr) };
+    let rhs_val = unsafe { read_ptr(rhs_ptr) };
 
     let lhs = match lhs_val {
         CelValue::Semver(v) => v,
@@ -459,8 +459,8 @@ pub unsafe extern "C" fn cel_k8s_semver_compare_to(
         return create_error_value("no such overload");
     }
 
-    let lhs_val = unsafe { null_to_unbound(lhs_ptr) };
-    let rhs_val = unsafe { null_to_unbound(rhs_ptr) };
+    let lhs_val = unsafe { read_ptr(lhs_ptr) };
+    let rhs_val = unsafe { read_ptr(rhs_ptr) };
 
     let lhs = match lhs_val {
         CelValue::Semver(v) => v,
