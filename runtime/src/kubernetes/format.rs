@@ -6,7 +6,7 @@
 //! Functions:
 //!   - `format.named(string)`                  → ?Format (optional)
 //!   - `format.<formatName>()`                 → Format  (13 zero-arg constructors)
-//!   - `<Format>.validate(string)`             → ?list<string>
+//!   - `<Format>.validate(string)`             → ?`list<string>`
 //!
 //! The 13 named formats:
 //!   dns1123Label, dns1123Subdomain, dns1035Label, qualifiedName,

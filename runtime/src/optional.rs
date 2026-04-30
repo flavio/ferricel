@@ -1,13 +1,13 @@
 //! CEL optional type runtime functions.
 //!
 //! Implements the CEL optional functions:
-//!   - `optional.none()`              → optional<dyn>  (no value)
-//!   - `optional.of(x)`               → optional<dyn>  (always wraps x)
-//!   - `optional.ofNonZeroValue(x)`   → optional<dyn>  (wraps x unless x is zero/empty/null)
+//!   - `optional.none()`              → `optional<dyn>`  (no value)
+//!   - `optional.of(x)`               → `optional<dyn>`  (always wraps x)
+//!   - `optional.ofNonZeroValue(x)`   → `optional<dyn>`  (wraps x unless x is zero/empty/null)
 //!   - `<opt>.hasValue()`             → bool
 //!   - `<opt>.value()`                → dyn  (or error if none)
 //!   - `<opt>.orValue(default)`       → dyn  (unwrap or return default)
-//!   - `<opt>.or(other_opt)`          → optional<dyn>  (first with value, or other_opt)
+//!   - `<opt>.or(other_opt)`          → `optional<dyn>`  (first with value, or other_opt)
 //!
 //! `optMap` and `optFlatMap` are macro-like constructs that the compiler
 //! handles by inlining the lambda; they do not need dedicated runtime functions.

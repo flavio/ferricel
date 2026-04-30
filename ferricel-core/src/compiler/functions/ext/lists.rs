@@ -89,7 +89,7 @@ pub fn compile_ext_list_function(
 /// Compile `lists.range(n)` — namespace-qualified, no receiver.
 ///
 /// CEL parses `lists.range(n)` as:
-///   target = Ident("lists"), func = "range", args = [n]
+///   target = Ident("lists"), func = "range", args = \[n\]
 pub fn compile_list_range(
     call_expr: &CallExpr,
     body: &mut InstrSeqBuilder,
