@@ -14,6 +14,7 @@ fn main() -> Result<()> {
     prost_build::Config::new()
         .bytes(["."])
         .file_descriptor_set_path(&descriptor_path)
+        .type_attribute(".", "#[allow(dead_code)]")
         .compile_protos(
             &[
                 "cel/expr/value.proto",

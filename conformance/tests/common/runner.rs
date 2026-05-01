@@ -313,7 +313,9 @@ impl ConformanceTestRunner {
         // Step 1: Compile the CEL expression to WASM (in memory)
         let mut builder = CompilerBuilder::new().with_logger(self.logger.clone());
         if let Some(descriptor) = self.proto_descriptor.clone() {
-            builder = builder.with_proto_descriptor(descriptor).map_err(|e| format!("Build failed: {}", e))?;
+            builder = builder
+                .with_proto_descriptor(descriptor)
+                .map_err(|e| format!("Build failed: {}", e))?;
         }
         if !test.container.is_empty() {
             builder = builder.with_container(test.container.clone());
@@ -450,35 +452,6 @@ impl ConformanceTestRunner {
         };
 
         Ok(FerricelValue { kind: Some(kind) })
-    }
-
-    pub fn convert_bindings_to_json(
-        &self,
-        bindings: &HashMap<String, ExprValue>,
-    ) -> Result<String, String> {
-        let mut json_bindings = serde_json::Map::new();
-
-        for (key, expr_value) in bindings {
-            if let Some(kind) = &expr_value.kind {
-                let json_value = self.expr_value_to_json(kind)?;
-                json_bindings.insert(key.clone(), json_value);
-            }
-        }
-
-        serde_json::to_string(&json_bindings)
-            .map_err(|e| format!("JSON serialization error: {}", e))
-    }
-
-    pub fn expr_value_to_json(
-        &self,
-        kind: &super::proto_gen::cel::expr::expr_value::Kind,
-    ) -> Result<JsonValue, String> {
-        use super::proto_gen::cel::expr::expr_value::Kind;
-        match kind {
-            Kind::Value(v) => self.cel_value_to_json(v),
-            Kind::Error(_) => Err("Cannot convert error to JSON".to_string()),
-            Kind::Unknown(_) => Err("Cannot convert unknown to JSON".to_string()),
-        }
     }
 
     pub fn cel_value_to_json(&self, value: &Value) -> Result<JsonValue, String> {
