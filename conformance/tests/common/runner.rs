@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use serde_json::Value as JsonValue;
 use slog::{Drain, Logger, o};
 
-use ferricel_core::compiler::{CompilerOptions, compile_cel_to_wasm};
+use ferricel_core::compiler::Builder as CompilerBuilder;
 use ferricel_core::runtime::CelEngine;
 
 use ferricel_types::proto::Bindings as FerricelBindings;
@@ -311,17 +311,15 @@ impl ConformanceTestRunner {
 
     pub fn execute_cel_expression(&self, test: &SimpleTest) -> Result<JsonValue, String> {
         // Step 1: Compile the CEL expression to WASM (in memory)
-        let compiler_options = CompilerOptions {
-            proto_descriptor: self.proto_descriptor.clone(),
-            container: if test.container.is_empty() {
-                None
-            } else {
-                Some(test.container.clone())
-            },
-            logger: self.logger.clone(),
-            extensions: vec![],
-        };
-        let wasm_bytes = match compile_cel_to_wasm(&test.expr, compiler_options) {
+        let mut builder = CompilerBuilder::new().with_logger(self.logger.clone());
+        if let Some(descriptor) = self.proto_descriptor.clone() {
+            builder = builder.with_proto_descriptor(descriptor).map_err(|e| format!("Build failed: {}", e))?;
+        }
+        if !test.container.is_empty() {
+            builder = builder.with_container(test.container.clone());
+        }
+        let compiler = builder.build();
+        let wasm_bytes = match compiler.compile(&test.expr) {
             Ok(bytes) => bytes,
             Err(e) => {
                 // Check if this test expects an error (eval_error or any error)
