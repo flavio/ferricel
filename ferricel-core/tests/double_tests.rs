@@ -107,11 +107,11 @@ fn test_double_division_by_zero_yields_infinity() {
 // ============================================================
 
 #[rstest]
-#[case("3.14 == 3.14", 1)]
-#[case("3.14 == 2.71", 0)]
-#[case("0.0 == 0.0", 1)]
-fn test_double_equality(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case("3.14 == 3.14", true)]
+#[case("3.14 == 2.71", false)]
+#[case("0.0 == 0.0", true)]
+fn test_double_equality(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' should evaluate to {}",
@@ -120,14 +120,14 @@ fn test_double_equality(#[case] expr: &str, #[case] expected: i64) {
 }
 
 #[rstest]
-#[case("5.0 > 3.0", 1)]
-#[case("3.0 > 5.0", 0)]
-#[case("5.0 > 5.0", 0)]
-#[case("5.0 >= 5.0", 1)]
-#[case("5.0 >= 3.0", 1)]
-#[case("3.0 >= 5.0", 0)]
-fn test_double_greater_than(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case("5.0 > 3.0", true)]
+#[case("3.0 > 5.0", false)]
+#[case("5.0 > 5.0", false)]
+#[case("5.0 >= 5.0", true)]
+#[case("5.0 >= 3.0", true)]
+#[case("3.0 >= 5.0", false)]
+fn test_double_greater_than(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' should evaluate to {}",
@@ -136,14 +136,14 @@ fn test_double_greater_than(#[case] expr: &str, #[case] expected: i64) {
 }
 
 #[rstest]
-#[case("3.0 < 5.0", 1)]
-#[case("5.0 < 3.0", 0)]
-#[case("5.0 < 5.0", 0)]
-#[case("5.0 <= 5.0", 1)]
-#[case("3.0 <= 5.0", 1)]
-#[case("5.0 <= 3.0", 0)]
-fn test_double_less_than(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case("3.0 < 5.0", true)]
+#[case("5.0 < 3.0", false)]
+#[case("5.0 < 5.0", false)]
+#[case("5.0 <= 5.0", true)]
+#[case("3.0 <= 5.0", true)]
+#[case("5.0 <= 3.0", false)]
+fn test_double_less_than(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' should evaluate to {}",

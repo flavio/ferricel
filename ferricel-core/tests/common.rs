@@ -91,6 +91,13 @@ pub(crate) fn compile_and_execute_with_input_data(
 }
 
 /// Compile `cel_expr` and execute it, returning the result as `f64`.
+pub(crate) fn compile_and_execute_bool(cel_expr: &str) -> Result<bool, anyhow::Error> {
+    let value = compile_and_execute(cel_expr)?;
+    value
+        .as_bool()
+        .ok_or_else(|| anyhow::anyhow!("expected bool, got: {}", value))
+}
+
 pub(crate) fn compile_and_execute_double(cel_expr: &str) -> Result<f64, anyhow::Error> {
     let value = compile_and_execute(cel_expr)?;
     value

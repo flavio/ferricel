@@ -57,21 +57,28 @@ pub unsafe fn cel_serialize_bool(value: i64) -> i64 {
     serialize_to_json(&cel_value)
 }
 
-/// Serialize a CelValue pointer to JSON.
-/// Serializes the CelValue to JSON and returns encoded (ptr, len) as i64.
+/// Serialize a `CelValue` pointer to JSON, aborting if the value is an error.
+///
+/// If the value is `CelValue::Error`, calls `abort_with_error` which triggers the host's
+/// `cel_abort` import — terminating WASM execution and propagating the error as `Err(...)`.
+///
+/// If the value is any other type, serializes it to JSON and returns the packed ptr+len.
 ///
 /// # Safety
 ///
-/// `value_ptr` must be a valid, non-null CelValue pointer.
+/// `value_ptr` must be a valid, non-null `CelValue` pointer.
 /// The returned bytes are valid for the lifetime of the WASM instance.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_serialize_value(value_ptr: *mut CelValue) -> i64 {
+pub unsafe extern "C" fn cel_serialize_result(value_ptr: *mut CelValue) -> i64 {
     if value_ptr.is_null() {
-        panic!("Null pointer passed to cel_serialize_value");
+        panic!("Null pointer passed to cel_serialize_result");
     }
     let value = unsafe { read_ptr(value_ptr) };
-    serialize_to_json(&value)
+    match value {
+        CelValue::Error(msg) => crate::error::abort_with_error(&msg),
+        other => serialize_to_json(&other),
+    }
 }
 
 #[cfg(test)]

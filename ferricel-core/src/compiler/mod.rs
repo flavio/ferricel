@@ -138,10 +138,14 @@ impl Compiler {
     /// Returns the compiled WASM module as bytes.
     /// The resulting module exports two functions:
     ///
-    /// - `validate(i64) -> i64`: takes JSON-encoded bindings, returns JSON-encoded result
-    /// - `validate_proto(i64) -> i64`: takes protobuf-encoded `ferricel.Bindings`, returns JSON-encoded result
+    /// - `evaluate(i64) -> i64`:       takes JSON-encoded bindings, returns JSON-encoded result
+    /// - `evaluate_proto(i64) -> i64`: takes protobuf-encoded `ferricel.Bindings`, returns JSON-encoded result
     ///
-    /// The i64 encoding packs ptr (low 32 bits) and len (high 32 bits) into a single value.
+    /// Both functions return a packed ptr+len i64 on success.  If the CEL expression
+    /// produces a runtime error (overflow, divide-by-zero, etc.) the WASM traps via
+    /// `cel_abort`, and the host receives `Err(...)` from the call.
+    ///
+    /// The i64 packs ptr (low 32 bits) and len (high 32 bits) into a single value.
     ///
     /// # Example
     ///
@@ -189,14 +193,14 @@ impl Compiler {
             &self.extensions,
         );
 
-        // 4. Build the 'validate' function (i64) -> i64 — JSON bindings path
-        let validate_id = build_validate_function(&mut module, &env, &ctx, &root_ast.expr)?;
-        module.exports.add("validate", validate_id);
+        // 4. Build the 'evaluate' function (i64) -> (i32, i64) — JSON bindings path
+        let evaluate_id = build_evaluate_function(&mut module, &env, &ctx, &root_ast.expr)?;
+        module.exports.add("evaluate", evaluate_id);
 
-        // 5. Build the 'validate_proto' function (i64) -> i64 — protobuf bindings path
-        let validate_proto_id =
-            build_validate_proto_function(&mut module, &env, &ctx, &root_ast.expr)?;
-        module.exports.add("validate_proto", validate_proto_id);
+        // 5. Build the 'evaluate_proto' function (i64) -> (i32, i64) — protobuf bindings path
+        let evaluate_proto_id =
+            build_evaluate_proto_function(&mut module, &env, &ctx, &root_ast.expr)?;
+        module.exports.add("evaluate_proto", evaluate_proto_id);
 
         // 6. Run garbage collection to remove unreferenced items (dead code elimination)
         walrus::passes::gc::run(&mut module);
@@ -206,11 +210,13 @@ impl Compiler {
     }
 }
 
-/// Build the `validate` WASM function `(i64) -> i64` using JSON-encoded bindings.
+/// Build the `evaluate` WASM function `(i64) -> i64` using JSON-encoded bindings.
 ///
 /// Deserializes bindings with [`RuntimeFunction::DeserializeJson`], evaluates the expression,
-/// and serializes the result back to JSON.
-fn build_validate_function(
+/// and serializes the result via [`RuntimeFunction::SerializeResult`].  If the result is a
+/// `CelValue::Error`, `SerializeResult` calls `cel_abort` which traps the WASM instance,
+/// propagating the error as `Err(...)` on the host side.
+fn build_evaluate_function(
     module: &mut walrus::Module,
     env: &CompilerEnv,
     ctx: &CompilerContext,
@@ -226,16 +232,18 @@ fn build_validate_function(
 
     expr::compile_expr(expr, &mut body, env, ctx, module)?;
 
-    body.call(env.get(RuntimeFunction::SerializeValue));
+    body.call(env.get(RuntimeFunction::SerializeResult));
 
     Ok(func.finish(vec![bindings_encoded_arg], &mut module.funcs))
 }
 
-/// Build the `validate_proto` WASM function `(i64) -> i64` using protobuf-encoded bindings.
+/// Build the `evaluate_proto` WASM function `(i64) -> i64` using protobuf-encoded bindings.
 ///
 /// Deserializes bindings with [`RuntimeFunction::DeserializeProto`], evaluates the expression,
-/// and serializes the result back to JSON.
-fn build_validate_proto_function(
+/// and serializes the result via [`RuntimeFunction::SerializeResult`].  If the result is a
+/// `CelValue::Error`, `SerializeResult` calls `cel_abort` which traps the WASM instance,
+/// propagating the error as `Err(...)` on the host side.
+fn build_evaluate_proto_function(
     module: &mut walrus::Module,
     env: &CompilerEnv,
     ctx: &CompilerContext,
@@ -251,7 +259,7 @@ fn build_validate_proto_function(
 
     expr::compile_expr(expr, &mut body, env, ctx, module)?;
 
-    body.call(env.get(RuntimeFunction::SerializeValue));
+    body.call(env.get(RuntimeFunction::SerializeResult));
 
     Ok(func.finish(vec![bindings_encoded_arg], &mut module.funcs))
 }

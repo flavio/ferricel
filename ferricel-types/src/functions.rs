@@ -34,7 +34,9 @@ pub enum RuntimeFunction {
     IsError,
 
     // Serialization
-    SerializeValue,
+    /// Serializes a `CelValue` to JSON, returning packed ptr+len as i64.
+    /// Aborts via `cel_abort` if the value is `CelValue::Error`.
+    SerializeResult,
 
     // Deserialization
     DeserializeJson,
@@ -338,7 +340,7 @@ impl RuntimeFunction {
             Self::IsStrictlyTrue => "cel_is_strictly_true",
             Self::IsError => "cel_is_error",
 
-            Self::SerializeValue => "cel_serialize_value",
+            Self::SerializeResult => "cel_serialize_result",
 
             Self::DeserializeJson => "cel_deserialize_json",
             Self::DeserializeProto => "cel_deserialize_proto",

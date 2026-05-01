@@ -162,11 +162,12 @@ impl CelEngine {
     /// Execute a compiled WASM module with protobuf-encoded variable bindings.
     ///
     /// Unlike [`CelEngine::execute`], this method accepts a pre-encoded
-    /// `ferricel.Bindings` protobuf message and calls the `validate_proto` export,
+    /// `ferricel.Bindings` protobuf message and calls the `evaluate_proto` export,
     /// which preserves full type fidelity for all CEL types (bytes, uint, timestamp,
     /// duration, etc.) that would be lost in a JSON round-trip.
     ///
-    /// The result is still a JSON-encoded CEL value string.
+    /// The result is a JSON-encoded CEL value string, or `Err` if the expression
+    /// produced a runtime error.
     pub fn execute_proto(
         &self,
         wasm_bytes: &[u8],
@@ -435,15 +436,16 @@ fn execute_wasm_inner(
         allocate_json("{}")?
     };
 
-    // Get the 'validate' function (now takes single bindings parameter)
-    let validate = instance
-        .get_typed_func::<i64, i64>(&mut store, "validate")
-        .map_err(|e| anyhow::anyhow!("Failed to get 'validate' function: {}", e))?;
+    // Get the 'evaluate' function: (i64) -> i64
+    let evaluate = instance
+        .get_typed_func::<i64, i64>(&mut store, "evaluate")
+        .map_err(|e| anyhow::anyhow!("Failed to get 'evaluate' function: {}", e))?;
 
-    // Call the validate function with encoded bindings
-    let encoded_result = validate.call(&mut store, bindings_encoded)?;
+    // Call the evaluate function. If the CEL expression produces a runtime error,
+    // cel_abort is triggered inside the WASM and this call returns Err(...).
+    let encoded_result = evaluate.call(&mut store, bindings_encoded)?;
 
-    // Decode the pointer and length from the i64 result
+    // Decode the pointer and length from the i64
     let ptr = (encoded_result & 0xFFFFFFFF) as u32;
     let len = (encoded_result >> 32) as u32;
 
@@ -451,15 +453,12 @@ fn execute_wasm_inner(
     let mut json_bytes = vec![0u8; len as usize];
     memory.read(&store, ptr as usize, &mut json_bytes)?;
 
-    // Convert bytes to UTF-8 string
-    let json_string = String::from_utf8(json_bytes)
-        .map_err(|e| anyhow::anyhow!("Failed to parse JSON as UTF-8: {}", e))?;
-
-    Ok(json_string)
+    String::from_utf8(json_bytes)
+        .map_err(|e| anyhow::anyhow!("Failed to parse JSON as UTF-8: {}", e))
 }
 
 /// Internal implementation: execute a compiled WASM module with protobuf-encoded bindings.
-/// Calls `validate_proto` instead of `validate`.
+/// Calls `evaluate_proto` instead of `evaluate`.
 fn execute_wasm_proto_inner(
     wasm_bytes: &[u8],
     bindings_proto: &[u8],
@@ -498,12 +497,14 @@ fn execute_wasm_proto_inner(
     memory.write(&mut store, proto_ptr as usize, bindings_proto)?;
     let bindings_encoded = (proto_ptr as i64) | ((proto_len as i64) << 32);
 
-    // Call validate_proto
-    let validate_proto = instance
-        .get_typed_func::<i64, i64>(&mut store, "validate_proto")
-        .map_err(|e| anyhow::anyhow!("Failed to get 'validate_proto' function: {}", e))?;
+    // Call evaluate_proto: (i64) -> i64
+    let evaluate_proto = instance
+        .get_typed_func::<i64, i64>(&mut store, "evaluate_proto")
+        .map_err(|e| anyhow::anyhow!("Failed to get 'evaluate_proto' function: {}", e))?;
 
-    let encoded_result = validate_proto.call(&mut store, bindings_encoded)?;
+    // Call the evaluate_proto function. If the CEL expression produces a runtime error,
+    // cel_abort is triggered inside the WASM and this call returns Err(...).
+    let encoded_result = evaluate_proto.call(&mut store, bindings_encoded)?;
 
     // Decode result
     let ptr = (encoded_result & 0xFFFFFFFF) as u32;

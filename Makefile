@@ -34,7 +34,7 @@ clean:
 # Run only unit tests (compiler and runtime unit tests)
 unit-tests: $(RUNTIME_TARGET)
 	@echo "Running unit tests..."
-	cargo test --workspace --exclude conformance --lib --bins
+	cargo test --workspace --exclude conformance
 
 # Run only end-to-end tests (CLI integration tests)
 e2e-tests: $(RUNTIME_TARGET)

@@ -45,7 +45,7 @@ pub use logical::{
     cel_is_strictly_true, cel_not_strictly_false,
 };
 
-pub use serialization::{cel_serialize_bool, cel_serialize_int, cel_serialize_value};
+pub use serialization::{cel_serialize_bool, cel_serialize_int, cel_serialize_result};
 
 pub use deserialization::{cel_deserialize_json, cel_deserialize_proto};
 
