@@ -21,12 +21,17 @@ struct HostState {
 ///
 /// # Executing a compiled module
 ///
-/// Pass the WASM bytes produced by `compile_cel_to_wasm` along with an optional
-/// JSON bindings map. The result is a JSON-encoded CEL value.
+/// Use [`crate::compiler::Builder`] to build a [`crate::compiler::Compiler`],
+/// call [`crate::compiler::Compiler::compile`] to get WASM bytes, then pass
+/// those bytes along with an optional JSON bindings map to [`CelEngine::execute`].
+/// The result is a JSON-encoded CEL value.
 ///
 /// ```rust,ignore
+/// use ferricel_core::compiler;
+///
 /// // CEL expression: "x * 2 + 1"
-/// let wasm = compile_cel_to_wasm("x * 2 + 1", CompilerOptions::default())?;
+/// let compiler = compiler::Builder::new().build();
+/// let wasm = compiler.compile("x * 2 + 1")?;
 ///
 /// let result = CelEngine::new(logger)
 ///     .execute(&wasm, Some(r#"{"x": 10}"#))?;
@@ -42,6 +47,7 @@ struct HostState {
 /// (so it knows which host function to call at runtime).
 ///
 /// ```rust,ignore
+/// use ferricel_core::compiler;
 /// use ferricel_types::extensions::ExtensionDecl;
 ///
 /// // Declare abs(x: int) -> int as a global-style, single-argument extension.
@@ -54,11 +60,10 @@ struct HostState {
 /// };
 ///
 /// // 1. Compile time: pass the decl so the compiler accepts the abs() call.
-/// // CEL expression: "abs(x)"
-/// let wasm = compile_cel_to_wasm("abs(x)", CompilerOptions {
-///     extensions: vec![abs_decl.clone()],
-///     ..Default::default()
-/// })?;
+/// let compiler = compiler::Builder::new()
+///     .with_extension(abs_decl.clone())
+///     .build();
+/// let wasm = compiler.compile("abs(x)")?;
 ///
 /// // 2. Runtime: register the host implementation under the same decl.
 /// let mut engine = CelEngine::new(logger);
