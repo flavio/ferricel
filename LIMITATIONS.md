@@ -42,15 +42,15 @@ Got: `-19` (single negation applied)
 
 **File:** `src/parser/` (bytes literal parsing)
 
-**Affected conformance tests:** `parse` suite — `bytes_literals` section (triple-quoted variants)
+**Affected conformance tests:** `parse` suite — `bytes_literals` section (triple-quoted variants); `string` suite — all `triple_single_quoted` and `triple_double_quoted` bytes literal tests
 
-`b'''hello'''` produces the bytes `''hello''` (the inner quotes are included) instead of `hello`.
+`b'''hello'''` produces the bytes `''hello''` (the inner quotes are included) instead of `hello`. This affects the full range of triple-quoted bytes literals: plain values, octal escapes, lower-x escapes, unescaped control characters, unescaped line feeds, unescaped punctuation, and escaped variants.
 
 ### 4. Bytes literals reject common escape sequences
 
 **File:** `src/parser/parse.rs`, `parse_bytes`
 
-**Affected conformance tests:** `parse` suite — `bytes_literals` section
+**Affected conformance tests:** `parse` suite — `bytes_literals` section; `string` suite — `*_escaped_carriage_return`, `*_escaped_line_feed`, `*_escaped_special_control_characters`, `*_escaped_windows_line_end`, `raw_*_escapes`, `upper_raw_*_escapes` tests
 
 Bytes literals do not accept `\\`, `\n`, `\r`, `\a`, `\b`, `\f`, `\t`, `\v` escape sequences, returning `InvalidEscape` errors. These are all valid per the CEL spec.
 
@@ -58,7 +58,7 @@ Bytes literals do not accept `\\`, `\n`, `\r`, `\a`, `\b`, `\f`, `\t`, `\v` esca
 
 **File:** `src/parser/parse.rs`
 
-**Affected conformance tests:** `parse` suite — `string_literals` and `bytes_literals` sections (`*_upper_x_escapes` tests)
+**Affected conformance tests:** `parse` suite — `string_literals` and `bytes_literals` sections (`*_upper_x_escapes` tests); `string` suite — all `*_upper_x_escapes` and `mixed_case_hex_*` tests
 
 `\X00` etc. should be accepted as a hex escape (same as `\x00`) in both string and bytes literals, but the parser rejects it with `InvalidEscape`.
 
@@ -66,7 +66,7 @@ Bytes literals do not accept `\\`, `\n`, `\r`, `\a`, `\b`, `\f`, `\t`, `\v` esca
 
 **File:** `src/parser/parse.rs`, `parse_string`
 
-**Affected conformance tests:** `parse` suite — `string_literals` section (`*_escaped_punctuation` tests)
+**Affected conformance tests:** `parse` suite — `string_literals` section (`*_escaped_punctuation` tests); `string` suite — `*_escaped_punctuation` tests; `basic` suite — `self_eval_zeroish/self_eval_ascii_escape_seq`
 
 - In single-quoted strings, `\"` should unescape to `"` but is kept as `\"`
 - In double-quoted strings, `\'` should unescape to `'` but is kept as `\'`
@@ -75,7 +75,7 @@ Bytes literals do not accept `\\`, `\n`, `\r`, `\a`, `\b`, `\f`, `\t`, `\v` esca
 
 **File:** `src/parser/parse.rs`, `parse_raw_string`
 
-**Affected conformance tests:** `parse` suite — `string_literals` section (`raw_triple_*_escapes` tests)
+**Affected conformance tests:** `parse` suite — `string_literals` section (`raw_triple_*_escapes` tests); `string` suite — `raw_triple_*_escapes` and `upper_raw_triple_*_escapes` tests
 
 In raw strings, `\'` and `\"` should remain as the two-character sequences `\'` and `\"` (no escape processing). The parser currently unescapes them to `'` and `"` respectively.
 
@@ -87,6 +87,14 @@ In raw strings, `\'` and `\"` should remain as the two-character sequences `\'` 
 
 Similar to issue #3 for bytes: triple-quoted strings that contain the single-char delimiter (e.g. `'''a'b'''`) may include the delimiter characters in the parsed value.
 
+### 9. Negative hex integer literals rejected by parser
+
+**File:** `src/parser/parse.rs` (integer literal parsing)
+
+**Affected conformance tests:** `basic` suite — `self_eval_nonzeroish/self_eval_int_hex_negative`
+
+`-0x55555555` (a negative hex integer literal) fails with `invalid int literal: InvalidDigit`. The parser does not handle the sign on hex literals. Positive hex literals (`0x55555555`) parse correctly.
+
 ---
 
 ## Out-of-scope features
@@ -94,6 +102,11 @@ Similar to issue #3 for bytes: triple-quoted strings that contain the single-cha
 These are not bugs but features not yet implemented in ferricel:
 
 - **Proto message construction and field access** — tests using `TestAllTypes` proto messages are automatically skipped in the conformance runner.
+- **Proto message field selection at runtime** — accessing a field on a proto message value (e.g. `msg.field`) panics in the WASM runtime with `cel_get_field`. This is distinct from the skipped `TestAllTypes` binding tests: it affects any test that constructs a proto message literal and then selects a field from it.
+
+  **Affected conformance tests:**
+  - `parse` suite — `ipv6/select` (field selection on a parsed value)
+  - `type_deduction` suite — `duration_range/enum_field` (enum field access on a proto message)
 
 ---
 

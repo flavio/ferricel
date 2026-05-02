@@ -86,14 +86,15 @@ fn compile_optional_of_non_zero_value(
 /// `body_expr`, wrap the result in `optional.of(result)`. If opt is none, return none.
 ///
 /// Generated WASM logic:
-/// ```
-/// opt_val = compile(target)
-/// if cel_optional_has_value(opt_val) == Bool(true):
-///     inner = cel_optional_value(opt_val)
-///     result = compile(body_expr) with var=inner
-///     return cel_optional_of(result)
-/// else:
-///     return cel_optional_none()
+/// ```ignore
+/// let opt_val = compile(target);
+/// if cel_optional_has_value(opt_val) {
+///     let inner = cel_optional_value(opt_val);
+///     let result = compile(body_expr); // with var=inner in scope
+///     cel_optional_of(result)
+/// } else {
+///     cel_optional_none()
+/// }
 /// ```
 fn compile_opt_map(
     call_expr: &CallExpr,

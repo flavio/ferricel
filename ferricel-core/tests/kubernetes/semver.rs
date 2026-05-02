@@ -1,7 +1,4 @@
 //! Integration tests for the Kubernetes CEL semver library.
-//!
-//! Tests are ported from the Go implementation in:
-//!   k8s.io/apiserver/pkg/cel/library/semver_test.go
 
 use crate::common::*;
 use rstest::rstest;
@@ -9,21 +6,19 @@ use rstest::rstest;
 // ── isSemver(string) ─────────────────────────────────────────────────────────
 
 #[rstest]
-// Valid strict semver
-#[case(r#"isSemver("1.2.3")"#, 1)]
-#[case(r#"isSemver("1.2.3-alpha")"#, 1)]
-#[case(r#"isSemver("1.2.3+build")"#, 1)]
-#[case(r#"isSemver("1.2.3-alpha+build")"#, 1)]
-#[case(r#"isSemver("0.0.0")"#, 1)]
-// Invalid strict semver
-#[case(r#"isSemver("v1.2.3")"#, 0)] // v prefix
-#[case(r#"isSemver("1.2")"#, 0)] // missing patch
-#[case(r#"isSemver("1")"#, 0)] // only major
-#[case(r#"isSemver("not-a-semver")"#, 0)]
-#[case(r#"isSemver("")"#, 0)]
-#[case(r#"isSemver("01.02.03")"#, 0)] // leading zeros not allowed in strict
-fn test_is_semver(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"isSemver("1.2.3")"#, true)]
+#[case(r#"isSemver("1.2.3-alpha")"#, true)]
+#[case(r#"isSemver("1.2.3+build")"#, true)]
+#[case(r#"isSemver("1.2.3-alpha+build")"#, true)]
+#[case(r#"isSemver("0.0.0")"#, true)]
+#[case(r#"isSemver("v1.2.3")"#, false)] // v prefix
+#[case(r#"isSemver("1.2")"#, false)] // missing patch
+#[case(r#"isSemver("1")"#, false)] // only major
+#[case(r#"isSemver("not-a-semver")"#, false)]
+#[case(r#"isSemver("")"#, false)]
+#[case(r#"isSemver("01.02.03")"#, false)] // leading zeros not allowed in strict
+fn test_is_semver(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -34,24 +29,22 @@ fn test_is_semver(#[case] expr: &str, #[case] expected: i64) {
 // ── isSemver(string, bool) ───────────────────────────────────────────────────
 
 #[rstest]
-// Normalize=false (same as isSemver(str))
-#[case(r#"isSemver("1.2.3", false)"#, 1)]
-#[case(r#"isSemver("v1.2.3", false)"#, 0)]
-#[case(r#"isSemver("1.2", false)"#, 0)]
-// Normalize=true
-#[case(r#"isSemver("v1.2.3", true)"#, 1)]
-#[case(r#"isSemver("1.2", true)"#, 1)]
-#[case(r#"isSemver("1", true)"#, 1)]
-#[case(r#"isSemver("01.02.03", true)"#, 1)] // leading zeros stripped
-#[case(r#"isSemver("v01.01", true)"#, 1)] // v prefix + short + leading zeros
-#[case(r#"isSemver("1.0.0-alpha", true)"#, 1)] // pre-release allowed at 3 parts
-#[case(r#"isSemver("1.0.0+build", true)"#, 1)] // build meta allowed at 3 parts
-#[case(r#"isSemver("1-alpha", true)"#, 0)] // short version with pre-release
-#[case(r#"isSemver("1+build", true)"#, 0)] // short version with build meta
-#[case(r#"isSemver("1.0-alpha", true)"#, 0)] // 2-part with pre-release
-#[case(r#"isSemver("not-a-semver", true)"#, 0)]
-fn test_is_semver_normalize(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"isSemver("1.2.3", false)"#, true)]
+#[case(r#"isSemver("v1.2.3", false)"#, false)]
+#[case(r#"isSemver("1.2", false)"#, false)]
+#[case(r#"isSemver("v1.2.3", true)"#, true)]
+#[case(r#"isSemver("1.2", true)"#, true)]
+#[case(r#"isSemver("1", true)"#, true)]
+#[case(r#"isSemver("01.02.03", true)"#, true)]
+#[case(r#"isSemver("v01.01", true)"#, true)]
+#[case(r#"isSemver("1.0.0-alpha", true)"#, true)]
+#[case(r#"isSemver("1.0.0+build", true)"#, true)]
+#[case(r#"isSemver("1-alpha", true)"#, false)]
+#[case(r#"isSemver("1+build", true)"#, false)]
+#[case(r#"isSemver("1.0-alpha", true)"#, false)]
+#[case(r#"isSemver("not-a-semver", true)"#, false)]
+fn test_is_semver_normalize(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -63,7 +56,6 @@ fn test_is_semver_normalize(#[case] expr: &str, #[case] expected: i64) {
 
 #[test]
 fn test_semver_parse_returns_semver() {
-    // semver() returns a Semver, which serialises to a string
     let result = compile_and_execute_string(r#"string(semver("1.2.3"))"#)
         .expect("Failed to compile and execute");
     assert_eq!(result, "1.2.3");
@@ -113,7 +105,6 @@ fn test_semver_parse_normalize_leading_zeros() {
 
 #[test]
 fn test_semver_parse_normalize_v_and_leading_zeros() {
-    // From Go test: equality_normalize: semver("v01.01", true) == semver("1.1.0")
     let result = compile_and_execute_string(r#"string(semver("v01.01", true))"#)
         .expect("Failed to compile and execute");
     assert_eq!(result, "1.1.0");
@@ -160,7 +151,6 @@ fn test_patch(#[case] expr: &str, #[case] expected: i64) {
     );
 }
 
-// major/minor/patch from normalized
 #[test]
 fn test_major_from_normalized() {
     let result = compile_and_execute(r#"semver("v3.5.1", true).major()"#)
@@ -185,14 +175,14 @@ fn test_patch_from_normalized() {
 // ── isLessThan() ─────────────────────────────────────────────────────────────
 
 #[rstest]
-#[case(r#"semver("1.0.0").isLessThan(semver("2.0.0"))"#, 1)]
-#[case(r#"semver("1.0.0").isLessThan(semver("1.1.0"))"#, 1)]
-#[case(r#"semver("1.0.0").isLessThan(semver("1.0.1"))"#, 1)]
-#[case(r#"semver("1.0.0-alpha").isLessThan(semver("1.0.0"))"#, 1)] // pre-release < release
-#[case(r#"semver("1.0.0").isLessThan(semver("1.0.0"))"#, 0)]
-#[case(r#"semver("2.0.0").isLessThan(semver("1.0.0"))"#, 0)]
-fn test_is_less_than(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"semver("1.0.0").isLessThan(semver("2.0.0"))"#, true)]
+#[case(r#"semver("1.0.0").isLessThan(semver("1.1.0"))"#, true)]
+#[case(r#"semver("1.0.0").isLessThan(semver("1.0.1"))"#, true)]
+#[case(r#"semver("1.0.0-alpha").isLessThan(semver("1.0.0"))"#, true)]
+#[case(r#"semver("1.0.0").isLessThan(semver("1.0.0"))"#, false)]
+#[case(r#"semver("2.0.0").isLessThan(semver("1.0.0"))"#, false)]
+fn test_is_less_than(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -203,14 +193,14 @@ fn test_is_less_than(#[case] expr: &str, #[case] expected: i64) {
 // ── isGreaterThan() ──────────────────────────────────────────────────────────
 
 #[rstest]
-#[case(r#"semver("2.0.0").isGreaterThan(semver("1.0.0"))"#, 1)]
-#[case(r#"semver("1.1.0").isGreaterThan(semver("1.0.0"))"#, 1)]
-#[case(r#"semver("1.0.1").isGreaterThan(semver("1.0.0"))"#, 1)]
-#[case(r#"semver("1.0.0").isGreaterThan(semver("1.0.0-alpha"))"#, 1)] // release > pre-release
-#[case(r#"semver("1.0.0").isGreaterThan(semver("1.0.0"))"#, 0)]
-#[case(r#"semver("1.0.0").isGreaterThan(semver("2.0.0"))"#, 0)]
-fn test_is_greater_than(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"semver("2.0.0").isGreaterThan(semver("1.0.0"))"#, true)]
+#[case(r#"semver("1.1.0").isGreaterThan(semver("1.0.0"))"#, true)]
+#[case(r#"semver("1.0.1").isGreaterThan(semver("1.0.0"))"#, true)]
+#[case(r#"semver("1.0.0").isGreaterThan(semver("1.0.0-alpha"))"#, true)]
+#[case(r#"semver("1.0.0").isGreaterThan(semver("1.0.0"))"#, false)]
+#[case(r#"semver("1.0.0").isGreaterThan(semver("2.0.0"))"#, false)]
+fn test_is_greater_than(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -224,7 +214,6 @@ fn test_is_greater_than(#[case] expr: &str, #[case] expected: i64) {
 #[case(r#"semver("1.0.0").compareTo(semver("2.0.0"))"#, -1)]
 #[case(r#"semver("2.0.0").compareTo(semver("1.0.0"))"#, 1)]
 #[case(r#"semver("1.0.0").compareTo(semver("1.0.0"))"#, 0)]
-// compareTo ignores build metadata (uses cmp_precedence)
 #[case(r#"semver("1.0.0+build.1").compareTo(semver("1.0.0+build.2"))"#, 0)]
 fn test_compare_to(#[case] expr: &str, #[case] expected: i64) {
     let result = compile_and_execute(expr).expect("Failed to compile and execute");
@@ -238,16 +227,13 @@ fn test_compare_to(#[case] expr: &str, #[case] expected: i64) {
 // ── equality ─────────────────────────────────────────────────────────────────
 
 #[rstest]
-// reflexivity
-#[case(r#"semver("1.2.3") == semver("1.2.3")"#, 1)]
-#[case(r#"semver("1.2.3-alpha+build") == semver("1.2.3-alpha+build")"#, 1)]
-// normalize equality: semver("v01.01", true) == semver("1.1.0")
-#[case(r#"semver("v01.01", true) == semver("1.1.0")"#, 1)]
-// inequality
-#[case(r#"semver("1.2.3") == semver("1.2.4")"#, 0)]
-#[case(r#"semver("1.2.3") == semver("1.3.0")"#, 0)]
-fn test_equality(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"semver("1.2.3") == semver("1.2.3")"#, true)]
+#[case(r#"semver("1.2.3-alpha+build") == semver("1.2.3-alpha+build")"#, true)]
+#[case(r#"semver("v01.01", true) == semver("1.1.0")"#, true)]
+#[case(r#"semver("1.2.3") == semver("1.2.4")"#, false)]
+#[case(r#"semver("1.2.3") == semver("1.3.0")"#, false)]
+fn test_equality(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -271,27 +257,23 @@ fn test_semver_with_prerelease_serializes() {
     assert_eq!(result, "1.0.0-alpha");
 }
 
-// ── whitespace not trimmed (unlike ParseTolerant) ─────────────────────────────
+// ── whitespace not trimmed ─────────────────────────────────────────────────────
 
 #[test]
 fn test_semver_whitespace_rejected() {
     let result =
-        compile_and_execute(r#"isSemver(" 1.0.0")"#).expect("Failed to compile and execute");
-    assert_eq!(result, 0, "whitespace should not be trimmed");
+        compile_and_execute_bool(r#"isSemver(" 1.0.0")"#).expect("Failed to compile and execute");
+    assert!(!result, "whitespace should not be trimmed");
 }
 
 #[test]
 fn test_semver_whitespace_normalize_rejected() {
-    let result =
-        compile_and_execute(r#"isSemver(" 1.0.0", true)"#).expect("Failed to compile and execute");
-    assert_eq!(
-        result, 0,
-        "whitespace should not be trimmed during normalize"
-    );
+    let result = compile_and_execute_bool(r#"isSemver(" 1.0.0", true)"#)
+        .expect("Failed to compile and execute");
+    assert!(!result, "whitespace should not be trimmed during normalize");
 }
 
 // ── cross-type dispatch errors ───────────────────────────────────────────────
-// Passing a Quantity where a Semver argument is expected must return an error.
 
 #[rstest]
 #[case(r#"semver("1.0.0").isLessThan(quantity("1k"))"#)]

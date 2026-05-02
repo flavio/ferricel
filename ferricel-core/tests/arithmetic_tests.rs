@@ -1,7 +1,6 @@
 // Integration tests for integer arithmetic and comparison operators.
 
-mod common;
-use common::*;
+use crate::common::*;
 use rstest::rstest;
 
 // ============================================================

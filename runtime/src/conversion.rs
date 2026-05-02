@@ -363,6 +363,7 @@ fn convert_string(value: CelValue) -> CelValue {
         CelValue::IpAddr(addr) => CelValue::String(addr.to_string()),
         CelValue::Cidr(addr, prefix_len) => CelValue::String(format!("{}/{}", addr, prefix_len)),
         CelValue::Quantity(s) => CelValue::String(s),
+        CelValue::Semver(v) => CelValue::String(v.to_string()),
         other => {
             error!(log, "Cannot convert type to string"; "from_type" => format!("{:?}", other));
             abort_with_error("no such overload")

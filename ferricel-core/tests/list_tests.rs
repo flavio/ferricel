@@ -1,7 +1,6 @@
 // Integration tests for list literals and list macros (all, exists, exists_one, filter, map).
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use rstest::rstest;
 

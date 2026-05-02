@@ -417,14 +417,14 @@ mod tests {
     use crate::kubernetes::test_helpers::*;
 
     unsafe fn read_format(ptr: *mut CelValue) -> String {
-        match unsafe { read_val(ptr) } {
+        match read_val(ptr) {
             CelValue::Format(s) => s,
             other => panic!("expected Format, got {:?}", other),
         }
     }
 
     unsafe fn read_optional_list(ptr: *mut CelValue) -> Option<Vec<String>> {
-        match unsafe { read_val(ptr) } {
+        match read_val(ptr) {
             CelValue::Optional(None) => None,
             CelValue::Optional(Some(inner)) => match *inner {
                 CelValue::Array(items) => Some(
@@ -469,9 +469,9 @@ mod tests {
 
     #[test]
     fn test_format_named_known() {
-        let name_ptr = unsafe { make_str("dns1123Label") };
+        let name_ptr = make_str("dns1123Label");
         let result = unsafe { cel_k8s_format_named(name_ptr) };
-        match unsafe { read_val(result) } {
+        match read_val(result) {
             CelValue::Optional(Some(inner)) => {
                 assert_eq!(*inner, CelValue::Format("dns1123Label".to_string()))
             }
@@ -481,17 +481,17 @@ mod tests {
 
     #[test]
     fn test_format_named_unknown() {
-        let name_ptr = unsafe { make_str("bogus") };
+        let name_ptr = make_str("bogus");
         let result = unsafe { cel_k8s_format_named(name_ptr) };
-        assert_eq!(unsafe { read_val(result) }, CelValue::Optional(None));
+        assert_eq!(read_val(result), CelValue::Optional(None));
     }
 
     // ── dns1123Label ──
 
     #[test]
     fn test_validate_dns1123_label_valid() {
-        let fmt = unsafe { cel_k8s_format_dns1123_label() };
-        let val = unsafe { make_str("my-label") };
+        let fmt = cel_k8s_format_dns1123_label();
+        let val = make_str("my-label");
         assert_eq!(
             unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) },
             None
@@ -500,17 +500,17 @@ mod tests {
 
     #[test]
     fn test_validate_dns1123_label_invalid_dots() {
-        let fmt = unsafe { cel_k8s_format_dns1123_label() };
-        let val = unsafe { make_str("my.label") };
+        let fmt = cel_k8s_format_dns1123_label();
+        let val = make_str("my.label");
         let errs = unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) }.unwrap();
         assert!(errs.iter().any(|e| e.contains("must not contain dots")));
     }
 
     #[test]
     fn test_validate_dns1123_label_too_long() {
-        let fmt = unsafe { cel_k8s_format_dns1123_label() };
+        let fmt = cel_k8s_format_dns1123_label();
         let long = "a".repeat(64);
-        let val = unsafe { make_str(&long) };
+        let val = make_str(&long);
         let errs = unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) }.unwrap();
         assert!(errs.iter().any(|e| e.contains("63")));
     }
@@ -519,8 +519,8 @@ mod tests {
 
     #[test]
     fn test_validate_dns1123_subdomain_valid() {
-        let fmt = unsafe { cel_k8s_format_dns1123_subdomain() };
-        let val = unsafe { make_str("apiextensions.k8s.io") };
+        let fmt = cel_k8s_format_dns1123_subdomain();
+        let val = make_str("apiextensions.k8s.io");
         assert_eq!(
             unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) },
             None
@@ -529,8 +529,8 @@ mod tests {
 
     #[test]
     fn test_validate_dns1123_subdomain_invalid() {
-        let fmt = unsafe { cel_k8s_format_dns1123_subdomain() };
-        let val = unsafe { make_str("NOT_VALID") };
+        let fmt = cel_k8s_format_dns1123_subdomain();
+        let val = make_str("NOT_VALID");
         let errs = unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) }.unwrap();
         assert!(!errs.is_empty());
     }
@@ -539,8 +539,8 @@ mod tests {
 
     #[test]
     fn test_validate_uuid_valid() {
-        let fmt = unsafe { cel_k8s_format_uuid() };
-        let val = unsafe { make_str("123e4567-e89b-12d3-a456-426614174000") };
+        let fmt = cel_k8s_format_uuid();
+        let val = make_str("123e4567-e89b-12d3-a456-426614174000");
         assert_eq!(
             unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) },
             None
@@ -549,8 +549,8 @@ mod tests {
 
     #[test]
     fn test_validate_uuid_invalid() {
-        let fmt = unsafe { cel_k8s_format_uuid() };
-        let val = unsafe { make_str("not-a-uuid") };
+        let fmt = cel_k8s_format_uuid();
+        let val = make_str("not-a-uuid");
         let errs = unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) }.unwrap();
         assert!(errs.iter().any(|e| e.contains("UUID")));
     }
@@ -559,8 +559,8 @@ mod tests {
 
     #[test]
     fn test_validate_byte_valid() {
-        let fmt = unsafe { cel_k8s_format_byte() };
-        let val = unsafe { make_str("aGVsbG8=") };
+        let fmt = cel_k8s_format_byte();
+        let val = make_str("aGVsbG8=");
         assert_eq!(
             unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) },
             None
@@ -569,8 +569,8 @@ mod tests {
 
     #[test]
     fn test_validate_byte_invalid() {
-        let fmt = unsafe { cel_k8s_format_byte() };
-        let val = unsafe { make_str("!not!base64!") };
+        let fmt = cel_k8s_format_byte();
+        let val = make_str("!not!base64!");
         let errs = unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) }.unwrap();
         assert!(errs.iter().any(|e| e.contains("base64")));
     }
@@ -579,8 +579,8 @@ mod tests {
 
     #[test]
     fn test_validate_date_valid() {
-        let fmt = unsafe { cel_k8s_format_date() };
-        let val = unsafe { make_str("2021-01-01") };
+        let fmt = cel_k8s_format_date();
+        let val = make_str("2021-01-01");
         assert_eq!(
             unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) },
             None
@@ -589,8 +589,8 @@ mod tests {
 
     #[test]
     fn test_validate_date_invalid() {
-        let fmt = unsafe { cel_k8s_format_date() };
-        let val = unsafe { make_str("2021-13-01") };
+        let fmt = cel_k8s_format_date();
+        let val = make_str("2021-13-01");
         let errs = unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) }.unwrap();
         assert!(errs.iter().any(|e| e.contains("invalid date")));
     }
@@ -599,8 +599,8 @@ mod tests {
 
     #[test]
     fn test_validate_datetime_valid() {
-        let fmt = unsafe { cel_k8s_format_datetime() };
-        let val = unsafe { make_str("2021-01-01T00:00:00Z") };
+        let fmt = cel_k8s_format_datetime();
+        let val = make_str("2021-01-01T00:00:00Z");
         assert_eq!(
             unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) },
             None
@@ -609,8 +609,8 @@ mod tests {
 
     #[test]
     fn test_validate_datetime_invalid() {
-        let fmt = unsafe { cel_k8s_format_datetime() };
-        let val = unsafe { make_str("not-a-datetime") };
+        let fmt = cel_k8s_format_datetime();
+        let val = make_str("not-a-datetime");
         let errs = unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) }.unwrap();
         assert!(errs.iter().any(|e| e.contains("invalid datetime")));
     }
@@ -619,8 +619,8 @@ mod tests {
 
     #[test]
     fn test_validate_uri_valid() {
-        let fmt = unsafe { cel_k8s_format_uri() };
-        let val = unsafe { make_str("http://example.com") };
+        let fmt = cel_k8s_format_uri();
+        let val = make_str("http://example.com");
         assert_eq!(
             unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) },
             None
@@ -629,8 +629,8 @@ mod tests {
 
     #[test]
     fn test_validate_uri_invalid() {
-        let fmt = unsafe { cel_k8s_format_uri() };
-        let val = unsafe { make_str("not a url") };
+        let fmt = cel_k8s_format_uri();
+        let val = make_str("not a url");
         let errs = unsafe { read_optional_list(cel_k8s_format_validate(fmt, val)) }.unwrap();
         assert!(!errs.is_empty());
     }

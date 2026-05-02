@@ -1,7 +1,4 @@
 //! Integration tests for the Kubernetes CEL quantity library.
-//!
-//! Tests are ported from the Go implementation in:
-//!   k8s.io/apiserver/pkg/cel/library/quantity_test.go
 
 use crate::common::*;
 use rstest::rstest;
@@ -9,29 +6,29 @@ use rstest::rstest;
 // ── isQuantity(string) ───────────────────────────────────────────────────────
 
 #[rstest]
-#[case(r#"isQuantity("0")"#, 1)]
-#[case(r#"isQuantity("1")"#, 1)]
-#[case(r#"isQuantity("1k")"#, 1)]
-#[case(r#"isQuantity("1M")"#, 1)]
-#[case(r#"isQuantity("1G")"#, 1)]
-#[case(r#"isQuantity("1T")"#, 1)]
-#[case(r#"isQuantity("1P")"#, 1)]
-#[case(r#"isQuantity("1E")"#, 1)]
-#[case(r#"isQuantity("1Ki")"#, 1)]
-#[case(r#"isQuantity("1Mi")"#, 1)]
-#[case(r#"isQuantity("1Gi")"#, 1)]
-#[case(r#"isQuantity("1Ti")"#, 1)]
-#[case(r#"isQuantity("1Pi")"#, 1)]
-#[case(r#"isQuantity("1Ei")"#, 1)]
-#[case(r#"isQuantity("100m")"#, 1)]
-#[case(r#"isQuantity("1.5")"#, 1)]
-#[case(r#"isQuantity("1e3")"#, 1)]
-#[case(r#"isQuantity("-1")"#, 1)]
-#[case(r#"isQuantity("+1")"#, 1)]
-#[case(r#"isQuantity("")"#, 0)]
-#[case(r#"isQuantity("abc")"#, 0)]
-fn test_is_quantity(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"isQuantity("0")"#, true)]
+#[case(r#"isQuantity("1")"#, true)]
+#[case(r#"isQuantity("1k")"#, true)]
+#[case(r#"isQuantity("1M")"#, true)]
+#[case(r#"isQuantity("1G")"#, true)]
+#[case(r#"isQuantity("1T")"#, true)]
+#[case(r#"isQuantity("1P")"#, true)]
+#[case(r#"isQuantity("1E")"#, true)]
+#[case(r#"isQuantity("1Ki")"#, true)]
+#[case(r#"isQuantity("1Mi")"#, true)]
+#[case(r#"isQuantity("1Gi")"#, true)]
+#[case(r#"isQuantity("1Ti")"#, true)]
+#[case(r#"isQuantity("1Pi")"#, true)]
+#[case(r#"isQuantity("1Ei")"#, true)]
+#[case(r#"isQuantity("100m")"#, true)]
+#[case(r#"isQuantity("1.5")"#, true)]
+#[case(r#"isQuantity("1e3")"#, true)]
+#[case(r#"isQuantity("-1")"#, true)]
+#[case(r#"isQuantity("+1")"#, true)]
+#[case(r#"isQuantity("")"#, false)]
+#[case(r#"isQuantity("abc")"#, false)]
+fn test_is_quantity(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -86,13 +83,13 @@ fn test_sign(#[case] expr: &str, #[case] expected: i64) {
 // ── isInteger() ──────────────────────────────────────────────────────────────
 
 #[rstest]
-#[case(r#"quantity("1").isInteger()"#, 1)]
-#[case(r#"quantity("1k").isInteger()"#, 1)]
-#[case(r#"quantity("1Ki").isInteger()"#, 1)]
-#[case(r#"quantity("100m").isInteger()"#, 0)]
-#[case(r#"quantity("1.5").isInteger()"#, 0)]
-fn test_is_integer(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"quantity("1").isInteger()"#, true)]
+#[case(r#"quantity("1k").isInteger()"#, true)]
+#[case(r#"quantity("1Ki").isInteger()"#, true)]
+#[case(r#"quantity("100m").isInteger()"#, false)]
+#[case(r#"quantity("1.5").isInteger()"#, false)]
+fn test_is_integer(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -152,14 +149,14 @@ fn test_as_approx_float(#[case] expr: &str, #[case] expected: f64) {
 #[rstest]
 #[case(
     r#"quantity("50k").add(quantity("50k")).compareTo(quantity("100k")) == 0"#,
-    1
+    true
 )]
 #[case(
     r#"quantity("200M").add(quantity("100k")).compareTo(quantity("200100k")) == 0"#,
-    1
+    true
 )]
-fn test_add_quantities(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+fn test_add_quantities(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -170,9 +167,9 @@ fn test_add_quantities(#[case] expr: &str, #[case] expected: i64) {
 // ── add(int) ─────────────────────────────────────────────────────────────────
 
 #[rstest]
-#[case(r#"quantity("50k").add(20).compareTo(quantity("50020")) == 0"#, 1)]
-fn test_add_int(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"quantity("50k").add(20).compareTo(quantity("50020")) == 0"#, true)]
+fn test_add_int(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -185,10 +182,10 @@ fn test_add_int(#[case] expr: &str, #[case] expected: i64) {
 #[rstest]
 #[case(
     r#"quantity("100k").sub(quantity("50k")).compareTo(quantity("50k")) == 0"#,
-    1
+    true
 )]
-fn test_sub_quantities(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+fn test_sub_quantities(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -199,10 +196,13 @@ fn test_sub_quantities(#[case] expr: &str, #[case] expected: i64) {
 // ── sub(int) ─────────────────────────────────────────────────────────────────
 
 #[rstest]
-#[case(r#"quantity("50k").sub(20).compareTo(quantity("49980")) == 0"#, 1)]
-#[case(r#"quantity("50k").sub(-50000).compareTo(quantity("100k")) == 0"#, 1)]
-fn test_sub_int(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"quantity("50k").sub(20).compareTo(quantity("49980")) == 0"#, true)]
+#[case(
+    r#"quantity("50k").sub(-50000).compareTo(quantity("100k")) == 0"#,
+    true
+)]
+fn test_sub_int(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -214,23 +214,22 @@ fn test_sub_int(#[case] expr: &str, #[case] expected: i64) {
 
 #[test]
 fn test_chained_add_sub() {
-    // quantity("50k").add(20).sub(quantity("100k")).sub(-50000) == quantity("20")
-    let result = compile_and_execute(
+    let result = compile_and_execute_bool(
         r#"quantity("50k").add(20).sub(quantity("100k")).sub(-50000).compareTo(quantity("20")) == 0"#,
     )
     .expect("Failed to compile and execute");
-    assert_eq!(result, 1, "chained arithmetic should equal 20");
+    assert!(result, "chained arithmetic should equal 20");
 }
 
 // ── isLessThan() ─────────────────────────────────────────────────────────────
 
 #[rstest]
-#[case(r#"quantity("100m").isLessThan(quantity("200m"))"#, 1)]
-#[case(r#"quantity("200m").isLessThan(quantity("100m"))"#, 0)]
-#[case(r#"quantity("100m").isLessThan(quantity("100m"))"#, 0)]
-#[case(r#"quantity("1k").isLessThan(quantity("1M"))"#, 1)]
-fn test_is_less_than(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"quantity("100m").isLessThan(quantity("200m"))"#, true)]
+#[case(r#"quantity("200m").isLessThan(quantity("100m"))"#, false)]
+#[case(r#"quantity("100m").isLessThan(quantity("100m"))"#, false)]
+#[case(r#"quantity("1k").isLessThan(quantity("1M"))"#, true)]
+fn test_is_less_than(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -241,11 +240,11 @@ fn test_is_less_than(#[case] expr: &str, #[case] expected: i64) {
 // ── isGreaterThan() ──────────────────────────────────────────────────────────
 
 #[rstest]
-#[case(r#"quantity("200m").isGreaterThan(quantity("100m"))"#, 1)]
-#[case(r#"quantity("100m").isGreaterThan(quantity("200m"))"#, 0)]
-#[case(r#"quantity("100m").isGreaterThan(quantity("100m"))"#, 0)]
-fn test_is_greater_than(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"quantity("200m").isGreaterThan(quantity("100m"))"#, true)]
+#[case(r#"quantity("100m").isGreaterThan(quantity("200m"))"#, false)]
+#[case(r#"quantity("100m").isGreaterThan(quantity("100m"))"#, false)]
+fn test_is_greater_than(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -259,7 +258,7 @@ fn test_is_greater_than(#[case] expr: &str, #[case] expected: i64) {
 #[case(r#"quantity("100m").compareTo(quantity("200m"))"#, -1)]
 #[case(r#"quantity("200m").compareTo(quantity("100m"))"#, 1)]
 #[case(r#"quantity("100m").compareTo(quantity("100m"))"#, 0)]
-#[case(r#"quantity("200M").compareTo(quantity("0.2G"))"#, 0)] // cross-suffix equality
+#[case(r#"quantity("200M").compareTo(quantity("0.2G"))"#, 0)]
 fn test_compare_to(#[case] expr: &str, #[case] expected: i64) {
     let result = compile_and_execute(expr).expect("Failed to compile and execute");
     assert_eq!(
@@ -272,16 +271,13 @@ fn test_compare_to(#[case] expr: &str, #[case] expected: i64) {
 // ── equality (==) ────────────────────────────────────────────────────────────
 
 #[rstest]
-// reflexivity
-#[case(r#"quantity("1k") == quantity("1k")"#, 1)]
-// cross-suffix equality
-#[case(r#"quantity("200M") == quantity("0.2G")"#, 1)]
-#[case(r#"quantity("1Ki") == quantity("1024")"#, 1)]
-#[case(r#"quantity("1k") == quantity("1000")"#, 1)]
-// inequality
-#[case(r#"quantity("1k") == quantity("2k")"#, 0)]
-fn test_equality(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case(r#"quantity("1k") == quantity("1k")"#, true)]
+#[case(r#"quantity("200M") == quantity("0.2G")"#, true)]
+#[case(r#"quantity("1Ki") == quantity("1024")"#, true)]
+#[case(r#"quantity("1k") == quantity("1000")"#, true)]
+#[case(r#"quantity("1k") == quantity("2k")"#, false)]
+fn test_equality(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' expected {}",
@@ -290,7 +286,6 @@ fn test_equality(#[case] expr: &str, #[case] expected: i64) {
 }
 
 // ── cross-type dispatch errors ───────────────────────────────────────────────
-// Passing a Semver where a Quantity argument is expected must return an error.
 
 #[rstest]
 #[case(r#"quantity("1k").isLessThan(semver("1.0.0"))"#)]
@@ -307,47 +302,58 @@ fn test_quantity_cross_type_dispatch_error(#[case] expr: &str) {
 }
 
 // ── overflow ─────────────────────────────────────────────────────────────────
-// Overflow quantities are those too large for the internal i128 milli-unit
-// representation. They are still valid quantities (isQuantity returns true)
-// and support all operations with best-effort semantics.
 
 #[rstest]
 // isQuantity accepts overflow strings as valid
-#[case(r#"isQuantity("9999999999999999999999999999999999999G")"#, 1)]
-#[case(r#"isQuantity("-9999999999999999999999999999999999999G")"#, 1)]
-// sign
-#[case(r#"quantity("9999999999999999999999999999999999999G").sign()"#, 1)]
-#[case(r#"quantity("-9999999999999999999999999999999999999G").sign()"#, -1)]
+#[case(r#"isQuantity("9999999999999999999999999999999999999G")"#, true)]
+#[case(r#"isQuantity("-9999999999999999999999999999999999999G")"#, true)]
 // isInteger — overflow is never an integer
-#[case(r#"quantity("9999999999999999999999999999999999999G").isInteger()"#, 0)]
-// asApproximateFloat returns ±infinity, tested via comparison to avoid JSON serialization limits
+#[case(
+    r#"quantity("9999999999999999999999999999999999999G").isInteger()"#,
+    false
+)]
+// asApproximateFloat comparisons
 #[case(
     r#"quantity("9999999999999999999999999999999999999G").asApproximateFloat() > 1e300"#,
-    1
+    true
 )]
 #[case(
     r#"quantity("-9999999999999999999999999999999999999G").asApproximateFloat() < -1e300"#,
-    1
+    true
 )]
-// comparisons: positive overflow > any finite, negative overflow < any finite
+// comparisons
 #[case(
     r#"quantity("9999999999999999999999999999999999999G").isGreaterThan(quantity("1k"))"#,
-    1
+    true
 )]
 #[case(
     r#"quantity("1k").isLessThan(quantity("9999999999999999999999999999999999999G"))"#,
-    1
+    true
 )]
 #[case(
     r#"quantity("-9999999999999999999999999999999999999G").isLessThan(quantity("1k"))"#,
-    1
+    true
 )]
+// equality
+#[case(r#"quantity("9999999999999999999999999999999999999G") == quantity("9999999999999999999999999999999999999G")"#, true)]
+#[case(r#"quantity("9999999999999999999999999999999999999G") == quantity("-9999999999999999999999999999999999999G")"#, false)]
 #[case(
-    r#"quantity("9999999999999999999999999999999999999G").compareTo(quantity("1k"))"#,
-    1
+    r#"quantity("9999999999999999999999999999999999999G") == quantity("1k")"#,
+    false
 )]
-#[case(r#"quantity("-9999999999999999999999999999999999999G").compareTo(quantity("1k"))"#, -1)]
-// arithmetic: overflow propagates through add/sub
+fn test_overflow(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' expected {}",
+        expr, expected
+    );
+}
+
+// overflow sign() and arithmetic sign() — these return i64
+#[rstest]
+#[case(r#"quantity("9999999999999999999999999999999999999G").sign()"#, 1)]
+#[case(r#"quantity("-9999999999999999999999999999999999999G").sign()"#, -1)]
 #[case(
     r#"quantity("9999999999999999999999999999999999999G").add(quantity("1k")).sign()"#,
     1
@@ -356,14 +362,12 @@ fn test_quantity_cross_type_dispatch_error(#[case] expr: &str) {
     r#"quantity("9999999999999999999999999999999999999G").sub(quantity("1k")).sign()"#,
     1
 )]
-// equality
-#[case(r#"quantity("9999999999999999999999999999999999999G") == quantity("9999999999999999999999999999999999999G")"#, 1)]
-#[case(r#"quantity("9999999999999999999999999999999999999G") == quantity("-9999999999999999999999999999999999999G")"#, 0)]
 #[case(
-    r#"quantity("9999999999999999999999999999999999999G") == quantity("1k")"#,
-    0
+    r#"quantity("9999999999999999999999999999999999999G").compareTo(quantity("1k"))"#,
+    1
 )]
-fn test_overflow(#[case] expr: &str, #[case] expected: i64) {
+#[case(r#"quantity("-9999999999999999999999999999999999999G").compareTo(quantity("1k"))"#, -1)]
+fn test_overflow_int(#[case] expr: &str, #[case] expected: i64) {
     let result = compile_and_execute(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,

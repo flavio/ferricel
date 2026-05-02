@@ -2,13 +2,13 @@ use crate::common::*;
 use rstest::rstest;
 
 #[rstest]
-#[case("[1, 2, 3].isSorted()", 1)]
-#[case("[1, 1, 2].isSorted()", 1)]
-#[case("[3, 1, 2].isSorted()", 0)]
-#[case("[].isSorted()", 1)]
-#[case("[42].isSorted()", 1)]
-fn test_k8s_list_is_sorted(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+#[case("[1, 2, 3].isSorted()", true)]
+#[case("[1, 1, 2].isSorted()", true)]
+#[case("[3, 1, 2].isSorted()", false)]
+#[case("[].isSorted()", true)]
+#[case("[42].isSorted()", true)]
+fn test_k8s_list_is_sorted(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' should evaluate to {}",

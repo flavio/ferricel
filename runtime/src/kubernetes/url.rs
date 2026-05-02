@@ -389,7 +389,7 @@ mod tests {
     use rstest::rstest;
 
     unsafe fn make_url(s: &str) -> *mut CelValue {
-        let str_ptr = unsafe { make_str(s) };
+        let str_ptr = make_str(s);
         unsafe { cel_k8s_url_parse(str_ptr) }
     }
 
@@ -402,7 +402,7 @@ mod tests {
     #[case::path_with_query("/path?k=v")]
     #[case::ipv6("https://[::1]:80/path")]
     fn test_url_parse_valid(#[case] input: &str) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_url_parse(str_ptr)) };
         assert!(
             matches!(result, CelValue::Url(_, _)),
@@ -416,7 +416,7 @@ mod tests {
     #[case::relative_path("../relative-path")]
     #[case::invalid_scheme("https://a:b:c/")]
     fn test_url_parse_invalid(#[case] input: &str) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_url_parse(str_ptr)) };
         assert!(
             matches!(result, CelValue::Error(_)),
@@ -432,7 +432,7 @@ mod tests {
     #[case::relative_path("../relative-path", false)]
     #[case::invalid_scheme("https://a:b:c/", false)]
     fn test_is_url(#[case] input: &str, #[case] expected: bool) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_is_url(str_ptr)) };
         assert_eq!(result, CelValue::Bool(expected), "isURL({:?})", input);
     }
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn test_get_scheme_wrong_type_returns_error() {
-        let val_ptr = unsafe { make_val(CelValue::Int(42)) };
+        let val_ptr = make_val(CelValue::Int(42));
         let result = unsafe { read_val(cel_k8s_url_get_scheme(val_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
     }

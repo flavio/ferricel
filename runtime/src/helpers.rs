@@ -594,6 +594,11 @@ pub(crate) fn cel_equals(a_val: &CelValue, b_val: &CelValue) -> bool {
             crate::kubernetes::quantity::quantities_equal(a.as_str(), b.as_str())
         }
 
+        // Semver equality: compare by precedence (ignoring build metadata, matching compareTo)
+        (CelValue::Semver(a), CelValue::Semver(b)) => {
+            a.cmp_precedence(b) == std::cmp::Ordering::Equal
+        }
+
         // Optional equality: none == none, some(a) == some(b) iff a == b
         (CelValue::Optional(None), CelValue::Optional(None)) => true,
         (CelValue::Optional(Some(a)), CelValue::Optional(Some(b))) => cel_equals(a, b),

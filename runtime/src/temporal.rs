@@ -1187,7 +1187,7 @@ mod tests {
             let sum_ptr = cel_duration_add(dur1_ptr, dur2_ptr);
 
             // Verify result (should be 5400s + 800_000_000ns = 1h 30m 0.8s)
-            let (secs, nanos) = match unsafe { &*sum_ptr } {
+            let (secs, nanos) = match &*sum_ptr {
                 CelValue::Duration(d) => crate::chrono_helpers::duration_to_parts(d),
                 other => panic!("expected Duration, got {:?}", other),
             };

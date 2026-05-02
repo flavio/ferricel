@@ -1,7 +1,6 @@
 // Integration tests for struct literal creation and struct equality.
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use rstest::rstest;
 
@@ -75,31 +74,31 @@ fn test_struct_multiple_fields() {
 #[rstest]
 #[case::wrapper_bool_equal(
     "google.protobuf.BoolValue{value: true} == google.protobuf.BoolValue{value: true}",
-    1
+    true
 )]
 #[case::wrapper_bool_not_equal(
     "google.protobuf.BoolValue{value: true} == google.protobuf.BoolValue{value: false}",
-    0
+    false
 )]
 #[case::wrapper_int_equal(
     "google.protobuf.Int32Value{value: 123} == google.protobuf.Int32Value{value: 123}",
-    1
+    true
 )]
 #[case::wrapper_int_not_equal(
     "google.protobuf.Int32Value{value: 123} == google.protobuf.Int32Value{value: 456}",
-    0
+    false
 )]
-#[case::empty_structs_equal("TestAllTypes{} == TestAllTypes{}", 1)]
+#[case::empty_structs_equal("TestAllTypes{} == TestAllTypes{}", true)]
 #[case::multi_field_equal(
     "TestAllTypes{single_int64: 1234, single_string: '1234'} == TestAllTypes{single_int64: 1234, single_string: '1234'}",
-    1
+    true
 )]
 #[case::multi_field_not_equal(
     "TestAllTypes{single_int64: 1234} == TestAllTypes{single_int64: 5678}",
-    0
+    false
 )]
-fn test_struct_equality(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
+fn test_struct_equality(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
         "Expression '{}' should evaluate to {}",

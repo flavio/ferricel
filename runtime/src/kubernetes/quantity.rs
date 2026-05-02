@@ -948,7 +948,7 @@ mod tests {
     use rstest::rstest;
 
     unsafe fn make_quantity(s: &str) -> *mut CelValue {
-        let str_ptr = unsafe { make_str(s) };
+        let str_ptr = make_str(s);
         unsafe { cel_k8s_quantity_parse(str_ptr) }
     }
 
@@ -1005,7 +1005,7 @@ mod tests {
     #[case("", false)]
     #[case("abc", false)]
     fn test_is_quantity(#[case] input: &str, #[case] expected: bool) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_is_quantity(str_ptr)) };
         assert_eq!(result, CelValue::Bool(expected), "isQuantity({:?})", input);
     }
@@ -1109,7 +1109,7 @@ mod tests {
     fn test_add_int() {
         // quantity("50k").add(20) == quantity("50020")
         let q = unsafe { make_quantity("50k") };
-        let n = unsafe { make_int(20) };
+        let n = make_int(20);
         let result = unsafe { read_val(cel_k8s_quantity_add_int(q, n)) };
         match result {
             CelValue::Quantity(s) => {
@@ -1142,7 +1142,7 @@ mod tests {
     #[test]
     fn test_sub_int() {
         let q = unsafe { make_quantity("50k") };
-        let n = unsafe { make_int(20) };
+        let n = make_int(20);
         let result = unsafe { read_val(cel_k8s_quantity_sub_int(q, n)) };
         match result {
             CelValue::Quantity(s) => {
@@ -1264,7 +1264,7 @@ mod tests {
         // A very large finite quantity + large int overflows at the arithmetic level.
         // Use the overflow sentinel directly as lhs.
         let q = unsafe { make_quantity(OVERFLOW_POS) };
-        let n = unsafe { make_int(1) };
+        let n = make_int(1);
         let result = unsafe { read_val(cel_k8s_quantity_add_int(q, n)) };
         match result {
             CelValue::Quantity(s) => assert_eq!(
@@ -1308,7 +1308,7 @@ mod tests {
     #[test]
     fn test_sub_int_overflow_operand() {
         let q = unsafe { make_quantity(OVERFLOW_POS) };
-        let n = unsafe { make_int(1) };
+        let n = make_int(1);
         let result = unsafe { read_val(cel_k8s_quantity_sub_int(q, n)) };
         match result {
             CelValue::Quantity(s) => assert_eq!(

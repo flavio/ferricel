@@ -1,4 +1,4 @@
-.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-list conformance-% conformance-sections-% docs publish-prep
+.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-tests-serial conformance-list conformance-% conformance-sections-% docs publish-prep
 
 # Default target
 all: ferricel
@@ -50,6 +50,13 @@ conformance-tests: $(RUNTIME_TARGET)
 	@echo "Note: Building ferricel-core first..."
 	cargo build --package ferricel-core
 	cargo test --package conformance --test conformance -- --nocapture
+
+# Run CEL conformance tests serially (one suite at a time, cleaner output)
+conformance-tests-serial: $(RUNTIME_TARGET)
+	@echo "Running CEL conformance tests (serial)..."
+	@echo "Note: Building ferricel-core first..."
+	cargo build --package ferricel-core
+	cargo test --package conformance --test conformance -- --nocapture --test-threads=1
 
 # Run a specific conformance test suite
 # Usage: make conformance-basic, make conformance-string, etc.
@@ -288,18 +295,18 @@ fmt:
 
 # Run clippy lints with warnings treated as errors
 .PHONY: lint
-lint:
+lint: $(RUNTIME_TARGET)
 	cargo fmt --all -- --check
 	cargo clippy --workspace -- -D warnings
 
 # Auto-fix clippy warnings where possible
 .PHONY: lint-fix
-lint-fix:
+lint-fix: $(RUNTIME_TARGET)
 	cargo clippy --workspace --fix --allow-dirty --allow-staged
 
 # Check that the code compiles without building artifacts
 .PHONY: check
-check:
+check: $(RUNTIME_TARGET)
 	cargo check --workspace
 
 # Help target

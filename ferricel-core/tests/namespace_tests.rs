@@ -5,8 +5,7 @@
 // A dotted expression `x.y` should first try to resolve as a qualified variable
 // named `"x.y"`, and only fall back to field access if that lookup misses.
 
-mod common;
-use common::*;
+use crate::common::*;
 use ferricel_core::runtime;
 use ferricel_types::LogLevel;
 use rstest::rstest;

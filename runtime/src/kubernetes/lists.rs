@@ -436,7 +436,7 @@ mod tests {
     )]
     #[case::doubles_descending(vec![CelValue::Double(2.0), CelValue::Double(1.0)], CelValue::Bool(false))]
     fn test_is_sorted(#[case] elements: Vec<CelValue>, #[case] expected: CelValue) {
-        let arr = unsafe { make_array(elements) };
+        let arr = make_array(elements);
         let result = unsafe { read_val(cel_k8s_list_is_sorted(arr)) };
         assert_eq!(result, expected);
     }
@@ -456,7 +456,7 @@ mod tests {
         CelValue::Duration(chrono::Duration::seconds(61))
     )]
     fn test_sum(#[case] elements: Vec<CelValue>, #[case] expected: CelValue) {
-        let arr = unsafe { make_array(elements) };
+        let arr = make_array(elements);
         let result = unsafe { read_val(cel_k8s_list_sum(arr)) };
         assert_eq!(result, expected);
     }
@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn test_min_empty_is_error() {
-        let arr = unsafe { make_array(vec![]) };
+        let arr = make_array(vec![]);
         let result = unsafe { read_val(cel_k8s_list_min(arr)) };
         assert!(matches!(result, CelValue::Error(_)));
     }
@@ -474,7 +474,7 @@ mod tests {
     #[case::ints(vec![CelValue::Int(3), CelValue::Int(1), CelValue::Int(2)], CelValue::Int(1))]
     #[case::single(vec![CelValue::Int(42)], CelValue::Int(42))]
     fn test_min(#[case] elements: Vec<CelValue>, #[case] expected: CelValue) {
-        let arr = unsafe { make_array(elements) };
+        let arr = make_array(elements);
         let result = unsafe { read_val(cel_k8s_list_min(arr)) };
         assert_eq!(result, expected);
     }
@@ -483,7 +483,7 @@ mod tests {
 
     #[test]
     fn test_max_empty_is_error() {
-        let arr = unsafe { make_array(vec![]) };
+        let arr = make_array(vec![]);
         let result = unsafe { read_val(cel_k8s_list_max(arr)) };
         assert!(matches!(result, CelValue::Error(_)));
     }
@@ -492,7 +492,7 @@ mod tests {
     #[case::ints(vec![CelValue::Int(1), CelValue::Int(3), CelValue::Int(2)], CelValue::Int(3))]
     #[case::single(vec![CelValue::Int(7)], CelValue::Int(7))]
     fn test_max(#[case] elements: Vec<CelValue>, #[case] expected: CelValue) {
-        let arr = unsafe { make_array(elements) };
+        let arr = make_array(elements);
         let result = unsafe { read_val(cel_k8s_list_max(arr)) };
         assert_eq!(result, expected);
     }
@@ -520,8 +520,8 @@ mod tests {
         #[case] needle: CelValue,
         #[case] expected: CelValue,
     ) {
-        let arr = unsafe { make_array(elements) };
-        let needle_ptr = unsafe { make_val(needle) };
+        let arr = make_array(elements);
+        let needle_ptr = make_val(needle);
         let result = unsafe { read_val(cel_k8s_list_index_of(arr, needle_ptr)) };
         assert_eq!(result, expected);
     }
@@ -549,8 +549,8 @@ mod tests {
         #[case] needle: CelValue,
         #[case] expected: CelValue,
     ) {
-        let arr = unsafe { make_array(elements) };
-        let needle_ptr = unsafe { make_val(needle) };
+        let arr = make_array(elements);
+        let needle_ptr = make_val(needle);
         let result = unsafe { read_val(cel_k8s_list_last_index_of(arr, needle_ptr)) };
         assert_eq!(result, expected);
     }

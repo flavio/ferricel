@@ -1,7 +1,6 @@
 // Integration tests for container name resolution.
 
-mod common;
-use common::*;
+use crate::common::*;
 
 // ============================================================
 // Container Resolution Tests

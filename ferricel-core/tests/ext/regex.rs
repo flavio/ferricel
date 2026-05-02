@@ -46,14 +46,14 @@ fn test_regex_replace_n(#[case] expr: &str, #[case] expected: &str) {
 
 #[rstest]
 // hasValue() returns true when there is a match
-#[case::match_no_group(r#"regex.extract("hello 123 world", r"\d+").hasValue()"#, 1)]
-#[case::no_match_no_value(r#"regex.extract("hello world", r"\d+").hasValue()"#, 0)]
+#[case::match_no_group(r#"regex.extract("hello 123 world", r"\d+").hasValue()"#, true)]
+#[case::no_match_no_value(r#"regex.extract("hello world", r"\d+").hasValue()"#, false)]
 #[case::match_with_capture_group_has_value(
     r#"regex.extract("hello 123", r"hello (\d+)").hasValue()"#,
-    1
+    true
 )]
-fn test_regex_extract_has_value(#[case] expr: &str, #[case] expected: i64) {
-    let result = compile_and_execute(expr).expect("compile_and_execute failed");
+fn test_regex_extract_has_value(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("compile_and_execute_bool failed");
     assert_eq!(
         result, expected,
         "Expression '{}' should evaluate to {}",

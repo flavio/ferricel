@@ -1,7 +1,6 @@
 // Integration tests for extension function registration and invocation.
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use ferricel_core::{compiler, runtime};
 use ferricel_types::extensions::ExtensionDecl;
@@ -235,15 +234,25 @@ fn test_extension_arity_mismatch_is_compile_error() {
 }
 
 #[test]
-fn test_extension_unknown_function_is_compile_error() {
-    // No extensions registered; calling unknown() should error.
-    let result = compiler::Builder::new()
+fn test_extension_unknown_function_runtime_error() {
+    // No extensions registered; calling unknown(1) compiles successfully but
+    // produces a "no matching overload" error at runtime (CEL defers unknown
+    // function errors to evaluation time).
+    let logger = create_test_logger();
+    let wasm = compiler::Builder::new()
         .with_logger(create_test_logger())
         .build()
-        .compile("unknown(1)");
+        .compile("unknown(1)")
+        .expect("compile should succeed — unknown functions are deferred to runtime");
+    let result = runtime::Builder::new()
+        .with_logger(logger)
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None);
     assert!(
         result.is_err(),
-        "Calling an unknown function should produce a compile error"
+        "Calling an unknown function should produce a runtime error"
     );
 }
 

@@ -5,12 +5,18 @@ use rstest::rstest;
 // math.greatest
 // ---------------------------------------------------------------------------
 
+// Single-arg cases just check they execute without error
 #[rstest]
-// Single arg
 #[case("math.greatest(-5)")]
 #[case("math.greatest(5)")]
 #[case("math.greatest(-5.0)")]
 #[case("math.greatest(5u)")]
+fn test_greatest_single_arg(#[case] expr: &str) {
+    compile_and_execute(expr).unwrap_or_else(|e| panic!("'{}' should not error: {}", expr, e));
+}
+
+// Equality cases return bool
+#[rstest]
 // Binary int
 #[case("math.greatest(1, 1) == 1")]
 #[case("math.greatest(3, -3) == 3")]
@@ -41,20 +47,26 @@ use rstest::rstest;
 #[case("math.greatest(9223372036854775807, 1) == 9223372036854775807")]
 #[case("math.greatest(-9223372036854775808, 1) == 1")]
 fn test_greatest_true(#[case] expr: &str) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
-    assert_eq!(result, 1, "Expression '{}' should be truthy", expr);
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
+    assert!(result, "Expression '{}' should be truthy", expr);
 }
 
 // ---------------------------------------------------------------------------
 // math.least
 // ---------------------------------------------------------------------------
 
+// Single-arg cases just check they execute without error
 #[rstest]
-// Single arg
 #[case("math.least(-5)")]
 #[case("math.least(5)")]
 #[case("math.least(-5.5)")]
 #[case("math.least(5u)")]
+fn test_least_single_arg(#[case] expr: &str) {
+    compile_and_execute(expr).unwrap_or_else(|e| panic!("'{}' should not error: {}", expr, e));
+}
+
+// Equality cases return bool
+#[rstest]
 // Binary int
 #[case("math.least(1, 1) == 1")]
 #[case("math.least(-3, 3) == -3")]
@@ -85,8 +97,8 @@ fn test_greatest_true(#[case] expr: &str) {
 #[case("math.least(-9223372036854775808, 1) == -9223372036854775808")]
 #[case("math.least(9223372036854775807, 1) == 1")]
 fn test_least_true(#[case] expr: &str) {
-    let result = compile_and_execute(expr).expect("Failed to compile and execute");
-    assert_eq!(result, 1, "Expression '{}' should be truthy", expr);
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
+    assert!(result, "Expression '{}' should be truthy", expr);
 }
 
 // ---------------------------------------------------------------------------
@@ -94,68 +106,60 @@ fn test_least_true(#[case] expr: &str) {
 // ---------------------------------------------------------------------------
 
 #[rstest]
-#[case("math.ceil(1.2) == 2.0", 2.0_f64)]
-#[case("math.ceil(-1.2) == -1.0", -1.0_f64)]
-fn test_ceil(#[case] expr: &str, #[case] expected: f64) {
-    let result = compile_and_execute_double(expr).expect("Failed to compile and execute");
-    assert!(
-        (result - expected).abs() < 1e-9,
-        "Expression '{}': got {}, expected {}",
-        expr,
-        result,
-        expected
+#[case("math.ceil(1.2) == 2.0", true)]
+#[case("math.ceil(-1.2) == -1.0", true)]
+fn test_ceil(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
     );
 }
 
 #[rstest]
-#[case("math.floor(1.2) == 1.0", 1.0_f64)]
-#[case("math.floor(-1.2) == -2.0", -2.0_f64)]
-fn test_floor(#[case] expr: &str, #[case] expected: f64) {
-    let result = compile_and_execute_double(expr).expect("Failed to compile and execute");
-    assert!(
-        (result - expected).abs() < 1e-9,
-        "Expression '{}': got {}, expected {}",
-        expr,
-        result,
-        expected
+#[case("math.floor(1.2) == 1.0", true)]
+#[case("math.floor(-1.2) == -2.0", true)]
+fn test_floor(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
     );
 }
 
 #[rstest]
-#[case("math.round(1.2) == 1.0", 1.0_f64)]
-#[case("math.round(1.5) == 2.0", 2.0_f64)]
-#[case("math.round(-1.5) == -2.0", -2.0_f64)]
-#[case("math.round(-1.2) == -1.0", -1.0_f64)]
-fn test_round(#[case] expr: &str, #[case] expected: f64) {
-    let result = compile_and_execute_double(expr).expect("Failed to compile and execute");
-    assert!(
-        (result - expected).abs() < 1e-9,
-        "Expression '{}': got {}, expected {}",
-        expr,
-        result,
-        expected
+#[case("math.round(1.2) == 1.0", true)]
+#[case("math.round(1.5) == 2.0", true)]
+#[case("math.round(-1.5) == -2.0", true)]
+#[case("math.round(-1.2) == -1.0", true)]
+fn test_round(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
     );
 }
 
 #[test]
 fn test_round_nan() {
     // math.round(NaN) == NaN  (NaN != NaN, so check via isNaN)
-    let result =
-        compile_and_execute("math.isNaN(math.round(0.0/0.0))").expect("compile_and_execute");
-    assert_eq!(result, 1, "math.round(NaN) should be NaN");
+    let result = compile_and_execute_bool("math.isNaN(math.round(0.0/0.0))")
+        .expect("compile_and_execute_bool");
+    assert!(result, "math.round(NaN) should be NaN");
 }
 
 #[rstest]
-#[case("math.trunc(-1.3) == -1.0", -1.0_f64)]
-#[case("math.trunc(1.3) == 1.0", 1.0_f64)]
-fn test_trunc(#[case] expr: &str, #[case] expected: f64) {
-    let result = compile_and_execute_double(expr).expect("Failed to compile and execute");
-    assert!(
-        (result - expected).abs() < 1e-9,
-        "Expression '{}': got {}, expected {}",
-        expr,
-        result,
-        expected
+#[case("math.trunc(-1.3) == -1.0", true)]
+#[case("math.trunc(1.3) == 1.0", true)]
+fn test_trunc(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to compile and execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
     );
 }
 
@@ -169,13 +173,8 @@ fn test_trunc(#[case] expr: &str, #[case] expected: f64) {
 #[case("math.abs(-234.5) == 234.5")]
 #[case("math.abs(234.5) == 234.5")]
 fn test_abs_true(#[case] expr: &str) {
-    let result = compile_and_execute(expr).expect("compile_and_execute");
-    assert_eq!(
-        result,
-        serde_json::Value::Bool(true),
-        "Expression '{}' should be truthy",
-        expr
-    );
+    let result = compile_and_execute_bool(expr).expect("compile_and_execute_bool");
+    assert!(result, "Expression '{}' should be truthy", expr);
 }
 
 #[test]
@@ -208,15 +207,15 @@ fn test_abs_overflow() {
 #[case("math.sign(1.0/0.0) == 1.0")] // +Inf -> 1.0
 #[case("math.sign(-1.0/0.0) == -1.0")] // -Inf -> -1.0
 fn test_sign_true(#[case] expr: &str) {
-    let result = compile_and_execute(expr).expect("compile_and_execute");
-    assert_eq!(result, 1, "Expression '{}' should be truthy", expr);
+    let result = compile_and_execute_bool(expr).expect("compile_and_execute_bool");
+    assert!(result, "Expression '{}' should be truthy", expr);
 }
 
 #[test]
 fn test_sign_nan() {
-    let result =
-        compile_and_execute("math.isNaN(math.sign(0.0/0.0))").expect("compile_and_execute");
-    assert_eq!(result, 1, "math.sign(NaN) should be NaN");
+    let result = compile_and_execute_bool("math.isNaN(math.sign(0.0/0.0))")
+        .expect("compile_and_execute_bool");
+    assert!(result, "math.sign(NaN) should be NaN");
 }
 
 // ---------------------------------------------------------------------------
@@ -233,8 +232,8 @@ fn test_sign_nan() {
 #[case("!math.isInf(0.0/0.0)")]
 #[case("!math.isInf(1.2)")]
 fn test_float_predicates(#[case] expr: &str) {
-    let result = compile_and_execute(expr).expect("compile_and_execute");
-    assert_eq!(result, 1, "Expression '{}' should be truthy", expr);
+    let result = compile_and_execute_bool(expr).expect("compile_and_execute_bool");
+    assert!(result, "Expression '{}' should be truthy", expr);
 }
 
 // ---------------------------------------------------------------------------
@@ -274,13 +273,8 @@ fn test_float_predicates(#[case] expr: &str) {
 #[case("math.bitShiftRight(1024u, 2) == 256u")]
 #[case("math.bitShiftRight(1024u, 64) == 0u")]
 fn test_bitwise_true(#[case] expr: &str) {
-    let result = compile_and_execute(expr).expect("compile_and_execute");
-    assert_eq!(
-        result,
-        serde_json::Value::Bool(true),
-        "Expression '{}' should be truthy",
-        expr
-    );
+    let result = compile_and_execute_bool(expr).expect("compile_and_execute_bool");
+    assert!(result, "Expression '{}' should be truthy", expr);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,13 +310,24 @@ fn test_bit_shift_right_negative_offset() {
 // ---------------------------------------------------------------------------
 
 #[rstest]
-#[case("math.sqrt(49.0) == 7.0", 7.0_f64)]
-#[case("math.sqrt(0) == 0.0", 0.0_f64)]
-#[case("math.sqrt(1) == 1.0", 1.0_f64)]
-#[case("math.sqrt(25u) == 5.0", 5.0_f64)]
-#[case("math.sqrt(82) == 9.055385138137417", 9.055385138137417_f64)]
-#[case("math.sqrt(985.25) == 31.388692231439016", 31.388692231439016_f64)]
-fn test_sqrt(#[case] expr: &str, #[case] expected: f64) {
+#[case("math.sqrt(49.0) == 7.0", true)]
+#[case("math.sqrt(0) == 0.0", true)]
+#[case("math.sqrt(1) == 1.0", true)]
+#[case("math.sqrt(25u) == 5.0", true)]
+fn test_sqrt(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("compile_and_execute_bool");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
+    );
+}
+
+// Cases where floating-point precision makes exact equality fragile — check via abs
+#[rstest]
+#[case("math.sqrt(82)", 9.055385138137417_f64)]
+#[case("math.sqrt(985.25)", 31.388692231439016_f64)]
+fn test_sqrt_precision(#[case] expr: &str, #[case] expected: f64) {
     let result = compile_and_execute_double(expr).expect("compile_and_execute_double");
     let tolerance = expected.abs() * 1e-9 + 1e-12;
     assert!(
@@ -336,8 +341,9 @@ fn test_sqrt(#[case] expr: &str, #[case] expected: f64) {
 
 #[test]
 fn test_sqrt_negative_is_nan() {
-    let result = compile_and_execute("math.isNaN(math.sqrt(-15.34))").expect("compile_and_execute");
-    assert_eq!(result, 1, "math.sqrt(-15.34) should be NaN");
+    let result = compile_and_execute_bool("math.isNaN(math.sqrt(-15.34))")
+        .expect("compile_and_execute_bool");
+    assert!(result, "math.sqrt(-15.34) should be NaN");
 }
 
 // ---------------------------------------------------------------------------

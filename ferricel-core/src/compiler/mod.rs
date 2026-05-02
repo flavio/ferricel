@@ -150,9 +150,9 @@ impl Compiler {
     /// # Example
     ///
     /// ```no_run
-    /// use ferricel_core::compiler::CompilerBuilder;
-    ///
-    /// let compiler = CompilerBuilder::new().build();
+     /// use ferricel_core::compiler::Builder;
+     ///
+     /// let compiler = Builder::new().build();
     /// let wasm_bytes = compiler.compile("1 + 1").unwrap();
     /// ```
     pub fn compile(&self, cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {

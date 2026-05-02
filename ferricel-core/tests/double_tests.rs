@@ -1,7 +1,6 @@
 // Integration tests for double (f64) arithmetic, comparisons, and type safety.
 
-mod common;
-use common::*;
+use crate::common::*;
 use rstest::rstest;
 
 // ============================================================

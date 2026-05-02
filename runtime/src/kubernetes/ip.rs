@@ -430,7 +430,7 @@ mod tests {
     use rstest::rstest;
 
     unsafe fn make_ip(s: &str) -> *mut CelValue {
-        let str_ptr = unsafe { make_str(s) };
+        let str_ptr = make_str(s);
         unsafe { cel_k8s_ip_parse(str_ptr) }
     }
 
@@ -445,7 +445,7 @@ mod tests {
     #[case::ipv6_full("2001:db8::abcd")]
     #[case::ipv6_hex_mapped("::ffff:c0a8:1")]
     fn test_ip_parse_valid(#[case] input: &str) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_ip_parse(str_ptr)) };
         assert!(
             matches!(result, CelValue::IpAddr(_)),
@@ -463,7 +463,7 @@ mod tests {
     #[case::too_many_octets("1.2.3.4.5")]
     #[case::empty("")]
     fn test_ip_parse_invalid(#[case] input: &str) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_ip_parse(str_ptr)) };
         assert!(
             matches!(result, CelValue::Error(_)),
@@ -482,7 +482,7 @@ mod tests {
     #[case::leading_zero("010.0.0.1", false)]
     #[case::garbage("not-an-ip", false)]
     fn test_is_ip(#[case] input: &str, #[case] expected: bool) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_is_ip(str_ptr)) };
         assert_eq!(result, CelValue::Bool(expected), "isIP({:?})", input);
     }
@@ -497,7 +497,7 @@ mod tests {
     #[case::ipv6_uppercase("2001:DB8::ABCD", false)]
     #[case::ipv6_uncompressed("2001:db8::0:0:0:abcd", false)]
     fn test_is_canonical_valid(#[case] input: &str, #[case] expected: bool) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_ip_is_canonical(str_ptr)) };
         assert_eq!(
             result,
@@ -509,7 +509,7 @@ mod tests {
 
     #[test]
     fn test_is_canonical_invalid_returns_error() {
-        let str_ptr = unsafe { make_str("not-an-ip") };
+        let str_ptr = make_str("not-an-ip");
         let result = unsafe { read_val(cel_k8s_ip_is_canonical(str_ptr)) };
         assert!(
             matches!(result, CelValue::Error(_)),
@@ -671,14 +671,14 @@ mod tests {
 
     #[test]
     fn test_family_wrong_type_returns_error() {
-        let val_ptr = unsafe { make_val(CelValue::Int(42)) };
+        let val_ptr = make_val(CelValue::Int(42));
         let result = unsafe { read_val(cel_k8s_ip_family(val_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
     }
 
     #[test]
     fn test_is_unspecified_wrong_type_returns_error() {
-        let val_ptr = unsafe { make_val(CelValue::Bool(true)) };
+        let val_ptr = make_val(CelValue::Bool(true));
         let result = unsafe { read_val(cel_k8s_ip_is_unspecified(val_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
     }

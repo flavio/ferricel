@@ -130,4 +130,3 @@ pub(crate) fn compile_with_container(
     }
     builder.build().compile(cel_expr)
 }
-

@@ -207,6 +207,7 @@ impl ProtoSchema {
     /// ```no_run
     /// use ferricel_core::schema::ProtoSchema;
     ///
+    /// let bytes: Vec<u8> = vec![];
     /// let schema = ProtoSchema::from_descriptor_set(&bytes).unwrap();
     /// let wrapper_fields = schema.get_wrapper_fields("cel.expr.conformance.proto3.TestAllTypes");
     /// // Returns: ["single_bool_wrapper", "single_int64_wrapper", ...]

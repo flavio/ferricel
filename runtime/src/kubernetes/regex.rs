@@ -169,8 +169,8 @@ mod tests {
     #[case::anchored_no_match("say hello", r"^hello", "")]
     #[case::full_string_match("hello", r"^hello$", "hello")]
     fn test_find(#[case] s: &str, #[case] pattern: &str, #[case] expected: &str) {
-        let s_ptr = unsafe { make_str(s) };
-        let p_ptr = unsafe { make_str(pattern) };
+        let s_ptr = make_str(s);
+        let p_ptr = make_str(pattern);
         let result = unsafe { read_val(cel_k8s_regex_find(s_ptr, p_ptr)) };
         assert_eq!(
             result,
@@ -183,8 +183,8 @@ mod tests {
 
     #[test]
     fn test_find_invalid_regex_returns_error() {
-        let s_ptr = unsafe { make_str("hello") };
-        let p_ptr = unsafe { make_str("[invalid") };
+        let s_ptr = make_str("hello");
+        let p_ptr = make_str("[invalid");
         let result = unsafe { read_val(cel_k8s_regex_find(s_ptr, p_ptr)) };
         assert!(
             matches!(result, CelValue::Error(_)),
@@ -216,9 +216,9 @@ mod tests {
         vec![]
     )]
     fn test_find_all(#[case] s: &str, #[case] pattern: &str, #[case] expected: Vec<&str>) {
-        let s_ptr = unsafe { make_str(s) };
-        let p_ptr = unsafe { make_str(pattern) };
-        let l_ptr = unsafe { make_int(-1) };
+        let s_ptr = make_str(s);
+        let p_ptr = make_str(pattern);
+        let l_ptr = make_int(-1);
         let result = unsafe { read_val(cel_k8s_regex_find_all_n(s_ptr, p_ptr, l_ptr)) };
         let expected_val = CelValue::Array(
             expected
@@ -243,9 +243,9 @@ mod tests {
         #[case] limit: i64,
         #[case] expected: Vec<&str>,
     ) {
-        let s_ptr = unsafe { make_str(s) };
-        let p_ptr = unsafe { make_str(pattern) };
-        let l_ptr = unsafe { make_int(limit) };
+        let s_ptr = make_str(s);
+        let p_ptr = make_str(pattern);
+        let l_ptr = make_int(limit);
         let result = unsafe { read_val(cel_k8s_regex_find_all_n(s_ptr, p_ptr, l_ptr)) };
         let expected_val = CelValue::Array(
             expected
@@ -262,9 +262,9 @@ mod tests {
 
     #[test]
     fn test_find_all_invalid_regex_returns_error() {
-        let s_ptr = unsafe { make_str("hello") };
-        let p_ptr = unsafe { make_str("[invalid") };
-        let l_ptr = unsafe { make_int(-1) };
+        let s_ptr = make_str("hello");
+        let p_ptr = make_str("[invalid");
+        let l_ptr = make_int(-1);
         let result = unsafe { read_val(cel_k8s_regex_find_all_n(s_ptr, p_ptr, l_ptr)) };
         assert!(
             matches!(result, CelValue::Error(_)),

@@ -6,6 +6,7 @@ description = "Core compiler and runtime library for ferricel (CEL → WASM)"
 license     = { workspace = true }
 repository  = { workspace = true }
 build       = "build.rs"
+autotests   = false
 include = [
     "src/**/*",
     "build.rs",
@@ -29,3 +30,7 @@ wasmtime       = "43.0"
 [dev-dependencies]
 rstest    = { workspace = true }
 slog-term = { workspace = true }
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

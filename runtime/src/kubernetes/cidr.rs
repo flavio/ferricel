@@ -421,12 +421,12 @@ mod tests {
     use rstest::rstest;
 
     unsafe fn make_cidr(s: &str) -> *mut CelValue {
-        let str_ptr = unsafe { make_str(s) };
+        let str_ptr = make_str(s);
         unsafe { cel_k8s_cidr_parse(str_ptr) }
     }
 
     unsafe fn make_ip(s: &str) -> *mut CelValue {
-        let str_ptr = unsafe { make_str(s) };
+        let str_ptr = make_str(s);
         unsafe { super::super::ip::cel_k8s_ip_parse(str_ptr) }
     }
 
@@ -440,7 +440,7 @@ mod tests {
     #[case::ipv6_host("2001:db8::1/128")]
     #[case::ipv4_with_host_bits("192.168.0.1/24")] // host bits non-zero: allowed by cidr()
     fn test_cidr_parse_valid(#[case] input: &str) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_cidr_parse(str_ptr)) };
         assert!(
             matches!(result, CelValue::Cidr(_, _)),
@@ -458,7 +458,7 @@ mod tests {
     #[case::ipv4_mapped_dotted("::ffff:192.168.0.1/24")]
     #[case::leading_zero("010.0.0.0/8")]
     fn test_cidr_parse_invalid(#[case] input: &str) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_cidr_parse(str_ptr)) };
         assert!(
             matches!(result, CelValue::Error(_)),
@@ -474,7 +474,7 @@ mod tests {
     #[case::invalid("not-a-cidr", false)]
     #[case::zone("fe80::1%en0/24", false)]
     fn test_is_cidr(#[case] input: &str, #[case] expected: bool) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_is_cidr(str_ptr)) };
         assert_eq!(result, CelValue::Bool(expected), "isCIDR({:?})", input);
     }
@@ -653,7 +653,7 @@ mod tests {
 
     #[test]
     fn test_cidr_ip_wrong_type_returns_error() {
-        let val_ptr = unsafe { make_val(CelValue::Int(42)) };
+        let val_ptr = make_val(CelValue::Int(42));
         let result = unsafe { read_val(cel_k8s_cidr_ip(val_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
     }

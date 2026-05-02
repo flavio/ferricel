@@ -1,7 +1,6 @@
 // Integration tests for variable access (input/data) and field access.
 
-mod common;
-use common::*;
+use crate::common::*;
 
 // ========================================
 // Variable Access Tests (PR #4)

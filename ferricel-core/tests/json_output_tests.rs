@@ -1,7 +1,6 @@
 // Integration tests for JSON serialization of CEL evaluation results.
 
-mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn test_json_output_integer() {

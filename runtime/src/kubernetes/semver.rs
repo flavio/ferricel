@@ -491,13 +491,13 @@ mod tests {
     use rstest::rstest;
 
     unsafe fn make_semver(s: &str) -> *mut CelValue {
-        let str_ptr = unsafe { make_str(s) };
+        let str_ptr = make_str(s);
         unsafe { cel_k8s_semver_parse(str_ptr) }
     }
 
     unsafe fn make_semver_norm(s: &str) -> *mut CelValue {
-        let str_ptr = unsafe { make_str(s) };
-        let norm_ptr = unsafe { make_val(CelValue::Bool(true)) };
+        let str_ptr = make_str(s);
+        let norm_ptr = make_val(CelValue::Bool(true));
         unsafe { cel_k8s_semver_parse_normalize(str_ptr, norm_ptr) }
     }
 
@@ -569,7 +569,7 @@ mod tests {
     #[case("1.2", false)]
     #[case("not-a-semver", false)]
     fn test_is_semver(#[case] input: &str, #[case] expected: bool) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_is_semver(str_ptr)) };
         assert_eq!(result, CelValue::Bool(expected), "isSemver({:?})", input);
     }
@@ -589,8 +589,8 @@ mod tests {
         #[case] normalize: bool,
         #[case] expected: bool,
     ) {
-        let str_ptr = unsafe { make_str(input) };
-        let norm_ptr = unsafe { make_val(CelValue::Bool(normalize)) };
+        let str_ptr = make_str(input);
+        let norm_ptr = make_val(CelValue::Bool(normalize));
         let result = unsafe { read_val(cel_k8s_is_semver_normalize(str_ptr, norm_ptr)) };
         assert_eq!(
             result,
@@ -608,7 +608,7 @@ mod tests {
     #[case("1.2.3-alpha")]
     #[case("0.0.0")]
     fn test_semver_parse_valid(#[case] input: &str) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_semver_parse(str_ptr)) };
         assert!(
             matches!(result, CelValue::Semver(_)),
@@ -623,7 +623,7 @@ mod tests {
     #[case("1.2")]
     #[case("not-a-semver")]
     fn test_semver_parse_invalid(#[case] input: &str) {
-        let str_ptr = unsafe { make_str(input) };
+        let str_ptr = make_str(input);
         let result = unsafe { read_val(cel_k8s_semver_parse(str_ptr)) };
         assert!(
             matches!(result, CelValue::Error(_)),
@@ -637,8 +637,8 @@ mod tests {
 
     #[test]
     fn test_semver_parse_normalize_valid() {
-        let str_ptr = unsafe { make_str("v01.02.03") };
-        let norm_ptr = unsafe { make_val(CelValue::Bool(true)) };
+        let str_ptr = make_str("v01.02.03");
+        let norm_ptr = make_val(CelValue::Bool(true));
         let result = unsafe { read_val(cel_k8s_semver_parse_normalize(str_ptr, norm_ptr)) };
         match result {
             CelValue::Semver(v) => {
@@ -749,14 +749,14 @@ mod tests {
 
     #[test]
     fn test_major_wrong_type_returns_error() {
-        let val_ptr = unsafe { make_val(CelValue::String("1.2.3".to_string())) };
+        let val_ptr = make_val(CelValue::String("1.2.3".to_string()));
         let result = unsafe { read_val(cel_k8s_semver_major(val_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
     }
 
     #[test]
     fn test_is_less_than_wrong_type_returns_error() {
-        let lhs_ptr = unsafe { make_val(CelValue::Int(1)) };
+        let lhs_ptr = make_val(CelValue::Int(1));
         let rhs_ptr = unsafe { make_semver("1.0.0") };
         let result = unsafe { read_val(cel_k8s_semver_is_less_than(lhs_ptr, rhs_ptr)) };
         assert!(matches!(result, CelValue::Error(_)));
