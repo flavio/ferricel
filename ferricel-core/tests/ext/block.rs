@@ -1,5 +1,5 @@
 use crate::common::*;
-use ferricel_core::runtime::CelEngine;
+use ferricel_core::runtime;
 use ferricel_types::LogLevel;
 use rstest::rstest;
 
@@ -42,9 +42,13 @@ fn test_cel_block_with_variable() {
     let wasm = compile_with_container("cel.block([x + 1], cel.index(0)) == 6", None, None).unwrap();
     let bindings = serde_json::to_string(&serde_json::json!({ "x": 5 })).unwrap();
     let result: serde_json::Value = serde_json::from_str(
-        &CelEngine::new(create_test_logger())
+        &runtime::Builder::new()
+            .with_logger(create_test_logger())
             .with_log_level(LogLevel::Info)
-            .execute(&wasm, Some(&bindings))
+            .with_wasm(wasm)
+            .build()
+            .unwrap()
+            .eval(Some(&bindings))
             .unwrap(),
     )
     .unwrap();
@@ -61,9 +65,13 @@ fn test_cel_block_two_variables() {
     .unwrap();
     let bindings = serde_json::to_string(&serde_json::json!({ "x": 1, "y": 2 })).unwrap();
     let result: serde_json::Value = serde_json::from_str(
-        &CelEngine::new(create_test_logger())
+        &runtime::Builder::new()
+            .with_logger(create_test_logger())
             .with_log_level(LogLevel::Info)
-            .execute(&wasm, Some(&bindings))
+            .with_wasm(wasm)
+            .build()
+            .unwrap()
+            .eval(Some(&bindings))
             .unwrap(),
     )
     .unwrap();
@@ -85,9 +93,13 @@ fn test_cel_block_slot_reuse() {
     .unwrap();
     let bindings = serde_json::to_string(&serde_json::json!({ "x": 3 })).unwrap();
     let result: serde_json::Value = serde_json::from_str(
-        &CelEngine::new(create_test_logger())
+        &runtime::Builder::new()
+            .with_logger(create_test_logger())
             .with_log_level(LogLevel::Info)
-            .execute(&wasm, Some(&bindings))
+            .with_wasm(wasm)
+            .build()
+            .unwrap()
+            .eval(Some(&bindings))
             .unwrap(),
     )
     .unwrap();

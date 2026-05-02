@@ -4,16 +4,16 @@ use rstest::rstest;
 // ─── exists(i, v, pred) ────────────────────────────────────────────────────
 
 #[rstest]
-#[case::all_true("[1, 2, 3].exists(i, v, i > -1 && v > 0)", 1)]
-#[case::some_true("[1, 2, 3].exists(i, v, i == 1 && v == 2)", 1)]
-#[case::none_true("![1, 2, 3].exists(i, v, i > 2 && v > 3)", 1)]
-#[case::empty("![].exists(i, v, i == 0 || v == 2)", 1)]
+#[case::all_true("[1, 2, 3].exists(i, v, i > -1 && v > 0)", true)]
+#[case::some_true("[1, 2, 3].exists(i, v, i == 1 && v == 2)", true)]
+#[case::none_true("![1, 2, 3].exists(i, v, i > 2 && v > 3)", true)]
+#[case::empty("![].exists(i, v, i == 0 || v == 2)", true)]
 // true absorbs errors that come later (short-circuit)
-#[case::type_shortcircuit("[1, 'foo', 3].exists(i, v, i == 1 && v != '1')", 1)]
+#[case::type_shortcircuit("[1, 'foo', 3].exists(i, v, i == 1 && v != '1')", true)]
 // Map receiver
-#[case::map_basic("{'key1':1, 'key2':2}.exists(k, v, k == 'key2' && v == 2)", 1)]
-#[case::map_not("!{'key1':1, 'key2':2}.exists(k, v, k == 'key3' || v == 3)", 1)]
-fn test_exists_two_var(#[case] expr: &str, #[case] expected: i64) {
+#[case::map_basic("{'key1':1, 'key2':2}.exists(k, v, k == 'key2' && v == 2)", true)]
+#[case::map_not("!{'key1':1, 'key2':2}.exists(k, v, k == 'key3' || v == 3)", true)]
+fn test_exists_two_var(#[case] expr: &str, #[case] expected: bool) {
     let result = compile_and_execute(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
@@ -25,15 +25,15 @@ fn test_exists_two_var(#[case] expr: &str, #[case] expected: i64) {
 // ─── all(i, v, pred) ───────────────────────────────────────────────────────
 
 #[rstest]
-#[case::all_true("[1, 2, 3].all(i, v, i > -1 && v > 0)", 1)]
-#[case::some_true("![1, 2, 3].all(i, v, i == 1 && v == 2)", 1)]
-#[case::none_true("![1, 2, 3].all(i, v, i == 3 || v == 4)", 1)]
-#[case::empty("[].all(i, v, i > -1 || v > 0)", 1)]
+#[case::all_true("[1, 2, 3].all(i, v, i > -1 && v > 0)", true)]
+#[case::some_true("![1, 2, 3].all(i, v, i == 1 && v == 2)", true)]
+#[case::none_true("![1, 2, 3].all(i, v, i == 3 || v == 4)", true)]
+#[case::empty("[].all(i, v, i > -1 || v > 0)", true)]
 // false absorbs errors that come after (short-circuit)
-#[case::error_shortcircuit("[1, 2, 3].all(i, v, 6 / (2 - v) == i) == false", 1)]
+#[case::error_shortcircuit("[1, 2, 3].all(i, v, 6 / (2 - v) == i) == false", true)]
 // Map receiver
-#[case::map_not("!{'key1':1, 'key2':2}.all(k, v, k == 'key2' && v == 2)", 1)]
-fn test_all_two_var(#[case] expr: &str, #[case] expected: i64) {
+#[case::map_not("!{'key1':1, 'key2':2}.all(k, v, k == 'key2' && v == 2)", true)]
+fn test_all_two_var(#[case] expr: &str, #[case] expected: bool) {
     let result = compile_and_execute(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
@@ -45,18 +45,18 @@ fn test_all_two_var(#[case] expr: &str, #[case] expected: i64) {
 // ─── existsOne(i, v, pred) ─────────────────────────────────────────────────
 
 #[rstest]
-#[case::empty("![].existsOne(i, v, i == 3 || v == 7)", 1)]
-#[case::one_true("[7].existsOne(i, v, i == 0 && v == 7)", 1)]
-#[case::one_false("![8].existsOne(i, v, i == 0 && v == 7)", 1)]
-#[case::none("![1, 2, 3].existsOne(i, v, i > 2 || v > 3)", 1)]
-#[case::one("[5, 7, 8].existsOne(i, v, v % 5 == i)", 1)]
-#[case::many("![0, 1, 2, 3, 4].existsOne(i, v, v % 2 == i)", 1)]
+#[case::empty("![].existsOne(i, v, i == 3 || v == 7)", true)]
+#[case::one_true("[7].existsOne(i, v, i == 0 && v == 7)", true)]
+#[case::one_false("![8].existsOne(i, v, i == 0 && v == 7)", true)]
+#[case::none("![1, 2, 3].existsOne(i, v, i > 2 || v > 3)", true)]
+#[case::one("[5, 7, 8].existsOne(i, v, v % 5 == i)", true)]
+#[case::many("![0, 1, 2, 3, 4].existsOne(i, v, v % 2 == i)", true)]
 // Map receiver — exactly one entry satisfies the predicate
 #[case::map_one(
     "{6: 'six', 7: 'seven', 8: 'eight'}.existsOne(k, v, k % 5 == 2 && v == 'seven')",
-    1
+    true
 )]
-fn test_exists_one_two_var(#[case] expr: &str, #[case] expected: i64) {
+fn test_exists_one_two_var(#[case] expr: &str, #[case] expected: bool) {
     let result = compile_and_execute(expr).expect("Failed to compile and execute");
     assert_eq!(
         result, expected,
@@ -191,19 +191,24 @@ fn test_transform_map_entry_filter_keep_some() {
 fn test_transform_map_entry_duplicate_key_error() {
     // {'greeting': 'aloha', 'farewell': 'aloha'}.transformMapEntry(k, v, {v: k})
     // Both entries map to value key 'aloha' → duplicate key error
-    let result = compile_and_execute(
+    let wasm = compile_with_container(
         "{'greeting': 'aloha', 'farewell': 'aloha'}.transformMapEntry(k, v, {v: k})",
+        None,
+        None,
     )
-    .unwrap();
-    // Error serializes as {"error": "<message>"}
-    let error_msg = result
-        .get("error")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default();
+    .expect("compile failed");
+
+    let err = ferricel_core::runtime::Builder::new()
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None)
+        .expect_err("expected a runtime error for duplicate key");
+
     assert!(
-        error_msg.contains("insert failed"),
-        "Expected duplicate key error, got: {:?}",
-        result
+        format!("{:?}", err).contains("insert failed"),
+        "Expected 'insert failed' in error, got: {}",
+        err
     );
 }
 

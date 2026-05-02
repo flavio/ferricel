@@ -7,7 +7,7 @@ use serde_json::Value as JsonValue;
 use slog::{Drain, Logger, o};
 
 use ferricel_core::compiler::Builder as CompilerBuilder;
-use ferricel_core::runtime::CelEngine;
+use ferricel_core::runtime;
 
 use ferricel_types::proto::Bindings as FerricelBindings;
 use ferricel_types::proto::cel::expr::Value as FerricelValue;
@@ -344,8 +344,12 @@ impl ConformanceTestRunner {
         };
 
         // Step 3: Execute the WASM module using the proto bindings path
-        let json_result = match CelEngine::new(self.logger.clone())
-            .execute_proto(&wasm_bytes, &bindings_proto)
+        let json_result = match runtime::Builder::new()
+            .with_logger(self.logger.clone())
+            .with_wasm(wasm_bytes)
+            .build()
+            .map_err(|e| format!("Build failed: {}", e))?
+            .eval_proto(&bindings_proto)
         {
             Ok(result) => result,
             Err(e) => {

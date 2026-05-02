@@ -6,8 +6,6 @@
 //
 // # Test file map
 //
-// Each logical group of tests lives in its own file:
-//
 //   compiler_tests.rs      — WASM magic number, invalid expression (2 tests)
 //   arithmetic_tests.rs    — Integer literals, arithmetic operators, comparisons, logical ops
 //   double_tests.rs        — Double literals, arithmetic, division-by-zero, comparisons, type safety
@@ -24,12 +22,11 @@
 //   kubernetes_tests.rs    — Kubernetes list extension tests
 
 use ferricel_core::compiler::Builder;
-use ferricel_core::runtime::CelEngine;
+use ferricel_core::runtime;
 use ferricel_types::LogLevel;
 use slog::{Drain, Logger, o};
 
 // Re-export so test files can reference these types directly after `use common::*;`.
-pub(crate) use ferricel_types::extensions::ExtensionDecl;
 
 /// Create a logger suitable for use in tests (writes to stderr).
 pub(crate) fn create_test_logger() -> Logger {
@@ -61,9 +58,12 @@ pub(crate) fn compile_and_execute_with_vars(
         .with_logger(logger.clone())
         .build()
         .compile(cel_expr)?;
-    let json_result = CelEngine::new(logger)
+    let json_result = runtime::Builder::new()
+        .with_logger(logger)
         .with_log_level(LogLevel::Info)
-        .execute(&wasm_bytes, bindings)?;
+        .with_wasm(wasm_bytes)
+        .build()?
+        .eval(bindings)?;
     Ok(serde_json::from_str(&json_result)?)
 }
 
@@ -90,7 +90,7 @@ pub(crate) fn compile_and_execute_with_input_data(
     compile_and_execute_with_vars(cel_expr, Some(&bindings_str))
 }
 
-/// Compile `cel_expr` and execute it, returning the result as `f64`.
+/// Compile `cel_expr` and execute it, returning the result as `bool`.
 pub(crate) fn compile_and_execute_bool(cel_expr: &str) -> Result<bool, anyhow::Error> {
     let value = compile_and_execute(cel_expr)?;
     value
@@ -131,40 +131,3 @@ pub(crate) fn compile_with_container(
     builder.build().compile(cel_expr)
 }
 
-/// Build a [`CelEngine`] pre-loaded with a single extension function that
-/// returns the sum of all integer arguments.
-///
-/// Returns both the engine (for `execute`) and the [`ExtensionDecl`] (for
-/// passing to [`compiler::Builder`](ferricel_core::compiler::Builder) via
-/// [`with_extension`](ferricel_core::compiler::Builder::with_extension)).
-pub(crate) fn make_engine_with_sum(
-    namespace: Option<&str>,
-    function: &str,
-    num_args: usize,
-    receiver_style: bool,
-    global_style: bool,
-) -> (CelEngine, ExtensionDecl) {
-    let logger = create_test_logger();
-    let decl = ExtensionDecl {
-        namespace: namespace.map(|s| s.to_string()),
-        function: function.to_string(),
-        receiver_style,
-        global_style,
-        num_args,
-    };
-    let mut engine = CelEngine::new(logger);
-    engine.register_extension(decl.clone(), |args| {
-        let sum: i64 = args.iter().filter_map(|v| v.as_i64()).sum();
-        Ok(serde_json::Value::Number(sum.into()))
-    });
-    (engine, decl)
-}
-
-/// Build a [`Compiler`] with a single extension declaration and no other
-/// customisation.
-pub(crate) fn options_with_ext(decl: ExtensionDecl) -> ferricel_core::compiler::Compiler {
-    Builder::new()
-        .with_logger(create_test_logger())
-        .with_extension(decl)
-        .build()
-}

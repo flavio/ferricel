@@ -170,7 +170,12 @@ fn test_trunc(#[case] expr: &str, #[case] expected: f64) {
 #[case("math.abs(234.5) == 234.5")]
 fn test_abs_true(#[case] expr: &str) {
     let result = compile_and_execute(expr).expect("compile_and_execute");
-    assert_eq!(result, 1, "Expression '{}' should be truthy", expr);
+    assert_eq!(
+        result,
+        serde_json::Value::Bool(true),
+        "Expression '{}' should be truthy",
+        expr
+    );
 }
 
 #[test]
@@ -270,7 +275,12 @@ fn test_float_predicates(#[case] expr: &str) {
 #[case("math.bitShiftRight(1024u, 64) == 0u")]
 fn test_bitwise_true(#[case] expr: &str) {
     let result = compile_and_execute(expr).expect("compile_and_execute");
-    assert_eq!(result, 1, "Expression '{}' should be truthy", expr);
+    assert_eq!(
+        result,
+        serde_json::Value::Bool(true),
+        "Expression '{}' should be truthy",
+        expr
+    );
 }
 
 // ---------------------------------------------------------------------------

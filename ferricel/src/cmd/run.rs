@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ferricel_core::runtime::CelEngine;
+use ferricel_core::runtime;
 use slog::{Drain, Logger, o};
 
 use crate::cli::LogLevelArg;
@@ -40,9 +40,12 @@ pub fn run(
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let logger = Logger::root(drain, o!());
 
-    let result = CelEngine::new(logger)
+    let result = runtime::Builder::new()
+        .with_logger(logger)
         .with_log_level(log_level.into())
-        .execute(&wasm_bytes, bindings.as_deref())?;
+        .with_wasm(wasm_bytes)
+        .build()?
+        .eval(bindings.as_deref())?;
 
     println!("Execution result: {}", result);
     Ok(())

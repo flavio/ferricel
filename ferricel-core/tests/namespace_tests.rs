@@ -7,7 +7,7 @@
 
 mod common;
 use common::*;
-use ferricel_core::runtime::CelEngine;
+use ferricel_core::runtime;
 use ferricel_types::LogLevel;
 use rstest::rstest;
 use serde_json::json;
@@ -49,9 +49,13 @@ fn test_container_resolution(
     let wasm = compile_with_container(expr, container, None).unwrap();
     let bindings_str = serde_json::to_string(&bindings).unwrap();
     let result: serde_json::Value = serde_json::from_str(
-        &CelEngine::new(create_test_logger())
+        &runtime::Builder::new()
+            .with_logger(create_test_logger())
             .with_log_level(LogLevel::Info)
-            .execute(&wasm, Some(&bindings_str))
+            .with_wasm(wasm)
+            .build()
+            .unwrap()
+            .eval(Some(&bindings_str))
             .unwrap(),
     )
     .unwrap();
