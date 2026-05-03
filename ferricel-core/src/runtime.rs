@@ -273,13 +273,13 @@ impl Builder {
 
     fn register_cel_abort(linker: &mut Linker<HostState>) -> Result<(), anyhow::Error> {
         // The guest runtime calls this when a runtime error occurs (divide by zero, overflow, etc.)
-        // The packed parameter contains: upper 32 bits = address, lower 32 bits = length.
+        // The packed parameter contains: lower 32 bits = pointer, upper 32 bits = length.
         linker.func_wrap(
             "env",
             "cel_abort",
             |mut caller: Caller<'_, HostState>, packed: i64| -> Result<(), wasmtime::Error> {
-                let address = ((packed as u64) >> 32) as u32;
-                let length = packed as u32;
+                let address = (packed & 0xFFFFFFFF) as u32;
+                let length = ((packed as u64) >> 32) as u32;
 
                 let memory = caller
                     .get_export("memory")

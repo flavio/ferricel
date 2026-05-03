@@ -48,7 +48,7 @@ pub fn into_raw_result(r: CelResult<crate::types::CelValue>) -> *mut crate::type
 // This function never returns - it terminates WASM execution.
 //
 // Arguments:
-// * `packed` - Packed i64 containing address (upper 32 bits) and length (lower 32 bits)
+// * `packed` - Packed i64 containing pointer (lower 32 bits) and length (upper 32 bits)
 //              of the error message string in WASM memory
 //
 // Only available when compiling to WASM target
@@ -62,7 +62,7 @@ unsafe extern "C" {
 ///
 /// This function:
 /// 1. Gets the pointer and length of the error message
-/// 2. Packs them into an i64: (address << 32) | length
+/// 2. Packs them into an i64: pointer in low 32 bits, length in high 32 bits
 /// 3. Calls the host's cel_abort function which terminates execution
 ///
 /// # Arguments
@@ -75,9 +75,9 @@ pub fn abort_with_error(message: &str) -> ! {
     let ptr = message.as_ptr() as u64;
     let len = message.len() as u64;
 
-    // Pack: upper 32 bits = address, lower 32 bits = length
-    // This matches the unpacking logic in the host's cel_abort
-    let packed = ((ptr & 0xFFFFFFFF) << 32) | (len & 0xFFFFFFFF);
+    // Pack: low 32 bits = pointer, high 32 bits = length
+    // Consistent with encode_ptr_len convention used elsewhere.
+    let packed = ((len & 0xFFFFFFFF) << 32) | (ptr & 0xFFFFFFFF);
 
     unsafe { cel_abort(packed as i64) }
 }
