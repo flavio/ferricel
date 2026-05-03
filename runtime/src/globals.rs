@@ -40,7 +40,7 @@ pub unsafe extern "C" fn cel_init_bindings(ptr: *mut CelValue) {
 /// - Null pointer if variable not found or bindings not initialized
 ///
 /// # Safety
-/// - Safe to call after cel_init_bindings in single-threaded WASM environment
+/// - Safe to call after cel_init_bindings in single-threaded Wasm environment
 /// - Returned pointer is valid until cel_reset_globals is called
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
@@ -60,7 +60,7 @@ pub unsafe extern "C" fn cel_get_variable(name_ptr: *const u8, name_len: i32) ->
             _ => return ptr::null_mut(), // Bindings should be a map
         };
 
-        // Read the variable name from WASM memory
+        // Read the variable name from Wasm memory
         let name_slice = std::slice::from_raw_parts(name_ptr, name_len as usize);
         let name = match std::str::from_utf8(name_slice) {
             Ok(s) => s,

@@ -10,13 +10,13 @@ fn test_compile_cel_to_wasm_returns_valid_bytes() {
         .build()
         .compile("42")
         .expect("Failed to compile");
-    assert!(!wasm_bytes.is_empty(), "WASM bytes should not be empty");
+    assert!(!wasm_bytes.is_empty(), "Wasm bytes should not be empty");
 
-    // WASM files start with magic number: 0x00 0x61 0x73 0x6D (\0asm)
+    // Wasm files start with magic number: 0x00 0x61 0x73 0x6D (\0asm)
     assert_eq!(
         &wasm_bytes[0..4],
         &[0x00, 0x61, 0x73, 0x6D],
-        "Should have WASM magic number"
+        "Should have Wasm magic number"
     );
 }
 

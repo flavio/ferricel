@@ -1,4 +1,4 @@
-//! JSON and protobuf deserialization from WASM memory into CelValue objects.
+//! JSON and protobuf deserialization from Wasm memory into CelValue objects.
 //! Handles parsing bytes and allocating CelValue on the heap.
 
 use crate::error::abort_with_error;
@@ -18,7 +18,7 @@ pub fn decode_ptr_len(encoded: i64) -> (i32, i32) {
     (ptr, len)
 }
 
-/// Deserialize JSON from WASM memory into a CelValue.
+/// Deserialize JSON from Wasm memory into a CelValue.
 ///
 /// # Parameters
 /// - `encoded`: i64 with ptr in low 32 bits, len in high 32 bits
@@ -30,7 +30,7 @@ pub fn decode_ptr_len(encoded: i64) -> (i32, i32) {
 /// - Null pointer (0) if encoded is 0 or parsing fails
 ///
 /// # Safety
-/// - The returned pointer is valid until the WASM instance is dropped
+/// - The returned pointer is valid until the Wasm instance is dropped
 /// - Caller must ensure the memory region [ptr, ptr+len) is valid
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
@@ -81,7 +81,7 @@ pub unsafe extern "C" fn cel_deserialize_json(encoded: i64) -> *mut CelValue {
     }
 }
 
-/// Deserialize a protobuf-encoded `Bindings` message from WASM memory into a
+/// Deserialize a protobuf-encoded `Bindings` message from Wasm memory into a
 /// `CelValue::Object` map, preserving full type fidelity for all CEL types.
 ///
 /// The wire format is a `ferricel.Bindings` protobuf message:
@@ -100,7 +100,7 @@ pub unsafe extern "C" fn cel_deserialize_json(encoded: i64) -> *mut CelValue {
 /// - Aborts on malformed proto input
 ///
 /// # Safety
-/// - The returned pointer is valid until the WASM instance is dropped
+/// - The returned pointer is valid until the Wasm instance is dropped
 /// - Caller must ensure the memory region [ptr, ptr+len) is valid
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]

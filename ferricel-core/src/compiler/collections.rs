@@ -474,7 +474,7 @@ pub fn compile_comprehension(
     body.i32_const(0);
     body.local_set(index_local);
 
-    // Step 6: Create the loop using WASM block/loop instructions
+    // Step 6: Create the loop using Wasm block/loop instructions
     // Structure: block $exit { loop $continue { ... } }
     let exit_block = body.dangling_instr_seq(None);
     let exit_block_id = exit_block.id();

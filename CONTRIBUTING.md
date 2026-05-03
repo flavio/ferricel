@@ -64,7 +64,7 @@ This filtering works with any conformance test suite (basic, string, lists, logi
 
 The workspace contains two publishable crates: `ferricel-core` and `ferricel`. Because `ferricel` depends on `ferricel-core`, they must be published in order.
 
-`ferricel-core` embeds the `runtime` WASM at compile time. When building inside the workspace, the build script finds the WASM automatically in `target/`. When building from the published crate (outside the workspace), the WASM must be bundled inside the crate package. The `publish-prep` Makefile target handles this.
+`ferricel-core` embeds the `runtime` Wasm at compile time. When building inside the workspace, the build script finds the Wasm automatically in `target/`. When building from the published crate (outside the workspace), the Wasm must be bundled inside the crate package. The `publish-prep` Makefile target handles this.
 
 **Steps:**
 

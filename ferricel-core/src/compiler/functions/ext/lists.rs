@@ -184,7 +184,7 @@ fn compile_flatten(
 /// CEL form: `list.sortBy(e, keyExpr)`
 /// AST: `target=list_expr`, `func="sortBy"`, `args=[Ident("e"), keyExpr]`
 ///
-/// Emits WASM that:
+/// Emits Wasm that:
 /// 1. Compiles `list_expr` → `list_local`
 /// 2. Creates an empty array → `keys_local`
 /// 3. Loops over `list_local`, for each element binds it to `var`, compiles `keyExpr`,

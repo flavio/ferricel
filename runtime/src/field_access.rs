@@ -10,7 +10,7 @@ use std::slice;
 ///
 /// # Parameters
 /// - `obj_ptr`: Pointer to a CelValue (must be an Object variant)
-/// - `field_name_ptr`: Pointer to the field name string in WASM memory
+/// - `field_name_ptr`: Pointer to the field name string in Wasm memory
 /// - `field_name_len`: Length of the field name string
 ///
 /// # Returns
@@ -24,7 +24,7 @@ use std::slice;
 ///
 /// # Safety
 /// - `obj_ptr` must be a valid pointer to a CelValue
-/// - `field_name_ptr` must point to valid UTF-8 bytes in WASM memory
+/// - `field_name_ptr` must point to valid UTF-8 bytes in Wasm memory
 /// - `field_name_len` must be the correct length
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
@@ -45,7 +45,7 @@ pub unsafe extern "C" fn cel_get_field(
     // SAFETY: Caller guarantees obj_ptr is valid
     let obj = unsafe { &*obj_ptr };
 
-    // Read the field name from WASM memory
+    // Read the field name from Wasm memory
     let field_name = unsafe {
         let bytes = slice::from_raw_parts(field_name_ptr as *const u8, field_name_len as usize);
         String::from_utf8(bytes.to_vec()).unwrap_or_else(|_| {
@@ -197,7 +197,7 @@ fn get_proto_field_default(
 ///
 /// # Parameters
 /// - `obj_ptr`: Pointer to a CelValue (should be an Object variant)
-/// - `field_name_ptr`: Pointer to the field name string in WASM memory
+/// - `field_name_ptr`: Pointer to the field name string in Wasm memory
 /// - `field_name_len`: Length of the field name string
 ///
 /// # Returns
@@ -208,7 +208,7 @@ fn get_proto_field_default(
 ///
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
 /// - `obj_ptr` is a valid pointer to an initialized CelValue instance
-/// - `field_name_ptr` points to valid UTF-8 bytes in WASM memory
+/// - `field_name_ptr` points to valid UTF-8 bytes in Wasm memory
 /// - `field_name_len` is the correct length of the field name
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
@@ -229,7 +229,7 @@ pub unsafe extern "C" fn cel_has_field(
     // SAFETY: Caller guarantees obj_ptr is valid
     let obj = unsafe { &*obj_ptr };
 
-    // Read the field name from WASM memory
+    // Read the field name from Wasm memory
     let field_name = unsafe {
         let bytes = slice::from_raw_parts(field_name_ptr as *const u8, field_name_len as usize);
         String::from_utf8(bytes.to_vec()).unwrap_or_else(|_| {
@@ -272,7 +272,7 @@ mod tests {
 
     #[test]
     fn test_field_access_logic() {
-        // Test the logic without WASM memory operations
+        // Test the logic without Wasm memory operations
         let mut map = HashMap::new();
         map.insert(CelMapKey::String("age".into()), CelValue::Int(42));
         let obj = CelValue::Object(map);
@@ -367,6 +367,6 @@ mod tests {
     }
 
     // Note: Tests using cel_get_field and cel_has_field are skipped because they require
-    // WASM memory operations that cause segfaults in the test environment.
-    // The actual WASM runtime will have proper memory management.
+    // Wasm memory operations that cause segfaults in the test environment.
+    // The actual Wasm runtime will have proper memory management.
 }

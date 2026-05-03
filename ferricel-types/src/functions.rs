@@ -2,7 +2,7 @@ use std::fmt;
 
 use strum::IntoEnumIterator;
 
-/// Enumeration of all functions exported by the runtime WASM module
+/// Enumeration of all functions exported by the runtime Wasm module
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter)]
 pub enum RuntimeFunction {
     // Memory
@@ -578,7 +578,7 @@ impl RuntimeFunction {
         }
     }
 
-    /// Returns true if this function should be exported in the final WASM module
+    /// Returns true if this function should be exported in the final Wasm module
     pub fn is_exported(&self) -> bool {
         matches!(self, Self::Malloc)
     }

@@ -96,13 +96,13 @@ pub unsafe extern "C" fn cel_create_null() -> *mut CelValue {
 /// Creates a CelValue::Type on the heap from a string pointer and returns a pointer to it.
 ///
 /// # Arguments
-/// * `type_name_ptr` - Pointer to the type name string in WASM memory
+/// * `type_name_ptr` - Pointer to the type name string in Wasm memory
 /// * `type_name_len` - Length of the type name string
 ///
 /// # Safety
 ///
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `type_name_ptr` points to valid UTF-8 bytes in WASM memory
+/// - `type_name_ptr` points to valid UTF-8 bytes in Wasm memory
 /// - `type_name_len` is the correct length of the type name
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
@@ -130,13 +130,13 @@ pub unsafe extern "C" fn cel_create_type(
 /// Creates a CelValue::Error on the heap from a string pointer and returns a pointer to it.
 ///
 /// # Arguments
-/// * `error_msg_ptr` - Pointer to the error message string in WASM memory
+/// * `error_msg_ptr` - Pointer to the error message string in Wasm memory
 /// * `error_msg_len` - Length of the error message string
 ///
 /// # Safety
 ///
 /// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `error_msg_ptr` points to valid bytes in WASM memory (if not null)
+/// - `error_msg_ptr` points to valid bytes in Wasm memory (if not null)
 /// - `error_msg_len` is the correct length of the error message
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]

@@ -2,7 +2,7 @@
 edition     = "2024"
 name        = "ferricel-core"
 version     = { workspace = true }
-description = "Core compiler and runtime library for ferricel (CEL → WASM)"
+description = "Core compiler and runtime library for ferricel (CEL → Wasm)"
 license     = { workspace = true }
 repository  = { workspace = true }
 build       = "build.rs"
@@ -11,7 +11,7 @@ include = [
     "src/**/*",
     "build.rs",
     "Cargo.toml",
-    # Pre-built runtime WASM, placed here by `make publish-prep` before publishing.
+    # Pre-built runtime Wasm, placed here by `make publish-prep` before publishing.
     # Not tracked in git (covered by the workspace .gitignore `*.wasm` rule).
     "runtime.wasm",
 ]

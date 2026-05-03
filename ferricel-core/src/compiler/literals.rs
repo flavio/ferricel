@@ -4,7 +4,7 @@ use walrus::{InstrSeqBuilder, LocalId, ValType};
 
 use super::{context::CompilerEnv, helpers::get_memory_id};
 
-/// Compile a literal CEL value into WASM instructions.
+/// Compile a literal CEL value into Wasm instructions.
 /// Leaves a *mut CelValue (i32) on the stack.
 pub fn compile_literal(
     literal: &LiteralValue,
@@ -20,7 +20,7 @@ pub fn compile_literal(
         }
         LiteralValue::UInt(value) => {
             // Create a CelValue::UInt pointer
-            // Note: WASM only has i64, so we pass u64 as i64
+            // Note: Wasm only has i64, so we pass u64 as i64
             body.i64_const(**value as i64);
             body.call(env.get(RuntimeFunction::CreateUint));
         }

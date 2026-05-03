@@ -4,12 +4,12 @@ A CEL (Common Expression Language) to WebAssembly compiler written in Rust.
 
 ## Overview
 
-Ferricel compiles CEL expressions into standalone WebAssembly modules that can be executed in any WASM runtime. Each compiled WASM module includes an embedded runtime library, making them fully self-contained and portable.
+Ferricel compiles CEL expressions into standalone WebAssembly modules that can be executed in any Wasm runtime. Each compiled Wasm module includes an embedded runtime library, making them fully self-contained and portable.
 
 ## Features
 
-- **CEL to WASM compilation**: Compile CEL expressions into efficient WebAssembly bytecode
-- **Standalone modules**: Each WASM file includes its own runtime - no external dependencies
+- **CEL to Wasm compilation**: Compile CEL expressions into efficient WebAssembly bytecode
+- **Standalone modules**: Each Wasm file includes its own runtime - no external dependencies
 - **Protocol Buffer support**: Full support for protobuf messages with proper wrapper type semantics
 - **Type safety**: Optional type checking at compile time when proto schemas are provided
 - **Fast evaluation**: Linear time complexity with respect to expression and input size

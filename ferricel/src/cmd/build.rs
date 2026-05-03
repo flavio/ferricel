@@ -73,7 +73,7 @@ pub fn run(
 
     let wasm_bytes = compiler.compile(&cel_code)?;
 
-    // Write the WASM bytes to the output file
+    // Write the Wasm bytes to the output file
     fs::write(output_path, wasm_bytes)?;
 
     println!("Successfully compiled CEL into: {}", output_path.display());

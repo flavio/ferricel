@@ -102,7 +102,7 @@ Similar to issue #3 for bytes: triple-quoted strings that contain the single-cha
 These are not bugs but features not yet implemented in ferricel:
 
 - **Proto message construction and field access** — tests using `TestAllTypes` proto messages are automatically skipped in the conformance runner.
-- **Proto message field selection at runtime** — accessing a field on a proto message value (e.g. `msg.field`) panics in the WASM runtime with `cel_get_field`. This is distinct from the skipped `TestAllTypes` binding tests: it affects any test that constructs a proto message literal and then selects a field from it.
+- **Proto message field selection at runtime** — accessing a field on a proto message value (e.g. `msg.field`) panics in the Wasm runtime with `cel_get_field`. This is distinct from the skipped `TestAllTypes` binding tests: it affects any test that constructs a proto message literal and then selects a field from it.
 
   **Affected conformance tests:**
   - `parse` suite — `ipv6/select` (field selection on a parsed value)

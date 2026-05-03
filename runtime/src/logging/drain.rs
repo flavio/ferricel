@@ -13,7 +13,7 @@ impl FerricelDrain {
 }
 
 // Host function declaration - will be provided by wasmtime
-// For tests, provide a no-op stub since we're not running in WASM
+// For tests, provide a no-op stub since we're not running in Wasm
 #[cfg(not(test))]
 unsafe extern "C" {
     fn cel_log(ptr: i32, len: i32);
@@ -21,7 +21,7 @@ unsafe extern "C" {
 
 #[cfg(test)]
 unsafe extern "C" fn cel_log(_ptr: i32, _len: i32) {
-    // No-op stub for tests - logging is not available outside WASM
+    // No-op stub for tests - logging is not available outside Wasm
 }
 
 impl Drain for FerricelDrain {

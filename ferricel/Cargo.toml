@@ -1,10 +1,10 @@
 [package]
+description = "CLI tool to compile CEL expressions to Wasm"
 edition     = "2024"
-name        = "ferricel"
-version     = { workspace = true }
-description = "CLI tool to compile CEL expressions to WASM"
 license     = { workspace = true }
+name        = "ferricel"
 repository  = { workspace = true }
+version     = { workspace = true }
 
 [dependencies]
 anyhow         = { workspace = true }

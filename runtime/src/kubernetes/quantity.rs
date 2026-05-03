@@ -508,7 +508,7 @@ pub(crate) fn quantities_equal(a: &str, b: &str) -> bool {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WASM-callable runtime functions
+// Wasm-callable runtime functions
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// `quantity(string)` → Quantity or Error

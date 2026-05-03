@@ -125,8 +125,8 @@ pub unsafe extern "C" fn cel_array_get(array_ptr: *mut CelValue, index: i32) -> 
 /// - Pointer to a new boxed CelValue containing an empty Array
 ///
 /// # Safety
-/// - The returned pointer is valid until the WASM instance is dropped
-/// - The returned pointer must not outlive the WASM instance
+/// - The returned pointer is valid until the Wasm instance is dropped
+/// - The returned pointer must not outlive the Wasm instance
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_array() -> *mut CelValue {

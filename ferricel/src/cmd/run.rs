@@ -12,14 +12,14 @@ pub fn run(
     bindings_file: Option<PathBuf>,
     log_level: LogLevelArg,
 ) -> Result<(), anyhow::Error> {
-    // Check if WASM file exists
+    // Check if Wasm file exists
     if !wasm_path.exists() {
-        anyhow::bail!("WASM file not found at {}", wasm_path.display());
+        anyhow::bail!("Wasm file not found at {}", wasm_path.display());
     }
 
-    println!("Loading WASM module: {}", wasm_path.display());
+    println!("Loading Wasm module: {}", wasm_path.display());
 
-    // Read the WASM file
+    // Read the Wasm file
     let wasm_bytes = fs::read(wasm_path)?;
 
     // Resolve bindings: either from --bindings-json or --bindings-file

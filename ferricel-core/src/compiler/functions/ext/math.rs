@@ -257,7 +257,7 @@ fn compile_math_minmax(
     Ok(())
 }
 
-/// Build a `CelValue::Array` on the WASM stack containing the compiled values
+/// Build a `CelValue::Array` on the Wasm stack containing the compiled values
 /// of each element in `args`.  Equivalent to compiling `[args[0], args[1], ...]`.
 fn compile_args_as_array(
     args: &[IdedExpr],

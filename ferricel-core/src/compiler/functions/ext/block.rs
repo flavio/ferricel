@@ -66,7 +66,7 @@ pub fn compile_cel_block(
         _ => anyhow::bail!("cel.block() first argument must be a list literal"),
     };
 
-    // Compile each slot in order, storing results in fresh WASM locals.
+    // Compile each slot in order, storing results in fresh Wasm locals.
     // Each slot is added to the context as @indexN before the next slot is compiled,
     // so later slots can reference earlier ones.
     //

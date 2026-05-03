@@ -47,8 +47,8 @@ Tests are automatically skipped when they require:
 
 The test runner:
 1. Parses protobuf test definitions from cel-spec
-2. Compiles each CEL expression to WASM in-memory using `ferricel-core`
-3. Executes the WASM module with test bindings
+2. Compiles each CEL expression to Wasm in-memory using `ferricel-core`
+3. Executes the Wasm module with test bindings
 4. Compares the result against expected values
 5. Reports statistics (PASSED/FAILED/SKIPPED)
 

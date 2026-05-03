@@ -37,7 +37,7 @@ fn serialize_to_json(value: &CelValue) -> i64 {
 /// # Safety
 ///
 /// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64.
-/// The returned bytes are valid for the lifetime of the WASM instance.
+/// The returned bytes are valid for the lifetime of the Wasm instance.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_serialize_int(value: i64) -> i64 {
     let cel_value = CelValue::Int(value);
@@ -50,7 +50,7 @@ pub unsafe fn cel_serialize_int(value: i64) -> i64 {
 /// # Safety
 ///
 /// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64.
-/// The returned bytes are valid for the lifetime of the WASM instance.
+/// The returned bytes are valid for the lifetime of the Wasm instance.
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn cel_serialize_bool(value: i64) -> i64 {
     let cel_value = CelValue::Bool(value != 0);
@@ -60,14 +60,14 @@ pub unsafe fn cel_serialize_bool(value: i64) -> i64 {
 /// Serialize a `CelValue` pointer to JSON, aborting if the value is an error.
 ///
 /// If the value is `CelValue::Error`, calls `abort_with_error` which triggers the host's
-/// `cel_abort` import — terminating WASM execution and propagating the error as `Err(...)`.
+/// `cel_abort` import — terminating Wasm execution and propagating the error as `Err(...)`.
 ///
 /// If the value is any other type, serializes it to JSON and returns the packed ptr+len.
 ///
 /// # Safety
 ///
 /// `value_ptr` must be a valid, non-null `CelValue` pointer.
-/// The returned bytes are valid for the lifetime of the WASM instance.
+/// The returned bytes are valid for the lifetime of the Wasm instance.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_serialize_result(value_ptr: *mut CelValue) -> i64 {
@@ -87,7 +87,7 @@ mod tests {
     use std::collections::HashMap;
 
     /// Test that CelValue variants can be serialized to JSON (format verification only)
-    /// Note: These tests verify JSON formatting but don't test WASM memory allocation
+    /// Note: These tests verify JSON formatting but don't test Wasm memory allocation
     #[test]
     fn test_celvalue_json_int() {
         let value = CelValue::Int(42);

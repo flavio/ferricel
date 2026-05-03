@@ -1,8 +1,8 @@
 //! End-to-end tests for the ferricel CLI
 //!
 //! These tests focus on the CLI interface and integration between components:
-//! - Building WASM files from CEL expressions
-//! - Running WASM files produced by the build command
+//! - Building Wasm files from CEL expressions
+//! - Running Wasm files produced by the build command
 //! - Passing bindings via command line arguments and files
 //!
 //! Note: Unit tests for CEL compilation logic are in src/compiler.rs
@@ -49,10 +49,10 @@ fn test_build_creates_wasm_file() {
         .success()
         .stdout(predicate::str::contains("Successfully compiled"));
 
-    // Verify the WASM file was created and has content
-    assert!(output_path.exists(), "WASM file should exist");
+    // Verify the Wasm file was created and has content
+    assert!(output_path.exists(), "Wasm file should exist");
     let metadata = fs::metadata(output_path).unwrap();
-    assert!(metadata.len() > 0, "WASM file should not be empty");
+    assert!(metadata.len() > 0, "Wasm file should not be empty");
 }
 
 #[test]
@@ -112,9 +112,9 @@ fn test_build_from_file_complex_expression() {
         .success()
         .stdout(predicate::str::contains("Successfully compiled"));
 
-    // Verify the WASM file was created and has content
+    // Verify the Wasm file was created and has content
     let metadata = fs::metadata(output_file.path()).unwrap();
-    assert!(metadata.len() > 0, "WASM file should not be empty");
+    assert!(metadata.len() > 0, "Wasm file should not be empty");
 }
 
 #[test]
@@ -195,7 +195,7 @@ fn test_build_missing_both_flags() {
 
 #[test]
 fn test_run_simple_wasm_without_variables() {
-    // Build a simple WASM file
+    // Build a simple Wasm file
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
         .args(["build", "-e", "42", "-o"])
@@ -203,7 +203,7 @@ fn test_run_simple_wasm_without_variables() {
         .assert()
         .success();
 
-    // Run the WASM file
+    // Run the Wasm file
     ferricel()
         .args(["run"])
         .arg(wasm_file.path())
@@ -227,7 +227,7 @@ fn test_run_nonexistent_wasm_file() {
 
 #[test]
 fn test_run_with_bindings_json_inline() {
-    // Build WASM that uses age variable
+    // Build Wasm that uses age variable
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
         .args(["build", "-e", "age + 10", "-o"])
@@ -247,7 +247,7 @@ fn test_run_with_bindings_json_inline() {
 
 #[test]
 fn test_run_with_bindings_json_multiple_vars() {
-    // Build WASM that uses multiple variables
+    // Build Wasm that uses multiple variables
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
         .args(["build", "-e", "x + y", "-o"])
@@ -274,7 +274,7 @@ fn test_run_with_bindings_from_file() {
     // Create bindings JSON file
     let bindings_file = create_json_file(r#"{"age": 42}"#);
 
-    // Build WASM
+    // Build Wasm
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
         .args(["build", "-e", "age", "-o"])
@@ -298,7 +298,7 @@ fn test_run_with_bindings_from_file_multiple_vars() {
     // Create bindings JSON file with multiple variables
     let bindings_file = create_json_file(r#"{"a": 100, "b": 50}"#);
 
-    // Build WASM
+    // Build Wasm
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
         .args(["build", "-e", "a - b", "-o"])

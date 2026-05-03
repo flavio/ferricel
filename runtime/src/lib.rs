@@ -1,5 +1,5 @@
-// Use a bump-pointer allocator for WASM builds. `dealloc` is a no-op: all
-// memory is released when the host drops the WASM instance. This eliminates
+// Use a bump-pointer allocator for Wasm builds. `dealloc` is a no-op: all
+// memory is released when the host drops the Wasm instance. This eliminates
 // double-frees, use-after-free, and memory leaks by design.
 #[cfg(target_arch = "wasm32")]
 #[global_allocator]
@@ -37,7 +37,7 @@ mod types;
 // Re-export public types
 pub use types::CelValue;
 
-// Re-export all WASM-callable functions
+// Re-export all Wasm-callable functions
 pub use memory::cel_malloc;
 
 pub use logical::{

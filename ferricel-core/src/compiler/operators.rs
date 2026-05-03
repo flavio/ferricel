@@ -294,7 +294,7 @@ fn compile_opt_select(
     let receiver_local = module.locals.add(ValType::I32);
     body.local_set(receiver_local);
 
-    // Write field name into WASM memory, leaving (ptr, len) on the stack.
+    // Write field name into Wasm memory, leaving (ptr, len) on the stack.
     let memory_id = helpers::get_memory_id(module)?;
     let field_ptr_local = module.locals.add(ValType::I32);
     helpers::emit_string_const(&field_name, body, env, memory_id, module);

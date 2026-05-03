@@ -1,6 +1,6 @@
 //! Logging infrastructure for ferricel runtime
 //!
-//! This module provides structured logging capabilities that work across the WASM boundary.
+//! This module provides structured logging capabilities that work across the Wasm boundary.
 //! The runtime uses `slog` for structured logging, and messages are sent to the host via
 //! the `cel_log` host function.
 //!
@@ -32,7 +32,7 @@ pub fn get_logger() -> Logger {
         .clone()
 }
 
-/// Set minimum log level (exposed to WASM host)
+/// Set minimum log level (exposed to Wasm host)
 /// 0=Debug, 1=Info, 2=Warn, 3=Error
 #[unsafe(no_mangle)]
 pub extern "C" fn cel_set_log_level(level: i32) {

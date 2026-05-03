@@ -13,7 +13,7 @@ FERRICEL_CARGO := ferricel/Cargo.toml
 
 WORKSPACE_CARGO := Cargo.toml Cargo.lock
 
-# Build the runtime WASM module
+# Build the runtime Wasm module
 runtime: $(RUNTIME_TARGET)
 
 $(RUNTIME_TARGET): $(RUNTIME_SOURCES) $(RUNTIME_CARGO) $(WORKSPACE_CARGO)
@@ -21,7 +21,7 @@ $(RUNTIME_TARGET): $(RUNTIME_SOURCES) $(RUNTIME_CARGO) $(WORKSPACE_CARGO)
 	cargo build -p runtime --target wasm32-unknown-unknown --release
 
 # Build and run ferricel (depends on runtime)
-# NOTE: Runtime WASM is embedded at compile-time using include_bytes!
+# NOTE: Runtime Wasm is embedded at compile-time using include_bytes!
 ferricel: $(RUNTIME_TARGET) $(FERRICEL_SOURCES) $(FERRICEL_CARGO) $(WORKSPACE_CARGO)
 	@echo "Building ferricel..."
 	cargo build -p ferricel --release
@@ -274,13 +274,13 @@ conformance-list:
 	@echo "  4. CONFORMANCE_SECTION=variables make conformance-basic            # Run that section"
 
 # Build Rust documentation for all workspace components
-# Depends on the runtime so the build script in ferricel-core can find the WASM.
+# Depends on the runtime so the build script in ferricel-core can find the Wasm.
 docs: $(RUNTIME_TARGET)
 	@echo "Building documentation for all workspace components..."
 	cargo doc --workspace --no-deps
 
 # Prepare ferricel-core for publishing to crates.io.
-# Copies the pre-built runtime WASM into ferricel-core/ so it is picked up by
+# Copies the pre-built runtime Wasm into ferricel-core/ so it is picked up by
 # the build script when building from the published (non-workspace) crate.
 # Run this immediately before `cargo publish -p ferricel-core`.
 publish-prep: $(RUNTIME_TARGET)
@@ -313,7 +313,7 @@ check: $(RUNTIME_TARGET)
 help:
 	@echo "Available targets:"
 	@echo "  all              - Build ferricel and runtime (default)"
-	@echo "  runtime          - Build only the runtime WASM module"
+	@echo "  runtime          - Build only the runtime Wasm module"
 	@echo "  ferricel         - Build runtime and ferricel binary (runtime is embedded at compile-time)"
 	@echo "  clean            - Remove all build artifacts"
 	@echo "  unit-tests       - Run unit tests (ferricel-core, runtime)"
@@ -331,13 +331,13 @@ help:
 	@echo "  check            - Check that code compiles without building"
 	@echo "  help             - Show this help message"
 	@echo ""
-	@echo "Note: The runtime WASM must be built before ferricel, as it's embedded using include_bytes!"
+	@echo "Note: The runtime Wasm must be built before ferricel, as it's embedded using include_bytes!"
 	@echo ""
 	@echo "Workspace structure:"
 	@echo "  ferricel-core    - Core compiler and runtime library"
 	@echo "  ferricel         - CLI binary (thin wrapper)"
 	@echo "  conformance      - CEL conformance tests"
-	@echo "  runtime          - WASM guest runtime"
+	@echo "  runtime          - Wasm guest runtime"
 	@echo "  ferricel-types   - Shared types"
 	@echo ""
 	@echo "Usage examples:"

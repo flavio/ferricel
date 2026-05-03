@@ -6,14 +6,14 @@ Core compiler and runtime library for compiling Common Expression Language (CEL)
 
 `ferricel-core` provides the core functionality for:
 - Compiling CEL expressions into standalone WebAssembly modules
-- Executing WASM modules with variable bindings
+- Executing Wasm modules with variable bindings
 - Type handling for integers, unsigned integers, doubles, strings, booleans, lists, and maps
 
 This crate is the reusable library that powers the `ferricel` CLI tool and can be integrated into other Rust projects.
 
 ## Features
 
-- **Zero-dependency WASM modules**: Generated WASM files are self-contained and portable
+- **Zero-dependency Wasm modules**: Generated Wasm files are self-contained and portable
 - **Variable binding support**: Pass JSON input and data to CEL expressions
 - **Type coercion**: Automatic conversion between numeric types following CEL spec
 - **Comprehensive operators**: Arithmetic, comparison, logical, string, and list operations
@@ -29,10 +29,10 @@ use ferricel_core::runtime;
 use ferricel_types::LogLevel;
 use slog::Logger;
 
-// Compile a CEL expression to WASM
+// Compile a CEL expression to Wasm
 let wasm_bytes = compile_cel_to_wasm("1 + 1")?;
 
-// Execute the WASM module
+// Execute the Wasm module
 let result = runtime::execute_wasm(
     &wasm_bytes,
     None,  // bindings JSON (map of variable names to values)
@@ -75,7 +75,7 @@ let result = runtime::execute_wasm(&wasm, None, log_level, logger)?;
 ## Architecture
 
 - **`compiler` module**: Parses CEL expressions using the `cel` crate, walks the AST, and generates WebAssembly bytecode using `walrus`
-- **`runtime` module**: Executes WASM modules using `wasmtime`, providing variable injection and result extraction
+- **`runtime` module**: Executes Wasm modules using `wasmtime`, providing variable injection and result extraction
 
 ## Testing
 

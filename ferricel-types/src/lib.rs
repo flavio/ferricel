@@ -32,7 +32,7 @@ impl LogLevel {
         self as u8
     }
 
-    /// Convert to i32 for WASM FFI
+    /// Convert to i32 for Wasm FFI
     pub fn as_i32(self) -> i32 {
         self as i32
     }
@@ -88,10 +88,10 @@ impl std::fmt::Display for LogLevel {
     }
 }
 
-/// Structured log event passed from WASM guest to host
+/// Structured log event passed from Wasm guest to host
 ///
 /// This struct represents a log event with file/line context and optional
-/// structured key-value pairs. It's serialized to JSON in the WASM guest
+/// structured key-value pairs. It's serialized to JSON in the Wasm guest
 /// and deserialized on the host side.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEvent {

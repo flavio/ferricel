@@ -76,7 +76,7 @@ pub(crate) fn is_zero_value(val: &CelValue) -> bool {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WASM-callable runtime functions
+// Wasm-callable runtime functions
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// `optional.none()` → Optional(None)
@@ -250,7 +250,7 @@ pub unsafe extern "C" fn cel_optional_or(
 /// - `Object(map)?.field` → `Optional(Some(map[field]))` or `Optional(None)` if absent
 /// - anything else → error ("no such key")
 ///
-/// Reads `receiver_ptr`. The `i32` params are raw WASM memory addresses.
+/// Reads `receiver_ptr`. The `i32` params are raw Wasm memory addresses.
 ///
 /// # Safety
 /// `receiver_ptr` must be a valid non-null pointer to a `CelValue`.

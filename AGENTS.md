@@ -27,18 +27,18 @@ The project is organized as a Cargo workspace with the following crates:
 ### Core Libraries
 
 - **ferricel-core**: Core compiler and runtime library. This is the reusable library that can be used by other projects
-- **ferricel-types**: Shared type definitions used by both WASM guest and host
-- **runtime**: WASM guest runtime functions
+- **ferricel-types**: Shared type definitions used by both Wasm guest and host
+- **runtime**: Wasm guest runtime functions
   - Compiled to `wasm32-unknown-unknown`
-  - Embedded into each generated WASM module
+  - Embedded into each generated Wasm module
   - Provides runtime functions that CEL programs call during execution
-  - Self-contained - each WASM file is standalone
+  - Self-contained - each Wasm file is standalone
 
 ### CLI Application
 
 - **ferricel**: Thin CLI wrapper around ferricel-core
-  - `build` subcommand: Reads CEL expressions, compiles to WASM files
-  - `run` subcommand: Loads and executes WASM modules, prints results
+  - `build` subcommand: Reads CEL expressions, compiles to Wasm files
+  - `run` subcommand: Loads and executes Wasm modules, prints results
   - Tests at `tests/e2e.rs` validate CLI behavior
 
 ### Testing
@@ -63,7 +63,7 @@ The project has three levels of testing:
 - Located in `ferricel/tests/e2e.rs`
 - Test the CLI interface and integration between components
 - Expensive to run - only add when CLI behavior changes
-- Verify full workflow: build CEL → WASM file → run WASM → check output
+- Verify full workflow: build CEL → Wasm file → run Wasm → check output
 
 ### 3. Conformance Tests
 
@@ -83,7 +83,7 @@ The project has three levels of testing:
    - Linter must pass (`make lint`)
    - Consider running conformance tests to check spec compliance
 
-3. **Runtime Stability**: The `runtime` WASM module is embedded in each output file. The internal API can change freely since there are no backward compatibility concerns. Each WASM file is self-contained.
+3. **Runtime Stability**: The `runtime` Wasm module is embedded in each output file. The internal API can change freely since there are no backward compatibility concerns. Each Wasm file is self-contained.
 
 4. **Code Organization**:
    - Core logic belongs in `ferricel-core`

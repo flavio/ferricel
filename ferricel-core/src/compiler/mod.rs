@@ -20,8 +20,8 @@ use context::{CompilerContext, CompilerEnv};
 // Re-export the public API types
 pub use context::ExtensionKey;
 
-// Embed the runtime WASM at compile time.
-// The build script (build.rs) copies the WASM into OUT_DIR, resolving it from
+// Embed the runtime Wasm at compile time.
+// The build script (build.rs) copies the Wasm into OUT_DIR, resolving it from
 // either the workspace target directory (development) or a bundled file
 // placed by `make publish-prep` (when publishing to crates.io).
 const RUNTIME_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/runtime.wasm"));
@@ -121,7 +121,7 @@ impl Default for Builder {
     }
 }
 
-/// An immutable CEL-to-WASM compiler.
+/// An immutable CEL-to-Wasm compiler.
 ///
 /// Construct via [`Builder`].  The parsed `ProtoSchema` (if any) is
 /// ready at construction time and reused across every call to [`compile`](Self::compile).
@@ -135,14 +135,14 @@ pub struct Compiler {
 impl Compiler {
     /// Compile a CEL expression into a WebAssembly module.
     ///
-    /// Returns the compiled WASM module as bytes.
+    /// Returns the compiled Wasm module as bytes.
     /// The resulting module exports two functions:
     ///
     /// - `evaluate(i64) -> i64`:       takes JSON-encoded bindings, returns JSON-encoded result
     /// - `evaluate_proto(i64) -> i64`: takes protobuf-encoded `ferricel.Bindings`, returns JSON-encoded result
     ///
     /// Both functions return a packed ptr+len i64 on success.  If the CEL expression
-    /// produces a runtime error (overflow, divide-by-zero, etc.) the WASM traps via
+    /// produces a runtime error (overflow, divide-by-zero, etc.) the Wasm traps via
     /// `cel_abort`, and the host receives `Err(...)` from the call.
     ///
     /// The i64 packs ptr (low 32 bits) and len (high 32 bits) into a single value.
@@ -150,9 +150,9 @@ impl Compiler {
     /// # Example
     ///
     /// ```no_run
-     /// use ferricel_core::compiler::Builder;
-     ///
-     /// let compiler = Builder::new().build();
+    /// use ferricel_core::compiler::Builder;
+    ///
+    /// let compiler = Builder::new().build();
     /// let wasm_bytes = compiler.compile("1 + 1").unwrap();
     /// ```
     pub fn compile(&self, cel_code: &str) -> Result<Vec<u8>, anyhow::Error> {
@@ -210,11 +210,11 @@ impl Compiler {
     }
 }
 
-/// Build the `evaluate` WASM function `(i64) -> i64` using JSON-encoded bindings.
+/// Build the `evaluate` Wasm function `(i64) -> i64` using JSON-encoded bindings.
 ///
 /// Deserializes bindings with [`RuntimeFunction::DeserializeJson`], evaluates the expression,
 /// and serializes the result via [`RuntimeFunction::SerializeResult`].  If the result is a
-/// `CelValue::Error`, `SerializeResult` calls `cel_abort` which traps the WASM instance,
+/// `CelValue::Error`, `SerializeResult` calls `cel_abort` which traps the Wasm instance,
 /// propagating the error as `Err(...)` on the host side.
 fn build_evaluate_function(
     module: &mut walrus::Module,
@@ -237,11 +237,11 @@ fn build_evaluate_function(
     Ok(func.finish(vec![bindings_encoded_arg], &mut module.funcs))
 }
 
-/// Build the `evaluate_proto` WASM function `(i64) -> i64` using protobuf-encoded bindings.
+/// Build the `evaluate_proto` Wasm function `(i64) -> i64` using protobuf-encoded bindings.
 ///
 /// Deserializes bindings with [`RuntimeFunction::DeserializeProto`], evaluates the expression,
 /// and serializes the result via [`RuntimeFunction::SerializeResult`].  If the result is a
-/// `CelValue::Error`, `SerializeResult` calls `cel_abort` which traps the WASM instance,
+/// `CelValue::Error`, `SerializeResult` calls `cel_abort` which traps the Wasm instance,
 /// propagating the error as `Err(...)` on the host side.
 fn build_evaluate_proto_function(
     module: &mut walrus::Module,

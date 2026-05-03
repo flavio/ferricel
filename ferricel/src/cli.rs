@@ -67,7 +67,7 @@ pub enum Commands {
     },
     /// Run a compiled WebAssembly module
     Run {
-        /// Path to the WASM file to execute
+        /// Path to the Wasm file to execute
         wasm: PathBuf,
 
         /// Bindings JSON string containing variable values (mutually exclusive with --bindings-file)

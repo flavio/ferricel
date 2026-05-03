@@ -8,7 +8,7 @@ use crate::compiler::{
     helpers::{emit_string_const, get_memory_id},
 };
 
-/// Emit a WASM runtime error value for an unknown function call.
+/// Emit a Wasm runtime error value for an unknown function call.
 ///
 /// Instead of failing at compile time, this emits instructions that produce a
 /// `CelValue::Error("no matching overload")` at runtime — allowing the CEL

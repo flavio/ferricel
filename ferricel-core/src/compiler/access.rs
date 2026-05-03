@@ -95,7 +95,7 @@ pub fn variable_candidates(name: &str, container: &Option<String>) -> Vec<String
     candidates
 }
 
-/// Emit WASM code that tries each candidate variable name in order, returning the
+/// Emit Wasm code that tries each candidate variable name in order, returning the
 /// first non-null result. Leaves a `*mut CelValue` (i32) on the stack.
 ///
 /// If none of the candidates resolves, the result is a **null pointer**. Use this
@@ -262,7 +262,7 @@ fn emit_null_to_unbound_error(
     Ok(())
 }
 
-/// Emit WASM code that tries each candidate variable name in order, returning the
+/// Emit Wasm code that tries each candidate variable name in order, returning the
 /// first non-null result. If no candidate resolves, emits a call to
 /// `cel_unbound_variable_error` with the bare (last) candidate name so the result
 /// is always a valid (non-null) `*mut CelValue`. Leaves an i32 on the stack.
@@ -367,7 +367,7 @@ fn build_fallback_chain(
     }
 
     // Else branch: result is already set (non-null), nothing to do
-    // (empty else branch is valid in WASM)
+    // (empty else branch is valid in Wasm)
 
     Ok(())
 }
@@ -535,7 +535,7 @@ pub fn compile_select(
     Ok(())
 }
 
-/// Emit field-access WASM for a SelectExpr: compile the operand, then call GetField/HasField.
+/// Emit field-access Wasm for a SelectExpr: compile the operand, then call GetField/HasField.
 fn compile_field_access(
     select_expr: &cel::common::ast::SelectExpr,
     body: &mut InstrSeqBuilder,

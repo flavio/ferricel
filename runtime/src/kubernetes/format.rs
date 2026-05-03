@@ -274,7 +274,7 @@ fn validate_by_name(format_name: &str, value: &str) -> Option<Vec<String>> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WASM-callable runtime functions
+// Wasm-callable runtime functions
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// `format.named(name: string)` → `?Format`

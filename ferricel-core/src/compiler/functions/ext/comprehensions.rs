@@ -2,7 +2,7 @@
 //!
 //! These macros are NOT handled by the `cel` parser (v0.13.0), which only supports
 //! single-variable comprehensions. The parser emits them as regular `Call` nodes, so
-//! we intercept them here and compile them by emitting WASM loops directly.
+//! we intercept them here and compile them by emitting Wasm loops directly.
 //!
 //! # Supported macros
 //!

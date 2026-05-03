@@ -1,12 +1,12 @@
-//! ferricel-core: CEL to WASM compiler and runtime
+//! ferricel-core: CEL to Wasm compiler and runtime
 //!
 //! This crate provides the core functionality for compiling Common Expression Language (CEL)
 //! expressions into WebAssembly modules and executing them.
 //!
 //! ## Features
 //!
-//! - **Compiler**: Compiles CEL expressions to standalone WASM modules
-//! - **Runtime**: Executes WASM modules with variable bindings
+//! - **Compiler**: Compiles CEL expressions to standalone Wasm modules
+//! - **Runtime**: Executes Wasm modules with variable bindings
 //! - **Type Support**: Handles integers, unsigned integers, doubles, strings, booleans, lists, and maps
 //! - **Extensions**: Host-provided functions callable from CEL expressions
 //!
@@ -15,10 +15,10 @@
 //! ```rust,ignore
 //! use ferricel_core::{compiler, runtime};
 //!
-//! // Compile a CEL expression to WASM
+//! // Compile a CEL expression to Wasm
 //! let wasm_bytes = compiler::Builder::new().build().compile("x + y")?;
 //!
-//! // Execute the WASM module with variable bindings
+//! // Execute the Wasm module with variable bindings
 //! let bindings = r#"{"x": 1, "y": 2}"#;
 //! let result = runtime::Builder::new()
 //!     .with_logger(logger)

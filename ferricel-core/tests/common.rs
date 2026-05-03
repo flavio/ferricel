@@ -6,7 +6,7 @@
 //
 // # Test file map
 //
-//   compiler_tests.rs      — WASM magic number, invalid expression (2 tests)
+//   compiler_tests.rs      — Wasm magic number, invalid expression (2 tests)
 //   arithmetic_tests.rs    — Integer literals, arithmetic operators, comparisons, logical ops
 //   double_tests.rs        — Double literals, arithmetic, division-by-zero, comparisons, type safety
 //   json_output_tests.rs   — JSON serialization of integers, booleans, arithmetic results
@@ -115,7 +115,7 @@ pub(crate) fn compile_and_execute_string(cel_expr: &str) -> Result<String, anyho
 }
 
 /// Compile `cel_expr` with an optional container name and proto descriptor,
-/// returning the raw WASM bytes (does not execute).
+/// returning the raw Wasm bytes (does not execute).
 pub(crate) fn compile_with_container(
     cel_expr: &str,
     container: Option<&str>,

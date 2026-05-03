@@ -63,7 +63,7 @@ pub fn compile_string_to_local(
     Ok(result_local)
 }
 
-/// Emit instructions to write a compile-time string constant into WASM memory
+/// Emit instructions to write a compile-time string constant into Wasm memory
 /// and leave `(ptr: i32, len: i32)` on the stack.
 ///
 /// When `s` is empty, pushes `(0i32, 0i32)` without any allocation.

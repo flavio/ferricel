@@ -2,7 +2,7 @@
 //!
 //! `CelError` is the standard error type for all internal (Layer 2) runtime
 //! functions. The ABI boundary (Layer 1, `extern "C"`) converts it to a
-//! `CelValue::Error` heap allocation before returning to WASM callers.
+//! `CelValue::Error` heap allocation before returning to Wasm callers.
 //!
 //! When a runtime error occurs (divide by zero, overflow, out of bounds, etc.),
 //! the guest runtime calls cel_abort which terminates execution and returns
@@ -45,13 +45,13 @@ pub fn into_raw_result(r: CelResult<crate::types::CelValue>) -> *mut crate::type
     }))
 }
 
-// This function never returns - it terminates WASM execution.
+// This function never returns - it terminates Wasm execution.
 //
 // Arguments:
 // * `packed` - Packed i64 containing pointer (lower 32 bits) and length (upper 32 bits)
-//              of the error message string in WASM memory
+//              of the error message string in Wasm memory
 //
-// Only available when compiling to WASM target
+// Only available when compiling to Wasm target
 #[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -82,7 +82,7 @@ pub fn abort_with_error(message: &str) -> ! {
     unsafe { cel_abort(packed as i64) }
 }
 
-/// Test/mock version of abort_with_error for non-WASM targets.
+/// Test/mock version of abort_with_error for non-Wasm targets.
 /// Just panics with the error message.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn abort_with_error(message: &str) -> ! {

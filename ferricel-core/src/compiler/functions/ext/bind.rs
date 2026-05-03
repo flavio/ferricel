@@ -8,7 +8,7 @@
 //!   `Call { target: Ident("cel"), func: "bind", args: [Ident(var), init, body] }`
 //!
 //! Since there is no runtime function involved, this is compiled purely by
-//! emitting a WASM local for the initializer result and threading a child
+//! emitting a Wasm local for the initializer result and threading a child
 //! `CompilerContext` that maps `var` to that local into the body compilation.
 //!
 //! Reference: <https://github.com/google/cel-go/blob/master/cel/library.go>
@@ -25,8 +25,8 @@ use crate::compiler::{
 ///
 /// Steps:
 /// 1. Validate: exactly 3 args, `args[0]` must be an identifier.
-/// 2. Compile `init` → i32 pointer on the WASM stack.
-/// 3. Store in a fresh WASM local.
+/// 2. Compile `init` → i32 pointer on the Wasm stack.
+/// 3. Store in a fresh Wasm local.
 /// 4. Build a child context with `var` mapped to that local.
 /// 5. Compile `body` in the child context — its result is the result of the whole expression.
 pub fn compile_cel_bind(

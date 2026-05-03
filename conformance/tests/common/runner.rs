@@ -310,7 +310,7 @@ impl ConformanceTestRunner {
     }
 
     pub fn execute_cel_expression(&self, test: &SimpleTest) -> Result<JsonValue, String> {
-        // Step 1: Compile the CEL expression to WASM (in memory)
+        // Step 1: Compile the CEL expression to Wasm (in memory)
         let mut builder = CompilerBuilder::new().with_logger(self.logger.clone());
         if let Some(descriptor) = self.proto_descriptor.clone() {
             builder = builder
@@ -343,7 +343,7 @@ impl ConformanceTestRunner {
             FerricelBindings::default().encode_to_vec()
         };
 
-        // Step 3: Execute the WASM module using the proto bindings path
+        // Step 3: Execute the Wasm module using the proto bindings path
         let json_result = match runtime::Builder::new()
             .with_logger(self.logger.clone())
             .with_wasm(wasm_bytes)

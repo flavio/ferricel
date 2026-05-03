@@ -27,7 +27,7 @@ pub struct ExtensionDecl {
     pub num_args: usize,
 }
 
-/// Wire format payload sent from the WASM guest to the host when calling an extension.
+/// Wire format payload sent from the Wasm guest to the host when calling an extension.
 ///
 /// Serialized as JSON and passed through the `cel_call_extension` host import.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -8,8 +8,8 @@
 //!   - `<opt>.value()`                → `cel_optional_value`             (unary method)
 //!   - `<opt>.orValue(default)`       → `cel_optional_or_value`          (binary method)
 //!   - `<opt>.or(other_opt)`          → `cel_optional_or`                (binary method)
-//!   - `<opt>.optMap(var, body)`      → inline WASM: if hasValue then of(body[var=value]) else none
-//!   - `<opt>.optFlatMap(var, body)`  → inline WASM: if hasValue then body[var=value] else none
+//!   - `<opt>.optMap(var, body)`      → inline Wasm: if hasValue then of(body[var=value]) else none
+//!   - `<opt>.optFlatMap(var, body)`  → inline Wasm: if hasValue then body[var=value] else none
 //!
 //! Reference: CEL spec optional types extension.
 
@@ -85,7 +85,7 @@ fn compile_optional_of_non_zero_value(
 /// Semantics: if opt has a value, bind the inner value to `var` and evaluate
 /// `body_expr`, wrap the result in `optional.of(result)`. If opt is none, return none.
 ///
-/// Generated WASM logic:
+/// Generated Wasm logic:
 /// ```ignore
 /// let opt_val = compile(target);
 /// if cel_optional_has_value(opt_val) {
@@ -321,7 +321,7 @@ pub fn compile_optional_function(
             )?;
         }
 
-        // optMap / optFlatMap are macro-like — inline WASM with branching
+        // optMap / optFlatMap are macro-like — inline Wasm with branching
         "optMap" => {
             compile_opt_map(call_expr, body, env, ctx, module)?;
         }

@@ -1,4 +1,4 @@
-//! Extension function support for the WASM guest runtime.
+//! Extension function support for the Wasm guest runtime.
 //!
 //! Provides the host import declaration and fixed-arity wrappers that compiled
 //! CEL programs use to call host-provided extension functions.
@@ -12,7 +12,7 @@ use ferricel_types::extensions::ExtensionCallPayload;
 // Host import: call a host-provided extension function.
 //
 // The packed i64 encodes the JSON request:
-//   - low 32 bits  = pointer to JSON bytes in WASM memory
+//   - low 32 bits  = pointer to JSON bytes in Wasm memory
 //   - high 32 bits = length of JSON bytes
 //
 // Returns a packed i64 with the JSON response in the same format.
@@ -50,7 +50,7 @@ unsafe fn call_extension_impl(
         serde_json::to_vec(&payload).expect("Failed to serialize ExtensionCallPayload");
     let json_len = json_bytes.len();
 
-    // Allocate WASM memory for the request JSON and copy the bytes in.
+    // Allocate Wasm memory for the request JSON and copy the bytes in.
     let req_ptr = cel_malloc(json_len);
     unsafe {
         std::ptr::copy_nonoverlapping(json_bytes.as_ptr(), req_ptr, json_len);
@@ -64,7 +64,7 @@ unsafe fn call_extension_impl(
     let resp_ptr = (resp_packed & 0xFFFFFFFF) as u32 as usize;
     let resp_len = (resp_packed >> 32) as u32 as usize;
 
-    // Read the response JSON from WASM memory.
+    // Read the response JSON from Wasm memory.
     let resp_bytes: &[u8] = unsafe { std::slice::from_raw_parts(resp_ptr as *const u8, resp_len) };
 
     // Deserialize the response into a CelValue.

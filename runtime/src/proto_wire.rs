@@ -4,7 +4,7 @@
 //! comparison, unless the type_url cannot be resolved, in which case the comparison
 //! falls back to byte equality."
 //!
-//! The schema (field_number_string → kind_string) is baked into the compiled WASM by
+//! The schema (field_number_string → kind_string) is baked into the compiled Wasm by
 //! the ferricel-core compiler and stored in the __any_schema__ map of the Any object.
 
 use crate::types::{CelMapKey, CelValue};

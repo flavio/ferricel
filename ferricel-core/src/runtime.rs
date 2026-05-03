@@ -9,7 +9,7 @@ pub type ExtensionFn = std::sync::Arc<
     dyn Fn(Vec<serde_json::Value>) -> Result<serde_json::Value, String> + Send + Sync,
 >;
 
-/// Host state that holds data accessible to WASM host functions.
+/// Host state that holds data accessible to Wasm host functions.
 struct HostState {
     logger: slog::Logger,
     /// Registered extension function implementations keyed by (namespace, function).
@@ -21,7 +21,7 @@ struct HostState {
 /// All builder methods are consuming (take and return `Self`).
 /// Call [`Builder::build`] to obtain an immutable [`Engine`].
 ///
-/// [`Builder::build`] is fallible: it parses the WASM bytes and pre-links all
+/// [`Builder::build`] is fallible: it parses the Wasm bytes and pre-links all
 /// host functions so that each call to [`Engine::eval`] only needs to
 /// instantiate the pre-linked module, not recompile it.
 ///
@@ -168,10 +168,10 @@ impl Builder {
         self
     }
 
-    /// Set the compiled WASM bytes to execute.
+    /// Set the compiled Wasm bytes to execute.
     ///
     /// These bytes are parsed and pre-linked during [`build`](Self::build), so
-    /// invalid WASM is rejected eagerly rather than on the first [`eval`](Engine::eval) call.
+    /// invalid Wasm is rejected eagerly rather than on the first [`eval`](Engine::eval) call.
     pub fn with_wasm(mut self, bytes: Vec<u8>) -> Self {
         self.wasm_bytes = Some(bytes);
         self
@@ -179,7 +179,7 @@ impl Builder {
 
     /// Consume the builder and produce an immutable [`Engine`].
     ///
-    /// This creates (or reuses) a [`wasmtime::Engine`], parses the WASM module,
+    /// This creates (or reuses) a [`wasmtime::Engine`], parses the Wasm module,
     /// registers all host functions, and calls [`Linker::instantiate_pre`] so that
     /// subsequent [`eval`](Engine::eval) calls only pay the cost of instantiation,
     /// not compilation.
@@ -187,10 +187,10 @@ impl Builder {
     /// If no [`wasmtime::Engine`] was supplied via [`with_engine`](Self::with_engine),
     /// a default one is created via [`wasmtime::Engine::default`].
     ///
-    /// Returns `Err` if no WASM bytes were provided or if the bytes are invalid.
+    /// Returns `Err` if no Wasm bytes were provided or if the bytes are invalid.
     pub fn build(self) -> Result<Engine, anyhow::Error> {
         let bytes = self.wasm_bytes.ok_or_else(|| {
-            anyhow::anyhow!("no WASM bytes provided: call with_wasm() before build()")
+            anyhow::anyhow!("no Wasm bytes provided: call with_wasm() before build()")
         })?;
 
         let wasm_engine = self.wasm_engine.unwrap_or_default();
@@ -229,7 +229,7 @@ impl Builder {
                 let memory = caller
                     .get_export("memory")
                     .and_then(|e| e.into_memory())
-                    .ok_or_else(|| wasmtime::Error::msg("Failed to get WASM memory"))?;
+                    .ok_or_else(|| wasmtime::Error::msg("Failed to get Wasm memory"))?;
 
                 let mut buffer = vec![0u8; len as usize];
                 memory.read(&caller, ptr as usize, &mut buffer)?;
@@ -284,7 +284,7 @@ impl Builder {
                 let memory = caller
                     .get_export("memory")
                     .and_then(|e| e.into_memory())
-                    .ok_or_else(|| wasmtime::Error::msg("Failed to get WASM memory for error"))?;
+                    .ok_or_else(|| wasmtime::Error::msg("Failed to get Wasm memory for error"))?;
 
                 let mut buffer = vec![0u8; length as usize];
                 memory.read(&caller, address as usize, &mut buffer)?;
@@ -316,7 +316,7 @@ impl Builder {
                 let memory = caller
                     .get_export("memory")
                     .and_then(|e| e.into_memory())
-                    .ok_or_else(|| wasmtime::Error::msg("Failed to get WASM memory"))?;
+                    .ok_or_else(|| wasmtime::Error::msg("Failed to get Wasm memory"))?;
 
                 let mut req_buf = vec![0u8; req_len];
                 memory.read(&caller, req_ptr, &mut req_buf)?;
@@ -370,7 +370,7 @@ impl Builder {
                 let memory = caller
                     .get_export("memory")
                     .and_then(|e| e.into_memory())
-                    .ok_or_else(|| wasmtime::Error::msg("Failed to get WASM memory"))?;
+                    .ok_or_else(|| wasmtime::Error::msg("Failed to get Wasm memory"))?;
                 memory.write(&mut caller, resp_ptr as usize, &resp_json)?;
 
                 let encoded = (resp_ptr as i64) | ((resp_len as i64) << 32);
@@ -387,7 +387,7 @@ impl Default for Builder {
     }
 }
 
-/// An immutable CEL engine that evaluates a compiled WASM module with optional
+/// An immutable CEL engine that evaluates a compiled Wasm module with optional
 /// variable bindings and host-provided extension functions.
 ///
 /// Construct via [`Builder`].
@@ -427,7 +427,7 @@ impl Engine {
     /// Shared implementation for [`eval`](Self::eval) and [`eval_proto`](Self::eval_proto).
     ///
     /// `bindings_bytes` is the already-serialised bindings payload (JSON or protobuf).
-    /// `export_name` is the WASM export to call (`"evaluate"` or `"evaluate_proto"`).
+    /// `export_name` is the Wasm export to call (`"evaluate"` or `"evaluate_proto"`).
     fn eval_raw(&self, bindings_bytes: &[u8], export_name: &str) -> Result<String, anyhow::Error> {
         let host_state = HostState {
             logger: self.logger.clone(),
@@ -447,7 +447,7 @@ impl Engine {
 
         let memory = instance
             .get_memory(&mut store, "memory")
-            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+            .ok_or_else(|| anyhow::anyhow!("Failed to get Wasm memory"))?;
 
         let len = bindings_bytes.len() as i32;
         let ptr = cel_malloc.call(&mut store, len)?;
@@ -469,10 +469,10 @@ impl Engine {
             .map_err(|e| anyhow::anyhow!("Failed to parse result as UTF-8: {}", e))
     }
 
-    /// Evaluate the compiled WASM module with optional JSON-encoded variable bindings.
+    /// Evaluate the compiled Wasm module with optional JSON-encoded variable bindings.
     ///
     /// Extension implementations registered via [`Builder::with_extension`] are
-    /// dispatched when the WASM program calls an extension function.
+    /// dispatched when the Wasm program calls an extension function.
     ///
     /// Returns a JSON-encoded CEL value string, or `Err` if the expression
     /// produced a runtime error.
@@ -480,7 +480,7 @@ impl Engine {
         self.eval_raw(bindings_json.unwrap_or("{}").as_bytes(), "evaluate")
     }
 
-    /// Evaluate the compiled WASM module with protobuf-encoded variable bindings.
+    /// Evaluate the compiled Wasm module with protobuf-encoded variable bindings.
     ///
     /// Unlike [`Engine::eval`], this method accepts a pre-encoded
     /// `ferricel.Bindings` protobuf message and calls the `evaluate_proto` export,

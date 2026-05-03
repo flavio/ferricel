@@ -25,7 +25,7 @@ impl CompilerEnv {
 /// Compilation context that holds state during expression compilation
 /// This includes local variable bindings for comprehensions and other scoped contexts
 pub struct CompilerContext {
-    /// Maps variable names to their local IDs in the WASM function
+    /// Maps variable names to their local IDs in the Wasm function
     /// Used for iteration variables in comprehensions (e.g., "x" in \[1,2,3\].all(x, x > 0))
     pub local_vars: HashMap<String, LocalId>,
     /// Optional Protocol Buffer schema for wrapper type semantics

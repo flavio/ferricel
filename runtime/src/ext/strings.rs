@@ -398,7 +398,7 @@ fn normalise_sci_exponent(s: &str) -> String {
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_char_at(
@@ -446,7 +446,7 @@ pub unsafe extern "C" fn cel_string_char_at(
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_index_of_offset(
@@ -502,7 +502,7 @@ pub unsafe extern "C" fn cel_string_index_of_offset(
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_last_index_of_offset(
@@ -558,7 +558,7 @@ pub unsafe extern "C" fn cel_string_last_index_of_offset(
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_lower_ascii(string_ptr: *mut CelValue) -> *mut CelValue {
@@ -580,7 +580,7 @@ pub unsafe extern "C" fn cel_string_lower_ascii(string_ptr: *mut CelValue) -> *m
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_upper_ascii(string_ptr: *mut CelValue) -> *mut CelValue {
@@ -602,7 +602,7 @@ pub unsafe extern "C" fn cel_string_upper_ascii(string_ptr: *mut CelValue) -> *m
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_replace(
@@ -647,7 +647,7 @@ pub unsafe extern "C" fn cel_string_replace(
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_replace_n(
@@ -709,7 +709,7 @@ pub unsafe extern "C" fn cel_string_replace_n(
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_split(
@@ -746,7 +746,7 @@ pub unsafe extern "C" fn cel_string_split(
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_split_n(
@@ -804,7 +804,7 @@ pub unsafe extern "C" fn cel_string_split_n(
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_substring(
@@ -850,7 +850,7 @@ pub unsafe extern "C" fn cel_string_substring(
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_substring_range(
@@ -912,7 +912,7 @@ pub unsafe extern "C" fn cel_string_substring_range(
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_trim(string_ptr: *mut CelValue) -> *mut CelValue {
@@ -933,7 +933,7 @@ pub unsafe extern "C" fn cel_string_trim(string_ptr: *mut CelValue) -> *mut CelV
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_reverse(string_ptr: *mut CelValue) -> *mut CelValue {
@@ -955,7 +955,7 @@ pub unsafe extern "C" fn cel_string_reverse(string_ptr: *mut CelValue) -> *mut C
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_strings_quote(string_ptr: *mut CelValue) -> *mut CelValue {
@@ -997,7 +997,7 @@ pub unsafe extern "C" fn cel_strings_quote(string_ptr: *mut CelValue) -> *mut Ce
 /// # Safety
 ///
 /// Caller must ensure all pointer arguments point to valid `CelValue` instances
-/// allocated by the WASM host.
+/// allocated by the Wasm host.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_string_format(
