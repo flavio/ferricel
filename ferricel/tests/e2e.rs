@@ -7,10 +7,10 @@
 //!
 //! Note: Unit tests for CEL compilation logic are in src/compiler.rs
 
+use std::{fs, path::PathBuf};
+
 use assert_cmd::Command;
 use predicates::prelude::*;
-use std::fs;
-use std::path::PathBuf;
 use tempfile::NamedTempFile;
 
 /// Helper function to get a Command for the ferricel binary

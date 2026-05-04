@@ -1,8 +1,8 @@
 // Integration tests for struct literal creation and struct equality.
 
-use crate::common::*;
-
 use rstest::rstest;
+
+use crate::common::*;
 
 // ============================================================
 // Struct Literal & Equality Tests

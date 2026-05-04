@@ -3,11 +3,9 @@
 //! Provides the host import declaration and fixed-arity wrappers that compiled
 //! CEL programs use to call host-provided extension functions.
 
-use crate::error::read_ptr;
-use crate::memory::cel_malloc;
-use crate::serialization::encode_ptr_len;
-use crate::types::CelValue;
 use ferricel_types::extensions::ExtensionCallPayload;
+
+use crate::{error::read_ptr, memory::cel_malloc, serialization::encode_ptr_len, types::CelValue};
 
 // Host import: call a host-provided extension function.
 //

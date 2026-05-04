@@ -1,8 +1,9 @@
 //! CEL value type definitions for JSON serialization and deserialization.
 
+use std::collections::HashMap;
+
 use semver::Version;
 use serde::{Deserialize, Serialize, Serializer};
-use std::collections::HashMap;
 use url::Url;
 
 /// Map key types allowed by CEL specification.
@@ -55,9 +56,11 @@ type CelMap = HashMap<CelMapKey, CelValue>;
 
 /// Helper module for deserializing maps with string keys from JSON
 mod cel_map_serde {
-    use super::*;
-    use serde::{Deserialize, Deserializer};
     use std::collections::HashMap;
+
+    use serde::{Deserialize, Deserializer};
+
+    use super::*;
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<CelMapKey, CelValue>, D::Error>
     where

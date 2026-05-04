@@ -17,15 +17,19 @@
 //!   k8s.io/apiserver/pkg/cel/library/format.go
 //!   k8s.io/apimachinery/pkg/util/validation/validation.go
 
-use crate::error::{create_error_value, read_ptr};
-use crate::types::CelValue;
+use std::sync::OnceLock;
+
 use base64::Engine;
 use chrono::NaiveDate;
 use regex_lite::Regex;
 use slog::error;
-use std::sync::OnceLock;
 use url::Url;
 use uuid::Uuid;
+
+use crate::{
+    error::{create_error_value, read_ptr},
+    types::CelValue,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Regex constants (compiled once)

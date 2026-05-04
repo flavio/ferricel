@@ -7,10 +7,12 @@
 //! The schema (field_number_string → kind_string) is baked into the compiled Wasm by
 //! the ferricel-core compiler and stored in the __any_schema__ map of the Any object.
 
-use crate::types::{CelMapKey, CelValue};
+use std::collections::HashMap;
+
 use bytes::Buf;
 use prost::encoding::{WireType, decode_key, decode_varint};
-use std::collections::HashMap;
+
+use crate::types::{CelMapKey, CelValue};
 
 /// A decoded proto wire field.
 struct WireField {

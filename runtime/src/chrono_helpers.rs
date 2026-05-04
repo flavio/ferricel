@@ -91,14 +91,15 @@ pub fn parse_rfc3339(s: &str) -> Result<DateTime<FixedOffset>, String> {
 /// - `Ok(Duration)` if parse succeeds
 /// - `Err(String)` with error message
 pub fn parse_duration(s: &str) -> Result<Duration, String> {
-    use nom::IResult;
-    use nom::Parser;
-    use nom::branch::alt;
-    use nom::bytes::complete::tag;
-    use nom::character::complete::char;
-    use nom::combinator::{map, opt};
-    use nom::multi::many1;
-    use nom::number::complete::double;
+    use nom::{
+        IResult, Parser,
+        branch::alt,
+        bytes::complete::tag,
+        character::complete::char,
+        combinator::{map, opt},
+        multi::many1,
+        number::complete::double,
+    };
 
     enum Unit {
         Nanosecond,

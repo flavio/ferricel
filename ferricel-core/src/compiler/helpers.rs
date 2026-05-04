@@ -2,8 +2,10 @@ use cel::common::ast::CallExpr;
 use ferricel_types::functions::RuntimeFunction;
 use walrus::{InstrSeqBuilder, LocalId, ValType};
 
-use super::context::{CompilerContext, CompilerEnv};
-use super::expr::compile_expr;
+use super::{
+    context::{CompilerContext, CompilerEnv},
+    expr::compile_expr,
+};
 
 /// Returns the single memory id from the module, or an error if none exists.
 pub fn get_memory_id(module: &walrus::Module) -> Result<walrus::MemoryId, anyhow::Error> {

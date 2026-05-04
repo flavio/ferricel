@@ -1,9 +1,9 @@
 //! Array operations for CelValue objects.
 //! Supports creating arrays, accessing elements, array concatenation, and getting array length.
 
-use crate::error::abort_with_error;
-use crate::types::CelValue;
 use slog::{debug, error};
+
+use crate::{error::abort_with_error, types::CelValue};
 
 /// Internal helper: Concatenate two arrays.
 ///
@@ -189,8 +189,9 @@ pub unsafe extern "C" fn cel_array_push(array_ptr: *mut CelValue, element_ptr: *
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[test]
     fn test_create_array_logic() {

@@ -13,5 +13,7 @@ pub mod cel {
     }
 }
 
-pub use cel::expr::conformance::test::{SimpleTest, SimpleTestFile};
-pub use cel::expr::{ExprValue, Value};
+pub use cel::expr::{
+    ExprValue, Value,
+    conformance::test::{SimpleTest, SimpleTestFile},
+};

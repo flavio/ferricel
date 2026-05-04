@@ -19,10 +19,14 @@
 //!   - IP addresses with zones (e.g. `fe80::1%eth0`) are NOT allowed.
 //!   - Leading zeros in IPv4 octets (e.g. `010.0.0.1`) are NOT allowed.
 
-use crate::error::{create_error_value, read_ptr};
-use crate::types::CelValue;
-use slog::error;
 use std::net::IpAddr;
+
+use slog::error;
+
+use crate::{
+    error::{create_error_value, read_ptr},
+    types::CelValue,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Validation helper
@@ -425,9 +429,12 @@ pub unsafe extern "C" fn cel_k8s_ip_is_global_unicast(ip_ptr: *mut CelValue) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_helpers::{make_str, make_val, read_val};
-    use super::*;
     use rstest::rstest;
+
+    use super::{
+        super::test_helpers::{make_str, make_val, read_val},
+        *,
+    };
 
     unsafe fn make_ip(s: &str) -> *mut CelValue {
         let str_ptr = make_str(s);

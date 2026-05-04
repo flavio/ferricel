@@ -7,8 +7,7 @@
 //!
 //! See: <https://pkg.go.dev/github.com/google/cel-go/ext#Math>
 
-use crate::error::read_ptr;
-use crate::types::CelValue;
+use crate::{error::read_ptr, types::CelValue};
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -484,8 +483,9 @@ pub unsafe extern "C" fn cel_math_sqrt(val_ptr: *mut CelValue) -> *mut CelValue 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     // ── helpers ───────────────────────────────────────────────────────────────
 

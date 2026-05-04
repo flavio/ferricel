@@ -7,9 +7,9 @@
 //! - String comparison (startsWith, endsWith, contains)
 //! - Regular expression matching (matches)
 
-use crate::error::read_ptr;
-use crate::types::CelValue;
 use regex_lite::Regex;
+
+use crate::{error::read_ptr, types::CelValue};
 
 /// Internal helper: Concatenate two strings.
 ///
@@ -168,8 +168,9 @@ pub unsafe extern "C" fn cel_string_matches(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[test]
     fn test_create_string_logic() {

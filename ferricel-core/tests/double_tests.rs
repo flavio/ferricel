@@ -1,7 +1,8 @@
 // Integration tests for double (f64) arithmetic, comparisons, and type safety.
 
-use crate::common::*;
 use rstest::rstest;
+
+use crate::common::*;
 
 // ============================================================
 // Double Literal Tests

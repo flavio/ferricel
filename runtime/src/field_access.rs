@@ -1,10 +1,11 @@
 //! Field access operations for CelValue objects.
 //! Supports accessing fields from Object-type CelValues.
 
-use crate::error::abort_with_error;
-use crate::types::CelValue;
-use slog::{debug, error, info};
 use std::slice;
+
+use slog::{debug, error, info};
+
+use crate::{error::abort_with_error, types::CelValue};
 
 /// Get a field from a CelValue object.
 ///
@@ -267,8 +268,9 @@ pub unsafe extern "C" fn cel_has_field(
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{CelMapKey, CelValue};
     use std::collections::HashMap;
+
+    use crate::types::{CelMapKey, CelValue};
 
     #[test]
     fn test_field_access_logic() {

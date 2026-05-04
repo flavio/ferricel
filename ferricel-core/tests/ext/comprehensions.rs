@@ -1,5 +1,6 @@
-use crate::common::*;
 use rstest::rstest;
+
+use crate::common::*;
 
 // ─── exists(i, v, pred) ────────────────────────────────────────────────────
 

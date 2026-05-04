@@ -23,10 +23,13 @@
 //!   5. Pad with `"0"` until 3 parts
 //!   6. Rejoin and parse with `semver::Version::parse`
 
-use crate::error::{create_error_value, read_ptr};
-use crate::types::CelValue;
 use semver::Version;
 use slog::error;
+
+use crate::{
+    error::{create_error_value, read_ptr},
+    types::CelValue,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parsing / normalization helpers
@@ -486,9 +489,12 @@ pub unsafe extern "C" fn cel_k8s_semver_compare_to(
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_helpers::{make_str, make_val, read_val};
-    use super::*;
     use rstest::rstest;
+
+    use super::{
+        super::test_helpers::{make_str, make_val, read_val},
+        *,
+    };
 
     unsafe fn make_semver(s: &str) -> *mut CelValue {
         let str_ptr = make_str(s);

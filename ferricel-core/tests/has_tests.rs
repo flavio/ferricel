@@ -1,8 +1,8 @@
 // Integration tests for the has() macro.
 
-use crate::common::*;
-
 use rstest::rstest;
+
+use crate::common::*;
 
 // ============================================================================
 // HAS MACRO TESTS

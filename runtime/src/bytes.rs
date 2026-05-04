@@ -6,9 +6,9 @@
 //! - Bytes size (length in bytes)
 //! - Bytes comparison (equality and ordering)
 
-use crate::error::abort_with_error;
-use crate::types::CelValue;
 use slog::{debug, error};
+
+use crate::{error::abort_with_error, types::CelValue};
 
 /// Internal helper: Concatenate two byte sequences.
 ///
@@ -308,8 +308,9 @@ pub unsafe fn cel_bytes_gte(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[test]
     fn test_create_bytes() {

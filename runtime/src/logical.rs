@@ -1,7 +1,6 @@
 //! Boolean logic operations on CelValue::Bool pointers.
 
-use crate::error::read_ptr;
-use crate::types::CelValue;
+use crate::{error::read_ptr, types::CelValue};
 
 // ---------------------------------------------------------------------------
 // Consuming operator functions (ABI boundary — take ownership of inputs)

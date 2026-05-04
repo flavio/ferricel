@@ -4,8 +4,10 @@
 //! `charAt`, `indexOf`, `lastIndexOf`, `lowerAscii`, `upperAscii`, `replace`,
 //! `split`, `substring`, `trim`, `reverse`, `format`, and `strings.quote`.
 
-use crate::error::read_ptr;
-use crate::types::{CelMapKey, CelValue};
+use crate::{
+    error::read_ptr,
+    types::{CelMapKey, CelValue},
+};
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -1031,8 +1033,9 @@ pub unsafe extern "C" fn cel_string_format(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     // ── pure helpers ──────────────────────────────────────────────────────────
 

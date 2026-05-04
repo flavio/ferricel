@@ -1,9 +1,7 @@
 //! JSON serialization of CEL values with memory-encoded results.
 //! Returns i64 with pointer in low 32 bits, length in high 32 bits.
 
-use crate::error::read_ptr;
-use crate::memory::cel_malloc;
-use crate::types::CelValue;
+use crate::{error::read_ptr, memory::cel_malloc, types::CelValue};
 
 /// Encode pointer and length into a single i64.
 /// Low 32 bits = pointer, High 32 bits = length.
@@ -83,8 +81,9 @@ pub unsafe extern "C" fn cel_serialize_result(value_ptr: *mut CelValue) -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::collections::HashMap;
+
+    use super::*;
 
     /// Test that CelValue variants can be serialized to JSON (format verification only)
     /// Note: These tests verify JSON formatting but don't test Wasm memory allocation

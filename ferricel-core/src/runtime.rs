@@ -1,5 +1,7 @@
-use ferricel_types::LogLevel;
-use ferricel_types::extensions::{ExtensionCallPayload, ExtensionDecl};
+use ferricel_types::{
+    LogLevel,
+    extensions::{ExtensionCallPayload, ExtensionDecl},
+};
 use wasmtime::{Caller, Engine as WasmEngine, InstancePre, Linker, Module, Store};
 
 use crate::compiler::ExtensionKey;

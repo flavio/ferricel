@@ -8,10 +8,13 @@
 //! - Time cost for lists: O(n×m) where n is list size, m is element size
 //! - Time cost for maps: O(1) expected (implementation may vary)
 
-use crate::error::{abort_with_error, read_ptr};
-use crate::helpers::cel_equals;
-use crate::types::CelValue;
 use slog::{debug, error};
+
+use crate::{
+    error::{abort_with_error, read_ptr},
+    helpers::cel_equals,
+    types::CelValue,
+};
 
 /// Check if an element exists in a container (list or map).
 ///
@@ -103,9 +106,11 @@ fn value_in(element: CelValue, container: CelValue) -> CelValue {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rstest::rstest;
     use std::collections::HashMap;
+
+    use rstest::rstest;
+
+    use super::*;
 
     // Helper function to test membership operations
     fn assert_membership(element: CelValue, container: CelValue, expected: bool) {

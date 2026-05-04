@@ -1,5 +1,6 @@
-use crate::common::*;
 use rstest::rstest;
+
+use crate::common::*;
 
 #[rstest]
 #[case("[1, 2, 3].isSorted()", true)]

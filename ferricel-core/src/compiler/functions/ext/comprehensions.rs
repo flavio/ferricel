@@ -47,8 +47,7 @@
 
 use cel::common::ast::{CallExpr, Expr};
 use ferricel_types::functions::RuntimeFunction;
-use walrus::ir::InstrSeqId;
-use walrus::{InstrSeqBuilder, ValType};
+use walrus::{InstrSeqBuilder, ValType, ir::InstrSeqId};
 
 use crate::compiler::{
     context::{CompilerContext, CompilerEnv},

@@ -1,7 +1,8 @@
-use crate::common::*;
 use ferricel_core::runtime;
 use ferricel_types::LogLevel;
 use rstest::rstest;
+
+use crate::common::*;
 
 // ---------------------------------------------------------------------------
 // cel.block — basic slot bindings

@@ -2,24 +2,23 @@
 
 use std::{collections::HashMap, path::Path, sync::Mutex};
 
+use ferricel_core::{compiler::Builder as CompilerBuilder, runtime};
+use ferricel_types::proto::{
+    Bindings as FerricelBindings,
+    cel::expr::{
+        ListValue as FerricelListValue, MapValue as FerricelMapValue, Value as FerricelValue,
+        map_value::Entry as FerricelEntry, value::Kind as FerricelKind,
+    },
+};
+use prost::Message;
 use rayon::prelude::*;
 use serde_json::Value as JsonValue;
 use slog::{Drain, Logger, o};
 
-use ferricel_core::compiler::Builder as CompilerBuilder;
-use ferricel_core::runtime;
-
-use ferricel_types::proto::Bindings as FerricelBindings;
-use ferricel_types::proto::cel::expr::Value as FerricelValue;
-use ferricel_types::proto::cel::expr::map_value::Entry as FerricelEntry;
-use ferricel_types::proto::cel::expr::value::Kind as FerricelKind;
-use ferricel_types::proto::cel::expr::{
-    ListValue as FerricelListValue, MapValue as FerricelMapValue,
+use super::{
+    proto_gen::{ExprValue, SimpleTest, SimpleTestFile, Value},
+    types::{SkipList, TestResult, TestStats},
 };
-use prost::Message;
-
-use super::proto_gen::{ExprValue, SimpleTest, SimpleTestFile, Value};
-use super::types::{SkipList, TestResult, TestStats};
 
 pub struct ConformanceTestRunner {
     pub skip_list: SkipList,

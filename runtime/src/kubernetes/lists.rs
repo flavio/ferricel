@@ -10,10 +10,13 @@
 //!
 //! Reference: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-list-library>
 
-use crate::error::{create_error_value, read_ptr};
-use crate::helpers::{cel_equals, cel_value_less_than};
-use crate::types::CelValue;
 use slog::error;
+
+use crate::{
+    error::{create_error_value, read_ptr},
+    helpers::{cel_equals, cel_value_less_than},
+    types::CelValue,
+};
 
 // ──────────────────────────────────────────────────────────────────────────────
 // isSorted
@@ -413,9 +416,12 @@ pub unsafe extern "C" fn cel_k8s_list_last_index_of(
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_helpers::{make_array, make_val, read_val};
-    use super::*;
     use rstest::rstest;
+
+    use super::{
+        super::test_helpers::{make_array, make_val, read_val},
+        *,
+    };
 
     // ── isSorted ────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
-use crate::common::*;
-
 use ferricel_core::compiler::Builder;
+
+use crate::common::*;
 
 #[test]
 fn test_compile_cel_to_wasm_returns_valid_bytes() {

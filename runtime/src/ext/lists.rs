@@ -10,9 +10,11 @@
 //! - `slice(start, end)` — sub-list by index range
 //! - `sort` — sort comparable elements
 
-use crate::error::read_ptr;
-use crate::helpers::{cel_equals, cel_value_less_than};
-use crate::types::CelValue;
+use crate::{
+    error::read_ptr,
+    helpers::{cel_equals, cel_value_less_than},
+    types::CelValue,
+};
 
 /// Joins a list of strings with no separator.
 ///
@@ -472,8 +474,9 @@ pub unsafe extern "C" fn cel_list_last(list_ptr: *mut CelValue) -> *mut CelValue
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     // ── join (no separator) ───────────────────────────────────────────────────
 

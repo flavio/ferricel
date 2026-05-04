@@ -1,8 +1,8 @@
 // Integration tests for the `in` operator (list membership and map key presence).
 
-use crate::common::*;
-
 use rstest::rstest;
+
+use crate::common::*;
 
 // ============================================================
 // `in` Operator Tests

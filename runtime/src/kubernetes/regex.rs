@@ -7,10 +7,13 @@
 //!
 //! Reference: <https://kubernetes.io/docs/reference/using-api/cel/#kubernetes-regex-library>
 
-use crate::error::{create_error_value, read_ptr};
-use crate::types::CelValue;
 use regex_lite::Regex;
 use slog::error;
+
+use crate::{
+    error::{create_error_value, read_ptr},
+    types::CelValue,
+};
 
 // ──────────────────────────────────────────────────────────────────────────────
 // find
@@ -154,9 +157,12 @@ pub unsafe extern "C" fn cel_k8s_regex_find_all_n(
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_helpers::{make_int, make_str, read_val};
-    use super::*;
     use rstest::rstest;
+
+    use super::{
+        super::test_helpers::{make_int, make_str, read_val},
+        *,
+    };
 
     // ── find ────────────────────────────────────────────────────────────────
 

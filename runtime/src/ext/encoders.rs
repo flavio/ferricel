@@ -2,10 +2,9 @@
 //!
 //! Implements `base64.encode(bytes) -> string` and `base64.decode(string) -> bytes`.
 
-use crate::error::read_ptr;
 use base64::{Engine as _, engine::general_purpose};
 
-use crate::types::CelValue;
+use crate::{error::read_ptr, types::CelValue};
 
 /// `base64.encode(b) -> string` — encodes bytes to a standard base64 string (with padding).
 ///

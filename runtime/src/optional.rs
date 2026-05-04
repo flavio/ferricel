@@ -14,9 +14,12 @@
 //!
 //! Reference: CEL spec optional types extension.
 
-use crate::error::{create_error_value, read_ptr};
-use crate::types::{CelMapKey, CelValue};
 use slog::error;
+
+use crate::{
+    error::{create_error_value, read_ptr},
+    types::{CelMapKey, CelValue},
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Zero-value test

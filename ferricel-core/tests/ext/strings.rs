@@ -1,5 +1,6 @@
-use crate::common::*;
 use rstest::rstest;
+
+use crate::common::*;
 
 #[rstest]
 #[case::basic(r#""hello".charAt(1)"#, "e")]

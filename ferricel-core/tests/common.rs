@@ -21,8 +21,7 @@
 //   extension_tests.rs     — Extension function registration and invocation
 //   kubernetes_tests.rs    — Kubernetes list extension tests
 
-use ferricel_core::compiler::Builder;
-use ferricel_core::runtime;
+use ferricel_core::{compiler::Builder, runtime};
 use ferricel_types::LogLevel;
 use slog::{Drain, Logger, o};
 

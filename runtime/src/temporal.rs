@@ -6,10 +6,13 @@
 //! - Timestamp accessors (getFullYear, getMonth, etc.)
 //! - Overflow checking for valid timestamp range
 
-use crate::error::{abort_with_error, read_ptr};
-use crate::helpers::cel_create_duration;
-use crate::types::CelValue;
 use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
+
+use crate::{
+    error::{abort_with_error, read_ptr},
+    helpers::cel_create_duration,
+    types::CelValue,
+};
 
 // Timestamp range constants (CEL spec)
 // Min: 0001-01-01T00:00:00Z
@@ -934,8 +937,10 @@ pub unsafe extern "C" fn cel_timestamp_get_milliseconds_tz(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::helpers::{cel_create_timestamp, extract_int};
-    use crate::string::cel_create_string;
+    use crate::{
+        helpers::{cel_create_timestamp, extract_int},
+        string::cel_create_string,
+    };
 
     /// Helper to create a CelValue::String from a Rust string
     fn create_string_value(s: &str) -> *mut CelValue {

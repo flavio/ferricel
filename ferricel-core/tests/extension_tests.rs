@@ -1,9 +1,9 @@
 // Integration tests for extension function registration and invocation.
 
-use crate::common::*;
-
 use ferricel_core::{compiler, runtime};
 use ferricel_types::extensions::ExtensionDecl;
+
+use crate::common::*;
 
 // ============================================================
 // Extension Function Tests

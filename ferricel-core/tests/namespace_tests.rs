@@ -5,11 +5,12 @@
 // A dotted expression `x.y` should first try to resolve as a qualified variable
 // named `"x.y"`, and only fall back to field access if that lookup misses.
 
-use crate::common::*;
 use ferricel_core::runtime;
 use ferricel_types::LogLevel;
 use rstest::rstest;
 use serde_json::json;
+
+use crate::common::*;
 
 #[rstest]
 // ── Qualified variable lookup (x.y resolves to binding "x.y") ───────────────

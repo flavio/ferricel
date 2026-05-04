@@ -3,10 +3,14 @@
 //! Provides functions for creating and populating map literals, and for
 //! iterating over maps (keys extraction, value lookup).
 
-use crate::error::abort_with_error;
-use crate::types::{CelMapKey, CelValue};
-use slog::{debug, error};
 use std::collections::HashMap;
+
+use slog::{debug, error};
+
+use crate::{
+    error::abort_with_error,
+    types::{CelMapKey, CelValue},
+};
 
 /// Create an empty CelValue map (Object).
 ///

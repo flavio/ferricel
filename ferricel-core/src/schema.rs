@@ -8,10 +8,11 @@
 //! - Unset wrapper field access: `TestAllTypes{}.single_bool_wrapper == null`
 //! - Any unpacking for equality: `Any{...} == Any{...}` compares decoded fields
 
+use std::collections::HashMap;
+
 use anyhow::{Context, Result};
 use prost::Message;
 use prost_types::{DescriptorProto, FileDescriptorSet};
-use std::collections::HashMap;
 
 /// The kind of a proto field, used to guide schema-aware wire comparison.
 #[derive(Debug, Clone, PartialEq)]

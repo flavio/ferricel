@@ -1,9 +1,9 @@
 // Integration tests for uint literals/arithmetic/comparisons, cross-type numeric equality
 // and ordering, string comparisons, boolean comparisons, and cross-type map/list equality.
 
-use crate::common::*;
-
 use rstest::rstest;
+
+use crate::common::*;
 
 // ============================================================
 // Uint, Cross-Type Numeric & Bool Comparison Tests

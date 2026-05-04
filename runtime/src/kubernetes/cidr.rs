@@ -18,10 +18,14 @@
 //!   - Leading zeros in IPv4 octets are NOT allowed.
 //!   - Host bits in the address part do NOT need to be zero (masked() zeroes them).
 
-use crate::error::{create_error_value, read_ptr};
-use crate::types::CelValue;
-use slog::error;
 use std::net::IpAddr;
+
+use slog::error;
+
+use crate::{
+    error::{create_error_value, read_ptr},
+    types::CelValue,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Validation / parsing helper
@@ -416,9 +420,12 @@ pub unsafe extern "C" fn cel_k8s_cidr_contains_cidr_obj(
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_helpers::{make_str, make_val, read_val};
-    use super::*;
     use rstest::rstest;
+
+    use super::{
+        super::test_helpers::{make_str, make_val, read_val},
+        *,
+    };
 
     unsafe fn make_cidr(s: &str) -> *mut CelValue {
         let str_ptr = make_str(s);

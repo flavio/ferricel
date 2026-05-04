@@ -1,13 +1,16 @@
 //! JSON and protobuf deserialization from Wasm memory into CelValue objects.
 //! Handles parsing bytes and allocating CelValue on the heap.
 
-use crate::error::abort_with_error;
-use crate::types::{CelMapKey, CelValue};
-use ferricel_types::proto::Bindings;
-use ferricel_types::proto::cel::expr::value::Kind;
+use std::collections::HashMap;
+
+use ferricel_types::proto::{Bindings, cel::expr::value::Kind};
 use prost::Message;
 use slog::{debug, error};
-use std::collections::HashMap;
+
+use crate::{
+    error::abort_with_error,
+    types::{CelMapKey, CelValue},
+};
 
 /// Decode i64 into (ptr, len) tuple.
 /// Low 32 bits = pointer, High 32 bits = length.

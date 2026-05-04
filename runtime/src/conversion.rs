@@ -2,10 +2,13 @@
 //! These functions extract values from CelValue pointers and panic on type mismatches.
 //! Also provides CEL type conversion functions (uint(), int(), double(), string(), timestamp(), duration()).
 
-use crate::error::{abort_with_error, read_ptr};
-use crate::helpers::cel_create_duration;
-use crate::types::CelValue;
 use slog::{debug, error};
+
+use crate::{
+    error::{abort_with_error, read_ptr},
+    helpers::cel_create_duration,
+    types::CelValue,
+};
 
 // ---------------------------------------------------------------------------
 // Non-consuming query: returns i64, borrows the pointer

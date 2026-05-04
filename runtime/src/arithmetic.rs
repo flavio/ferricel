@@ -59,8 +59,9 @@ pub(crate) fn double_div(a: f64, b: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[test]
     fn test_int_add_basic() {

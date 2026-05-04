@@ -1,8 +1,8 @@
 // Integration tests for string literals, operations, and built-in string functions.
 
-use crate::common::*;
-
 use rstest::rstest;
+
+use crate::common::*;
 
 // ============================================================
 // String Tests

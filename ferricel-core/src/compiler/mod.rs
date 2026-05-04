@@ -10,15 +10,12 @@ pub mod operators;
 use std::collections::HashMap;
 
 use anyhow::Context;
-use cel::common::ast::Expr;
-use cel::parser::Parser;
-use ferricel_types::{extensions::ExtensionDecl, functions::RuntimeFunction};
-use walrus::{FunctionBuilder, FunctionId, ModuleConfig, ValType};
-
-use context::{CompilerContext, CompilerEnv};
-
+use cel::{common::ast::Expr, parser::Parser};
 // Re-export the public API types
 pub use context::ExtensionKey;
+use context::{CompilerContext, CompilerEnv};
+use ferricel_types::{extensions::ExtensionDecl, functions::RuntimeFunction};
+use walrus::{FunctionBuilder, FunctionId, ModuleConfig, ValType};
 
 // Embed the runtime Wasm at compile time.
 // The build script (build.rs) copies the Wasm into OUT_DIR, resolving it from

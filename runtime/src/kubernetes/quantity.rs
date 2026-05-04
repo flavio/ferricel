@@ -44,9 +44,12 @@
 //!   - Trailing zeros are stripped.
 //!   - The suffix is chosen to keep the coefficient reasonably short.
 
-use crate::error::{create_error_value, read_ptr};
-use crate::types::CelValue;
 use slog::error;
+
+use crate::{
+    error::{create_error_value, read_ptr},
+    types::CelValue,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Format and amount types
@@ -943,9 +946,12 @@ pub(crate) unsafe fn cel_k8s_quantity_compare_to(
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_helpers::{make_int, make_str, read_val};
-    use super::*;
     use rstest::rstest;
+
+    use super::{
+        super::test_helpers::{make_int, make_str, read_val},
+        *,
+    };
 
     unsafe fn make_quantity(s: &str) -> *mut CelValue {
         let str_ptr = make_str(s);

@@ -2,10 +2,14 @@
 //! These are used internally by other runtime functions and exported for compiler use.
 //! Also includes polymorphic operators that dispatch to type-specific implementations.
 
-use crate::error::{abort_with_error, read_ptr};
-use crate::types::CelValue;
-use crate::{arithmetic, array, bytes, string, temporal};
 use slog::{debug, error};
+
+use crate::{
+    arithmetic, array, bytes,
+    error::{abort_with_error, read_ptr},
+    string, temporal,
+    types::CelValue,
+};
 
 /// Creates a CelValue::Int on the heap and returns a pointer to it.
 ///
@@ -994,8 +998,9 @@ fn index_value(log: &slog::Logger, container: CelValue, index: CelValue) -> CelV
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     fn extract_bool(ptr: *mut CelValue) -> bool {
         unsafe {

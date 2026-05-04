@@ -13,11 +13,15 @@
 //!   - `<URL>.getEscapedPath()` → string (percent-encoded)
 //!   - `<URL>.getQuery()`    → map\<string, list\<string\>>
 
-use crate::error::{create_error_value, read_ptr};
-use crate::types::{CelMapKey, CelValue};
-use slog::error;
 use std::collections::HashMap;
+
+use slog::error;
 use url::{Host, Url};
+
+use crate::{
+    error::{create_error_value, read_ptr},
+    types::{CelMapKey, CelValue},
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Validation helper
@@ -384,9 +388,12 @@ pub unsafe extern "C" fn cel_k8s_url_get_query(url_ptr: *mut CelValue) -> *mut C
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_helpers::{make_str, make_val, read_val};
-    use super::*;
     use rstest::rstest;
+
+    use super::{
+        super::test_helpers::{make_str, make_val, read_val},
+        *,
+    };
 
     unsafe fn make_url(s: &str) -> *mut CelValue {
         let str_ptr = make_str(s);

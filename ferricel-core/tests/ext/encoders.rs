@@ -1,5 +1,6 @@
-use crate::common::*;
 use rstest::rstest;
+
+use crate::common::*;
 
 #[rstest]
 #[case::hello(r#"base64.encode(b'hello')"#, "aGVsbG8=")]

@@ -1,7 +1,8 @@
 //! Integration tests for the Kubernetes CEL semver library.
 
-use crate::common::*;
 use rstest::rstest;
+
+use crate::common::*;
 
 // ── isSemver(string) ─────────────────────────────────────────────────────────
 

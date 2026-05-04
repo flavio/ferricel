@@ -11,9 +11,7 @@
 //!
 //! The algorithms mirror the Go reference implementation (O(n*m) linear scans).
 
-use crate::error::read_ptr;
-use crate::helpers::cel_equals;
-use crate::types::CelValue;
+use crate::{error::read_ptr, helpers::cel_equals, types::CelValue};
 
 /// Check whether every element of `sublist` exists somewhere in `list`.
 ///
@@ -131,8 +129,9 @@ fn sets_contains(list: &[CelValue], sublist: &[CelValue]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     // --- sets.contains ---
 

@@ -1,7 +1,5 @@
 // Build script for conformance tests - generates proto descriptor
-use std::env;
-use std::io::Result;
-use std::path::PathBuf;
+use std::{env, io::Result, path::PathBuf};
 
 fn main() -> Result<()> {
     // Configure prost to generate Rust code from CEL protobuf definitions

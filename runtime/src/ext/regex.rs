@@ -8,11 +8,13 @@
 //!
 //! Reference: <https://pkg.go.dev/github.com/google/cel-go/ext#Regex>
 
-use crate::error::read_ptr;
 use regex_lite::Regex;
 use slog::error;
 
-use crate::{error::create_error_value, types::CelValue};
+use crate::{
+    error::{create_error_value, read_ptr},
+    types::CelValue,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Replacement string conversion: CEL → regex_lite
@@ -375,8 +377,10 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::test_helpers::{make_int, make_str, none, read_val, some_str, strs};
-    use crate::types::CelValue;
+    use crate::{
+        test_helpers::{make_int, make_str, none, read_val, some_str, strs},
+        types::CelValue,
+    };
 
     // ── cel_replacement_to_regex_lite ────────────────────────────────────────
 

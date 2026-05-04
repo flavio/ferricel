@@ -4,8 +4,9 @@
 //! any user-provided bindings (e.g., `object`, `oldObject`, `request` for K8s,
 //! or custom variables for general CEL expressions).
 
-use crate::types::{CelMapKey, CelValue};
 use std::ptr;
+
+use crate::types::{CelMapKey, CelValue};
 
 /// Global storage for all variable bindings as a Map
 /// Initialized by validate() before expression evaluation

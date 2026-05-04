@@ -277,8 +277,7 @@ pub fn compile_struct(
         // so the runtime can do schema-aware wire comparison of Any.value bytes.
         if resolved_type_name == "google.protobuf.Any" {
             // Try to find a literal type_url in the struct entries at compile time
-            use cel::common::ast::EntryExpr as EE;
-            use cel::common::ast::LiteralValue;
+            use cel::common::ast::{EntryExpr as EE, LiteralValue};
             let maybe_type_url: Option<String> = struct_expr.entries.iter().find_map(|e| {
                 if let EE::StructField(sf) = &e.expr
                     && sf.field == "type_url"

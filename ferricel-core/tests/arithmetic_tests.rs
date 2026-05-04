@@ -1,7 +1,8 @@
 // Integration tests for integer arithmetic and comparison operators.
 
-use crate::common::*;
 use rstest::rstest;
+
+use crate::common::*;
 
 // ============================================================
 // Literal Integer Tests

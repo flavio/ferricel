@@ -16,9 +16,12 @@
 //!   ... body using var1, var2 ...
 //! ```
 
-use crate::error::abort_with_error;
-use crate::types::{CelMapKey, CelValue};
 use slog::error;
+
+use crate::{
+    error::abort_with_error,
+    types::{CelMapKey, CelValue},
+};
 
 /// Prepare a range value for two-variable comprehension iteration.
 ///
@@ -220,9 +223,10 @@ pub unsafe extern "C" fn cel_cond_inc(
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
     use crate::test_helpers::{make_int, make_val, read_val};
-    use rstest::rstest;
 
     // Helper: build a map CelValue pointer with given string→int entries
     fn make_map(entries: Vec<(&str, i64)>) -> *mut CelValue {
