@@ -711,6 +711,8 @@ dependencies = [
  "predicates",
  "prost",
  "prost-types",
+ "rstest",
+ "serde_json",
  "slog",
  "slog-term",
  "tempfile",

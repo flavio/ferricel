@@ -7,12 +7,16 @@ use prost::Message;
 use prost_types::FileDescriptorSet;
 use slog::{Drain, Logger, o};
 
+use crate::cmd::extensions::resolve_extensions;
+
 pub fn run(
     expression: Option<String>,
     expression_file: Option<PathBuf>,
     output_path: &Path,
     proto_descriptors: Vec<PathBuf>,
     container: Option<String>,
+    extensions_specs: Vec<String>,
+    extensions_file: Option<PathBuf>,
 ) -> Result<(), anyhow::Error> {
     // Determine CEL source - clap ensures exactly one is Some
     let cel_code = match (expression, expression_file) {
@@ -56,6 +60,9 @@ pub fn run(
         Some(buffer)
     };
 
+    // Resolve extension declarations from --extensions specs or --extensions-file
+    let extension_decls = resolve_extensions(extensions_specs, extensions_file.as_deref())?;
+
     // Create a logger to stderr for compilation warnings
     let decorator = slog_term::PlainSyncDecorator::new(std::io::stderr());
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
@@ -68,6 +75,9 @@ pub fn run(
     }
     if let Some(c) = container {
         builder = builder.with_container(c);
+    }
+    for decl in extension_decls {
+        builder = builder.with_extension(decl);
     }
     let compiler = builder.build();
 

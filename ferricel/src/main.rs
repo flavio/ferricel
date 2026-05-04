@@ -13,12 +13,16 @@ fn main() -> Result<(), anyhow::Error> {
             output,
             proto_descriptors,
             container,
+            extensions,
+            extensions_file,
         } => cmd::build::run(
             expression,
             expression_file,
             &output,
             proto_descriptors,
             container,
+            extensions,
+            extensions_file,
         ),
         cli::Commands::Run {
             wasm,

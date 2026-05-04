@@ -386,8 +386,48 @@ fn test_run_invalid_json_in_file() {
 }
 
 // ============================================================================
-// PROTO DESCRIPTOR TESTS - WARNINGS
+// EXTENSION DECLARATION TESTS
 // ============================================================================
+// Note: parsing and file-loading logic is unit-tested in src/cmd/extensions.rs.
+// Only CLI-level concerns (clap mutual exclusivity, full build→run pipeline)
+// belong here.
+
+#[test]
+fn test_build_extensions_and_extensions_file_are_mutually_exclusive() {
+    let ext_file = create_json_file(r#"[]"#);
+    let output_file = NamedTempFile::new().unwrap();
+
+    ferricel()
+        .args(["build", "-e", "abs(x)", "-o"])
+        .arg(output_file.path())
+        .args(["--extensions", "abs:global:1"])
+        .arg("--extensions-file")
+        .arg(ext_file.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn test_run_with_extension_produces_runtime_error_when_not_implemented() {
+    // Build a Wasm that calls an extension, then run it without an implementation.
+    // The runtime returns a CEL-level error encoded in the result JSON.
+    let wasm_file = NamedTempFile::new().unwrap();
+    ferricel()
+        .args(["build", "-e", "abs(x)", "-o"])
+        .arg(wasm_file.path())
+        .args(["--extensions", "abs:global:1"])
+        .assert()
+        .success();
+
+    ferricel()
+        .args(["run"])
+        .arg(wasm_file.path())
+        .args(["--bindings-json", r#"{"x": -5}"#])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Extension not found"));
+}
 
 #[test]
 fn test_build_no_warning_without_structs_no_proto() {

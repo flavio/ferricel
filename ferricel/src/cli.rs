@@ -64,6 +64,86 @@ pub enum Commands {
         /// Example: "google.protobuf" allows using "Timestamp" instead of "google.protobuf.Timestamp"
         #[arg(long)]
         container: Option<String>,
+
+        /// Declare host extension functions (can be specified multiple times).
+        /// Mutually exclusive with --extensions-file.
+        ///
+        /// Format: [namespace.]function:style:arity
+        ///
+        ///   namespace   Optional dot-separated namespace prefix. Everything before
+        ///               the last dot is the namespace; the last segment is the
+        ///               function name.
+        ///
+        ///   style       One of:
+        ///                 global   - callable as func(args) or ns.func(args)
+        ///                 receiver - callable as value.func(extra_args)
+        ///                            (receiver is always args[0])
+        ///                 both     - supports both calling conventions
+        ///
+        ///   arity       Total number of arguments the host receives, including
+        ///               the receiver for receiver-style calls.
+        ///
+        /// Examples:
+        ///   --extensions abs:global:1
+        ///       Adds a global function abs(x) with 1 argument.
+        ///
+        ///   --extensions math.sqrt:global:1
+        ///       Adds math.sqrt(x) — namespace "math", function "sqrt", 1 arg.
+        ///
+        ///   --extensions math.pow:global:2
+        ///       Adds math.pow(base, exp) — 2 args.
+        ///
+        ///   --extensions reverse:receiver:1
+        ///       Adds x.reverse() — receiver-style, receiver counts as the 1 arg.
+        ///
+        ///   --extensions greet:both:2
+        ///       Adds greet(name, lang) and name.greet(lang) — both styles, 2 args.
+        ///
+        /// Note: the host is responsible for providing implementations at evaluation
+        /// time. Extensions declared here but not implemented by the host will produce
+        /// a runtime error when the expression is evaluated.
+        #[arg(
+            long = "extensions",
+            conflicts_with = "extensions_file",
+            value_name = "SPEC"
+        )]
+        extensions: Vec<String>,
+
+        /// Path to a JSON file declaring host extension functions.
+        /// Mutually exclusive with --extensions.
+        ///
+        /// The file must contain a JSON array of extension declaration objects.
+        /// Each object has the following fields:
+        ///
+        ///   namespace      (string | null)  Optional namespace prefix,
+        ///                                   e.g. "math" for math.abs().
+        ///   function       (string)         Function name, e.g. "abs".
+        ///   global_style   (bool)           True if callable as func(args)
+        ///                                   or ns.func(args).
+        ///   receiver_style (bool)           True if callable as value.func(args).
+        ///                                   Receiver is always args[0].
+        ///   num_args       (number)         Total argument count including
+        ///                                   receiver for receiver-style calls.
+        ///
+        /// Example file contents:
+        ///   [
+        ///     { "namespace": "math", "function": "sqrt",
+        ///       "global_style": true, "receiver_style": false, "num_args": 1 },
+        ///     { "namespace": null,   "function": "reverse",
+        ///       "global_style": false, "receiver_style": true, "num_args": 1 },
+        ///     { "namespace": null,   "function": "greet",
+        ///       "global_style": true, "receiver_style": true, "num_args": 2 }
+        ///   ]
+        ///
+        /// Note: the host is responsible for providing implementations at evaluation
+        /// time. Extensions declared here but not implemented by the host will produce
+        /// a runtime error when the expression is evaluated.
+        #[arg(
+            long = "extensions-file",
+            conflicts_with = "extensions",
+            value_name = "PATH"
+        )]
+        extensions_file: Option<PathBuf>,
     },
     /// Run a compiled WebAssembly module
     Run {

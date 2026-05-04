@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// - Whether it can be called as `x.func()` (receiver-style)
 /// - Whether it can be called as `func(x)` or `ns.func(x)` (global-style)
 /// - How many total arguments (including receiver if receiver-style) it expects
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionDecl {
     /// Namespace prefix, e.g. `Some("math")` for `math.abs()`. `None` for flat names.
     pub namespace: Option<String>,
