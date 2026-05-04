@@ -1,26 +1,8 @@
 //! Chrono helper functions for duration and timestamp conversions.
 //! Provides wrappers around chrono types for FFI boundary and parsing/formatting.
 
-use chrono::{DateTime, Datelike, Duration, FixedOffset, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Duration, FixedOffset};
 use chrono_tz::Tz;
-
-/// Convert (seconds, nanos) to chrono::DateTime<FixedOffset>
-///
-/// # Parameters
-/// - `seconds`: Unix timestamp seconds
-/// - `nanos`: Nanoseconds component
-///
-/// # Returns
-/// chrono::DateTime with UTC timezone (converted to FixedOffset)
-///
-/// # Panics
-/// If timestamp is out of range for chrono
-pub fn parts_to_datetime(seconds: i64, nanos: i64) -> DateTime<FixedOffset> {
-    Utc.timestamp_opt(seconds, nanos as u32)
-        .single()
-        .expect("Invalid timestamp")
-        .into()
-}
 
 /// Convert (seconds, nanos) to chrono::Duration
 ///

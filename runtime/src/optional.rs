@@ -477,11 +477,17 @@ mod tests {
     #[case::array_empty(CelValue::Array(vec![]), true)]
     #[case::array_nonempty(CelValue::Array(vec![CelValue::Int(1)]), false)]
     #[case::timestamp_epoch(
-        CelValue::Timestamp(crate::chrono_helpers::parts_to_datetime(0, 0)),
+        CelValue::Timestamp({
+            use chrono::{TimeZone, Utc};
+            Utc.timestamp_opt(0, 0).single().expect("Invalid timestamp").into()
+        }),
         true
     )]
     #[case::timestamp_nonzero(
-        CelValue::Timestamp(crate::chrono_helpers::parts_to_datetime(1, 0)),
+        CelValue::Timestamp({
+            use chrono::{TimeZone, Utc};
+            Utc.timestamp_opt(1, 0).single().expect("Invalid timestamp").into()
+        }),
         false
     )]
     #[case::duration_zero(CelValue::Duration(chrono::Duration::zero()), true)]

@@ -102,17 +102,6 @@ pub unsafe extern "C" fn cel_unbound_variable_error(
     }
 }
 
-/// Reset global variables to null.
-///
-/// # Safety
-/// - Safe to call at any time
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_reset_globals() {
-    unsafe {
-        BINDINGS = ptr::null_mut();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,24 +154,6 @@ mod tests {
             let name = b"x";
             let var_ptr = cel_get_variable(name.as_ptr(), name.len() as i32);
             assert!(var_ptr.is_null());
-        }
-    }
-
-    #[test]
-    fn test_reset_globals() {
-        let map = std::collections::HashMap::new();
-        let bindings = Box::new(CelValue::Object(map));
-        let ptr = Box::into_raw(bindings);
-
-        unsafe {
-            cel_init_bindings(ptr);
-            assert!(!BINDINGS.is_null());
-
-            cel_reset_globals();
-            assert!(BINDINGS.is_null());
-
-            // Cleanup
-            let _boxed = Box::from_raw(ptr);
         }
     }
 }

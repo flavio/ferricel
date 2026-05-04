@@ -56,21 +56,6 @@ pub unsafe extern "C" fn cel_create_double(value: f64) -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::Double(value)))
 }
 
-/// Creates a CelValue::Timestamp on the heap and returns a pointer to it.
-///
-/// # Arguments
-/// * `seconds` - Seconds since Unix epoch (1970-01-01T00:00:00Z)
-/// * `nanos` - Nanoseconds component (0-999,999,999)
-///
-/// # Safety
-///
-/// This function is unsafe because it returns a raw pointer. The caller must ensure:
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_create_timestamp(seconds: i64, nanos: i64) -> *mut CelValue {
-    let dt = crate::chrono_helpers::parts_to_datetime(seconds, nanos);
-    Box::into_raw(Box::new(CelValue::Timestamp(dt)))
-}
-
 /// Creates a CelValue::Duration on the heap and returns a pointer to it.
 ///
 /// # Arguments
@@ -1132,15 +1117,21 @@ mod tests {
         CelValue::Array(vec![CelValue::Int(2)]),
         CelValue::Array(vec![CelValue::Int(1), CelValue::Bool(true), CelValue::Int(2)])
     )]
+    #[case::bytes_basic(
+        CelValue::Bytes(vec![1, 2]),
+        CelValue::Bytes(vec![3, 4]),
+        CelValue::Bytes(vec![1, 2, 3, 4])
+    )]
+    #[case::bytes_empty_first(CelValue::Bytes(vec![]), CelValue::Bytes(vec![1, 2]), CelValue::Bytes(vec![1, 2]))]
+    #[case::bytes_both_empty(CelValue::Bytes(vec![]), CelValue::Bytes(vec![]), CelValue::Bytes(vec![]))]
     fn test_value_add(#[case] a: CelValue, #[case] b: CelValue, #[case] expected: CelValue) {
-        let a_ptr = Box::into_raw(Box::new(a));
-        let b_ptr = Box::into_raw(Box::new(b));
-
         unsafe {
+            let a_ptr = Box::into_raw(Box::new(a));
+            let b_ptr = Box::into_raw(Box::new(b));
             let result_ptr = cel_value_add(a_ptr, b_ptr);
-            let result = &*result_ptr;
-
-            assert_eq!(result, &expected);
+            assert_eq!(&*result_ptr, &expected);
+            // a_ptr and b_ptr are consumed by read_ptr inside cel_value_add
+            drop(Box::from_raw(result_ptr));
         }
     }
 
@@ -1180,19 +1171,22 @@ mod tests {
     )]
     #[case::uint_uint_equal(CelValue::UInt(100), CelValue::UInt(100), CelValue::Bool(true))]
     #[case::uint_uint_different(CelValue::UInt(100), CelValue::UInt(200), CelValue::Bool(false))]
+    #[case::bytes_equal(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(true))]
+    #[case::bytes_not_equal(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 4]), CelValue::Bool(false))]
+    #[case::bytes_different_length(CelValue::Bytes(vec![1, 2]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(false))]
+    #[case::bytes_empty_equal(CelValue::Bytes(vec![]), CelValue::Bytes(vec![]), CelValue::Bool(true))]
     fn test_cross_type_equality(
         #[case] a: CelValue,
         #[case] b: CelValue,
         #[case] expected: CelValue,
     ) {
-        let a_ptr = Box::into_raw(Box::new(a));
-        let b_ptr = Box::into_raw(Box::new(b));
-
         unsafe {
+            let a_ptr = Box::into_raw(Box::new(a));
+            let b_ptr = Box::into_raw(Box::new(b));
             let result_ptr = cel_value_eq(a_ptr, b_ptr);
-            let result = &*result_ptr;
-
-            assert_eq!(result, &expected);
+            assert_eq!(&*result_ptr, &expected);
+            // a_ptr and b_ptr are consumed by read_ptr inside cel_value_eq
+            drop(Box::from_raw(result_ptr));
         }
     }
 
@@ -1206,19 +1200,22 @@ mod tests {
     #[case::uint_lt_double(CelValue::UInt(5), CelValue::Double(10.0), CelValue::Bool(true))]
     #[case::uint_gt_double(CelValue::UInt(100), CelValue::Double(50.0), CelValue::Bool(false))]
     #[case::uint_lt_uint(CelValue::UInt(50), CelValue::UInt(100), CelValue::Bool(true))]
+    #[case::bytes_less(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 4]), CelValue::Bool(true))]
+    #[case::bytes_greater(CelValue::Bytes(vec![1, 2, 4]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(false))]
+    #[case::bytes_equal(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(false))]
+    #[case::bytes_prefix(CelValue::Bytes(vec![1, 2]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(true))]
     fn test_cross_type_less_than(
         #[case] a: CelValue,
         #[case] b: CelValue,
         #[case] expected: CelValue,
     ) {
-        let a_ptr = Box::into_raw(Box::new(a));
-        let b_ptr = Box::into_raw(Box::new(b));
-
         unsafe {
+            let a_ptr = Box::into_raw(Box::new(a));
+            let b_ptr = Box::into_raw(Box::new(b));
             let result_ptr = cel_value_lt(a_ptr, b_ptr);
-            let result = &*result_ptr;
-
-            assert_eq!(result, &expected);
+            assert_eq!(&*result_ptr, &expected);
+            // a_ptr and b_ptr are consumed by read_ptr inside cel_value_lt
+            drop(Box::from_raw(result_ptr));
         }
     }
 
@@ -1230,19 +1227,65 @@ mod tests {
     #[case::uint_gt_double(CelValue::UInt(100), CelValue::Double(50.0), CelValue::Bool(true))]
     #[case::uint_lt_double(CelValue::UInt(5), CelValue::Double(10.0), CelValue::Bool(false))]
     #[case::uint_gt_uint(CelValue::UInt(100), CelValue::UInt(50), CelValue::Bool(true))]
+    #[case::bytes_greater(CelValue::Bytes(vec![1, 2, 4]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(true))]
+    #[case::bytes_less(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 4]), CelValue::Bool(false))]
+    #[case::bytes_equal(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(false))]
     fn test_cross_type_greater_than(
         #[case] a: CelValue,
         #[case] b: CelValue,
         #[case] expected: CelValue,
     ) {
-        let a_ptr = Box::into_raw(Box::new(a));
-        let b_ptr = Box::into_raw(Box::new(b));
-
         unsafe {
+            let a_ptr = Box::into_raw(Box::new(a));
+            let b_ptr = Box::into_raw(Box::new(b));
             let result_ptr = cel_value_gt(a_ptr, b_ptr);
-            let result = &*result_ptr;
+            assert_eq!(&*result_ptr, &expected);
+            // a_ptr and b_ptr are consumed by read_ptr inside cel_value_gt
+            drop(Box::from_raw(result_ptr));
+        }
+    }
 
-            assert_eq!(result, &expected);
+    #[rstest]
+    #[case::bytes_not_equal(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 4]), CelValue::Bool(true))]
+    #[case::bytes_equal(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(false))]
+    fn test_bytes_ne(#[case] a: CelValue, #[case] b: CelValue, #[case] expected: CelValue) {
+        unsafe {
+            let a_ptr = Box::into_raw(Box::new(a));
+            let b_ptr = Box::into_raw(Box::new(b));
+            let result_ptr = cel_value_ne(a_ptr, b_ptr);
+            assert_eq!(&*result_ptr, &expected);
+            // a_ptr and b_ptr are consumed by read_ptr inside cel_value_ne
+            drop(Box::from_raw(result_ptr));
+        }
+    }
+
+    #[rstest]
+    #[case::bytes_less(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 4]), CelValue::Bool(true))]
+    #[case::bytes_equal(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(true))]
+    #[case::bytes_greater(CelValue::Bytes(vec![1, 2, 4]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(false))]
+    fn test_bytes_lte(#[case] a: CelValue, #[case] b: CelValue, #[case] expected: CelValue) {
+        unsafe {
+            let a_ptr = Box::into_raw(Box::new(a));
+            let b_ptr = Box::into_raw(Box::new(b));
+            let result_ptr = cel_value_lte(a_ptr, b_ptr);
+            assert_eq!(&*result_ptr, &expected);
+            // a_ptr and b_ptr are consumed by read_ptr inside cel_value_lte
+            drop(Box::from_raw(result_ptr));
+        }
+    }
+
+    #[rstest]
+    #[case::bytes_greater(CelValue::Bytes(vec![1, 2, 4]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(true))]
+    #[case::bytes_equal(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 3]), CelValue::Bool(true))]
+    #[case::bytes_less(CelValue::Bytes(vec![1, 2, 3]), CelValue::Bytes(vec![1, 2, 4]), CelValue::Bool(false))]
+    fn test_bytes_gte(#[case] a: CelValue, #[case] b: CelValue, #[case] expected: CelValue) {
+        unsafe {
+            let a_ptr = Box::into_raw(Box::new(a));
+            let b_ptr = Box::into_raw(Box::new(b));
+            let result_ptr = cel_value_gte(a_ptr, b_ptr);
+            assert_eq!(&*result_ptr, &expected);
+            // a_ptr and b_ptr are consumed by read_ptr inside cel_value_gte
+            drop(Box::from_raw(result_ptr));
         }
     }
 }

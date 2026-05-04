@@ -29,32 +29,6 @@ fn serialize_to_json(value: &CelValue) -> i64 {
     encode_ptr_len(ptr as i32, len as i32)
 }
 
-/// Convert i64 result to CelValue::Int and serialize to JSON.
-/// Returns encoded (ptr, len) as i64.
-///
-/// # Safety
-///
-/// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64.
-/// The returned bytes are valid for the lifetime of the Wasm instance.
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_serialize_int(value: i64) -> i64 {
-    let cel_value = CelValue::Int(value);
-    serialize_to_json(&cel_value)
-}
-
-/// Convert i64 boolean (0 or 1) to CelValue::Bool and serialize to JSON.
-/// Returns encoded (ptr, len) as i64.
-///
-/// # Safety
-///
-/// This function is unsafe because it allocates memory and returns a raw pointer encoded in i64.
-/// The returned bytes are valid for the lifetime of the Wasm instance.
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_serialize_bool(value: i64) -> i64 {
-    let cel_value = CelValue::Bool(value != 0);
-    serialize_to_json(&cel_value)
-}
-
 /// Serialize a `CelValue` pointer to JSON, aborting if the value is an error.
 ///
 /// If the value is `CelValue::Error`, calls `abort_with_error` which triggers the host's
