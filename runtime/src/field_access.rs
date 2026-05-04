@@ -99,7 +99,7 @@ pub unsafe extern "C" fn cel_get_field(
             let key = CelMapKey::String(field_name.clone());
             match map.get(&key) {
                 Some(value) => {
-                    info!(log, "Field found"; "field" => field_name.as_str());
+                    debug!(log, "Field found"; "field" => field_name.as_str());
                     // Clone the value and return a new boxed pointer
                     let boxed_value = Box::new(value.clone());
                     Box::into_raw(boxed_value)

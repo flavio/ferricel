@@ -11,7 +11,7 @@
 use crate::error::{abort_with_error, read_ptr};
 use crate::helpers::cel_equals;
 use crate::types::CelValue;
-use slog::{debug, error, info};
+use slog::{debug, error};
 
 /// Check if an element exists in a container (list or map).
 ///
@@ -63,7 +63,7 @@ fn value_in(element: CelValue, container: CelValue) -> CelValue {
             debug!(log, "Checking list membership"; "list_size" => arr.len());
             // Linear search through array using CEL equality (supports cross-type numeric equality)
             let found = arr.iter().any(|item| cel_equals(item, &element));
-            info!(log, "List membership check complete"; "found" => found);
+            debug!(log, "List membership check complete"; "found" => found);
             CelValue::Bool(found)
         }
 
@@ -78,7 +78,7 @@ fn value_in(element: CelValue, container: CelValue) -> CelValue {
                         "key" => key.to_string_key(),
                         "map_size" => map.len());
                     let found = map.contains_key(&key);
-                    info!(log, "Map membership check complete"; "found" => found);
+                    debug!(log, "Map membership check complete"; "found" => found);
                     CelValue::Bool(found)
                 }
                 None => {

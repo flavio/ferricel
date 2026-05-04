@@ -6,7 +6,7 @@ use crate::types::{CelMapKey, CelValue};
 use ferricel_types::proto::Bindings;
 use ferricel_types::proto::cel::expr::value::Kind;
 use prost::Message;
-use slog::{error, info};
+use slog::{debug, error};
 use std::collections::HashMap;
 
 /// Decode i64 into (ptr, len) tuple.
@@ -39,7 +39,7 @@ pub unsafe extern "C" fn cel_deserialize_json(encoded: i64) -> *mut CelValue {
 
     // Handle null/absent input
     if encoded == 0 {
-        info!(log, "Deserializing null input");
+        debug!(log, "Deserializing null input");
         return core::ptr::null_mut();
     }
 
@@ -54,7 +54,7 @@ pub unsafe extern "C" fn cel_deserialize_json(encoded: i64) -> *mut CelValue {
         abort_with_error("no such overload");
     }
 
-    info!(log, "Deserializing JSON input";
+    debug!(log, "Deserializing JSON input";
         "ptr" => ptr,
         "len" => len);
 
@@ -108,7 +108,7 @@ pub unsafe extern "C" fn cel_deserialize_proto(encoded: i64) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
     if encoded == 0 {
-        info!(log, "Deserializing null proto input");
+        debug!(log, "Deserializing null proto input");
         return core::ptr::null_mut();
     }
 
@@ -121,7 +121,7 @@ pub unsafe extern "C" fn cel_deserialize_proto(encoded: i64) -> *mut CelValue {
         abort_with_error("no such overload");
     }
 
-    info!(log, "Deserializing proto input";
+    debug!(log, "Deserializing proto input";
         "ptr" => ptr,
         "len" => len);
 
