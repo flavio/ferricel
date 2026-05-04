@@ -2,7 +2,7 @@ use cel::common::ast::{CallExpr, operators};
 use ferricel_types::functions::RuntimeFunction;
 use walrus::{InstrSeqBuilder, ValType};
 
-use super::{
+use crate::compiler::{
     context::{CompilerContext, CompilerEnv},
     expr::compile_expr,
     helpers,

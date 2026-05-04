@@ -93,7 +93,6 @@ pub unsafe fn cel_bytes_size(bytes_ptr: *const CelValue) -> i64 {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use rstest::rstest;

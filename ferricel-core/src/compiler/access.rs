@@ -2,7 +2,7 @@ use cel::common::ast::Expr;
 use ferricel_types::functions::RuntimeFunction;
 use walrus::{InstrSeqBuilder, ValType};
 
-use super::{
+use crate::compiler::{
     context::{CompilerContext, CompilerEnv},
     helpers::{emit_string_const, get_memory_id},
 };

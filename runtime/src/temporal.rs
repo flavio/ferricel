@@ -9,7 +9,6 @@
 use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
 
 use crate::{
-    chrono_helpers::parts_to_duration,
     error::{abort_with_error, read_ptr},
     types::CelValue,
 };
@@ -755,8 +754,7 @@ pub unsafe extern "C" fn cel_timestamp_get_milliseconds_tz(
 mod tests {
     use super::*;
     use crate::{
-        helpers::extract_int,
-        string::cel_create_string,
+        chrono_helpers::parts_to_duration, helpers::extract_int, string::cel_create_string,
     };
 
     /// Helper to create a chrono::DateTime<FixedOffset> from unix seconds + nanos
@@ -778,7 +776,8 @@ mod tests {
     fn test_get_full_year_utc_default() {
         unsafe {
             // 2023-05-28T15:30:00Z
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let result_ptr = cel_timestamp_get_full_year(ts_ptr);
             let year = extract_int(result_ptr);
             assert_eq!(year, 2023);
@@ -791,7 +790,8 @@ mod tests {
     fn test_get_full_year_with_utc_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let tz_ptr = create_string_value("UTC");
             let result_ptr = cel_timestamp_get_full_year_tz(ts_ptr, tz_ptr);
             let year = extract_int(result_ptr);
@@ -805,7 +805,8 @@ mod tests {
     fn test_get_full_year_with_iana_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z -> 2023-05-28T08:30:00 in America/Los_Angeles (PDT, UTC-7)
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let tz_ptr = create_string_value("America/Los_Angeles");
             let result_ptr = cel_timestamp_get_full_year_tz(ts_ptr, tz_ptr);
             let year = extract_int(result_ptr);
@@ -818,7 +819,8 @@ mod tests {
     fn test_get_full_year_with_fixed_offset_positive() {
         unsafe {
             // 2023-05-28T15:30:00Z -> 2023-05-29T01:00:00 in +09:30
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let tz_ptr = create_string_value("+09:30");
             let result_ptr = cel_timestamp_get_full_year_tz(ts_ptr, tz_ptr);
             let year = extract_int(result_ptr);
@@ -831,7 +833,8 @@ mod tests {
     fn test_get_full_year_with_fixed_offset_negative() {
         unsafe {
             // 2023-05-28T15:30:00Z -> 2023-05-28T08:00:00 in -07:30
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let tz_ptr = create_string_value("-07:30");
             let result_ptr = cel_timestamp_get_full_year_tz(ts_ptr, tz_ptr);
             let year = extract_int(result_ptr);
@@ -844,7 +847,8 @@ mod tests {
     fn test_get_month_utc_default() {
         unsafe {
             // 2023-05-28T15:30:00Z (May is month 4 in CEL, 0-indexed)
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let result_ptr = cel_timestamp_get_month(ts_ptr);
             let month = extract_int(result_ptr);
             assert_eq!(month, 4); // CEL uses 0-based months
@@ -856,7 +860,8 @@ mod tests {
     fn test_get_month_with_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z -> 2023-05-28T08:30:00 in America/Los_Angeles
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let tz_ptr = create_string_value("America/Los_Angeles");
             let result_ptr = cel_timestamp_get_month_tz(ts_ptr, tz_ptr);
             let month = extract_int(result_ptr);
@@ -869,14 +874,16 @@ mod tests {
     fn test_get_hours_utc_vs_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z UTC: 15:30
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let utc_result = cel_timestamp_get_hours(ts_ptr);
             let utc_hours = extract_int(utc_result);
             assert_eq!(utc_hours, 15);
             drop(Box::from_raw(utc_result));
 
             // Los Angeles: 08:30 (PDT is UTC-7)
-            let ts_ptr2 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr2 =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let la_tz_ptr = create_string_value("America/Los_Angeles");
             let la_result = cel_timestamp_get_hours_tz(ts_ptr2, la_tz_ptr);
             let la_hours = extract_int(la_result);
@@ -884,7 +891,8 @@ mod tests {
             drop(Box::from_raw(la_result));
 
             // +09:00: 00:30 next day
-            let ts_ptr3 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr3 =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let tokyo_tz_ptr = create_string_value("+09:00");
             let tokyo_result = cel_timestamp_get_hours_tz(ts_ptr3, tokyo_tz_ptr);
             let tokyo_hours = extract_int(tokyo_result);
@@ -897,7 +905,8 @@ mod tests {
     fn test_get_minutes_with_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let tz_ptr = create_string_value("America/Los_Angeles");
             let result_ptr = cel_timestamp_get_minutes_tz(ts_ptr, tz_ptr);
             let minutes = extract_int(result_ptr);
@@ -910,14 +919,16 @@ mod tests {
     fn test_get_day_of_week_with_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z is Sunday (0) in UTC
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let utc_result = cel_timestamp_get_day_of_week(ts_ptr);
             let utc_dow = extract_int(utc_result);
             assert_eq!(utc_dow, 0); // Sunday
             drop(Box::from_raw(utc_result));
 
             // Same in LA timezone (still Sunday)
-            let ts_ptr2 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr2 =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let la_tz_ptr = create_string_value("America/Los_Angeles");
             let la_result = cel_timestamp_get_day_of_week_tz(ts_ptr2, la_tz_ptr);
             let la_dow = extract_int(la_result);
@@ -930,14 +941,16 @@ mod tests {
     fn test_get_date_with_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z UTC: day 28
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let utc_result = cel_timestamp_get_date(ts_ptr);
             let utc_day = extract_int(utc_result);
             assert_eq!(utc_day, 28);
             drop(Box::from_raw(utc_result));
 
             // LA timezone: still day 28
-            let ts_ptr2 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr2 =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let la_tz_ptr = create_string_value("America/Los_Angeles");
             let la_result = cel_timestamp_get_date_tz(ts_ptr2, la_tz_ptr);
             let la_day = extract_int(la_result);
@@ -945,7 +958,8 @@ mod tests {
             drop(Box::from_raw(la_result));
 
             // +09:00: day 29 (crosses midnight)
-            let ts_ptr3 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr3 =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let tokyo_tz_ptr = create_string_value("+09:00");
             let tokyo_result = cel_timestamp_get_date_tz(ts_ptr3, tokyo_tz_ptr);
             let tokyo_day = extract_int(tokyo_result);
@@ -958,27 +972,39 @@ mod tests {
     fn test_get_seconds_and_milliseconds() {
         unsafe {
             // 2023-05-28T15:30:45.123Z
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287845, 123_000_000))));
+            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(
+                1685287845,
+                123_000_000,
+            ))));
             let seconds_result = cel_timestamp_get_seconds(ts_ptr);
             let seconds = extract_int(seconds_result);
             assert_eq!(seconds, 45);
             drop(Box::from_raw(seconds_result));
 
-            let ts_ptr2 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287845, 123_000_000))));
+            let ts_ptr2 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(
+                1685287845,
+                123_000_000,
+            ))));
             let millis_result = cel_timestamp_get_milliseconds(ts_ptr2);
             let millis = extract_int(millis_result);
             assert_eq!(millis, 123);
             drop(Box::from_raw(millis_result));
 
             // Same with timezone
-            let ts_ptr3 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287845, 123_000_000))));
+            let ts_ptr3 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(
+                1685287845,
+                123_000_000,
+            ))));
             let tz_ptr = create_string_value("UTC");
             let tz_seconds_result = cel_timestamp_get_seconds_tz(ts_ptr3, tz_ptr);
             let tz_seconds = extract_int(tz_seconds_result);
             assert_eq!(tz_seconds, 45);
             drop(Box::from_raw(tz_seconds_result));
 
-            let ts_ptr4 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287845, 123_000_000))));
+            let ts_ptr4 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(
+                1685287845,
+                123_000_000,
+            ))));
             let tz_ptr2 = create_string_value("UTC");
             let tz_millis_result = cel_timestamp_get_milliseconds_tz(ts_ptr4, tz_ptr2);
             let tz_millis = extract_int(tz_millis_result);
@@ -991,13 +1017,15 @@ mod tests {
     fn test_get_day_of_year_with_timezone() {
         unsafe {
             // 2023-05-28T15:30:00Z (May 28 is day 147 of the year, 0-indexed = 147)
-            let ts_ptr = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let utc_result = cel_timestamp_get_day_of_year(ts_ptr);
             let utc_doy = extract_int(utc_result);
             assert_eq!(utc_doy, 147);
             drop(Box::from_raw(utc_result));
 
-            let ts_ptr2 = Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
+            let ts_ptr2 =
+                Box::into_raw(Box::new(CelValue::Timestamp(make_timestamp(1685287800, 0))));
             let tz_ptr = create_string_value("America/Los_Angeles");
             let tz_result = cel_timestamp_get_day_of_year_tz(ts_ptr2, tz_ptr);
             let tz_doy = extract_int(tz_result);

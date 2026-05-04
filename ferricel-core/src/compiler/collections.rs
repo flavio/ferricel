@@ -3,7 +3,7 @@ use ferricel_types::functions::RuntimeFunction;
 use slog::error;
 use walrus::{InstrSeqBuilder, ValType};
 
-use super::{
+use crate::compiler::{
     access::resolve_type_name,
     context::{CompilerContext, CompilerEnv},
     expr::compile_expr,

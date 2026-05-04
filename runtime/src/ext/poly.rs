@@ -2,11 +2,15 @@
 //! - `indexOf` / `lastIndexOf`: `String` → substring search; `Array` → element search
 //! - `reverse`: `String` → character reversal; `Array` → element reversal
 
-use super::{
-    lists::list_reverse_impl,
-    strings::{find_index_of, find_last_index_of, string_reverse_impl},
+use crate::{
+    error::read_ptr,
+    ext::{
+        lists::list_reverse_impl,
+        strings::{find_index_of, find_last_index_of, string_reverse_impl},
+    },
+    helpers::cel_equals,
+    types::CelValue,
 };
-use crate::{error::read_ptr, helpers::cel_equals, types::CelValue};
 
 /// Polymorphic `reverse`:
 /// - If receiver is a `String`, reverses the Unicode characters.

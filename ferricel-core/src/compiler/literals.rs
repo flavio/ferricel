@@ -2,7 +2,7 @@ use cel::common::ast::LiteralValue;
 use ferricel_types::functions::RuntimeFunction;
 use walrus::{InstrSeqBuilder, LocalId, ValType};
 
-use super::{context::CompilerEnv, helpers::get_memory_id};
+use crate::compiler::{context::CompilerEnv, helpers::get_memory_id};
 
 /// Compile a literal CEL value into Wasm instructions.
 /// Leaves a *mut CelValue (i32) on the stack.

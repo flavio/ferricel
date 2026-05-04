@@ -1,7 +1,7 @@
 use cel::common::ast::{CallExpr, Expr};
 use walrus::InstrSeqBuilder;
 
-use super::{
+use crate::compiler::{
     access, collections,
     context::{CompilerContext, CompilerEnv},
     functions, literals, operators,
