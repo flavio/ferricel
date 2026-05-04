@@ -257,6 +257,47 @@ fn test_extension_unknown_function_runtime_error() {
 }
 
 #[test]
+fn test_extension_runtime_impl_without_compiler_decl_produces_no_matching_overload() {
+    // Compile abs(x) WITHOUT declaring the extension to the compiler.
+    // The compiler emits a deferred "no matching overload" error in the Wasm.
+    let wasm = compiler::Builder::new()
+        .build()
+        .compile("abs(x)")
+        .expect("compile should succeed — unknown functions are deferred to runtime");
+
+    // Run WITH an implementation registered on the Engine.
+    // The implementation is never reached because the compiler already
+    // baked in the error; eval() should trap with "no matching overload".
+    let abs_decl = ExtensionDecl {
+        namespace: None,
+        function: "abs".to_string(),
+        global_style: true,
+        receiver_style: false,
+        num_args: 1,
+    };
+
+    let result = runtime::Builder::new()
+        .with_wasm(wasm)
+        .with_extension(abs_decl, |args| {
+            let n = args[0].as_i64().unwrap_or(0);
+            Ok(serde_json::Value::Number(n.abs().into()))
+        })
+        .build()
+        .expect("build failed")
+        .eval(Some(r#"{"x": -5}"#));
+
+    assert!(
+        result.is_err(),
+        "should produce a runtime error, not a value"
+    );
+    let msg = format!("{:#}", result.unwrap_err());
+    assert!(
+        msg.contains("no matching overload"),
+        "expected 'no matching overload', got: {msg}"
+    );
+}
+
+#[test]
 fn test_extension_wrong_call_style_is_compile_error() {
     // Register myFunc with global_style only; try receiver-style -> error.
     let decl = ExtensionDecl {
