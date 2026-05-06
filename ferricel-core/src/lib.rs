@@ -12,19 +12,22 @@
 //!
 //! ## Example
 //!
-//! ```rust,ignore
+//! ```rust
 //! use ferricel_core::{compiler, runtime};
 //!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Compile a CEL expression to Wasm
 //! let wasm_bytes = compiler::Builder::new().build().compile("x + y")?;
 //!
 //! // Execute the Wasm module with variable bindings
 //! let bindings = r#"{"x": 1, "y": 2}"#;
 //! let result = runtime::Builder::new()
-//!     .with_logger(logger)
-//!     .build()
-//!     .execute(&wasm_bytes, Some(bindings))?;
+//!     .with_wasm(wasm_bytes)
+//!     .build()?
+//!     .eval(Some(bindings))?;
 //! println!("Result: {}", result);
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod compiler;

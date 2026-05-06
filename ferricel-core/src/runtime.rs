@@ -29,23 +29,26 @@ struct HostState {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use ferricel_core::{compiler, runtime};
 ///
 /// let wasm = compiler::Builder::new().build().compile("x * 2 + 1")?;
 ///
 /// let result = runtime::Builder::new()
-///     .with_logger(logger)
 ///     .with_wasm(wasm)
 ///     .build()?
 ///     .eval(Some(r#"{"x": 10}"#))?;
 ///
 /// assert_eq!(result, "21");
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Registering extension functions
 ///
-/// ```rust,ignore
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use ferricel_core::{compiler, runtime};
 /// use ferricel_types::extensions::ExtensionDecl;
 ///
@@ -72,6 +75,8 @@ struct HostState {
 ///     .eval(Some(r#"{"x": -42}"#))?;
 ///
 /// assert_eq!(result, "42");
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Providing a custom wasmtime engine
@@ -82,12 +87,12 @@ struct HostState {
 /// interruption, etc.) or want to share a single compiled engine across
 /// multiple [`Engine`] instances.
 ///
-/// ```rust,ignore
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use ferricel_core::{compiler, runtime};
 /// use wasmtime::{Config, Engine as WasmEngine};
 ///
-/// let mut config = Config::new();
-/// config.consume_fuel(true);
+/// let config = Config::new();
 ///
 /// let wasm_engine = WasmEngine::new(&config)?;
 /// let wasm = compiler::Builder::new().build().compile("1 + 1")?;
@@ -97,6 +102,8 @@ struct HostState {
 ///     .with_wasm(wasm)
 ///     .build()?
 ///     .eval(None)?;
+/// # Ok(())
+/// # }
 /// ```
 pub struct Builder {
     logger: slog::Logger,
@@ -400,19 +407,21 @@ impl Default for Builder {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use ferricel_core::{compiler, runtime};
 ///
 /// let compiler = compiler::Builder::new().build();
 /// let wasm = compiler.compile("x * 2 + 1")?;
 ///
 /// let result = runtime::Builder::new()
-///     .with_logger(logger)
 ///     .with_wasm(wasm)
 ///     .build()?
 ///     .eval(Some(r#"{"x": 10}"#))?;
 ///
 /// assert_eq!(result, "21");
+/// # Ok(())
+/// # }
 /// ```
 pub struct Engine {
     wasm_engine: WasmEngine,
