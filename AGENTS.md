@@ -18,7 +18,9 @@ A file for [guiding coding agents](https://agents.md/).
 - **Formatting**: `make fmt`
 - **Linting**: `make lint`
 - **Linting (fix some issues automatically)**: `make lint-fix`
-- **Docs**: `make docs`
+- **Docs (all)**: `make docs` (builds both Rust API docs and the mdbook user guide)
+- **Docs (Rust API)**: `make docs-api` (requires runtime to be built first)
+- **Docs (user guide)**: `make docs-book` (requires `mdbook` to be installed; output in `docs/book/`)
 
 ## Workspace Structure
 

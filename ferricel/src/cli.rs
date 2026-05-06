@@ -77,7 +77,7 @@ pub enum Commands {
         ///   style       One of:
         ///                 global   - callable as func(args) or ns.func(args)
         ///                 receiver - callable as value.func(extra_args)
-        ///                            (receiver is always args[0])
+        ///                            (receiver is always args\[0\])
         ///                 both     - supports both calling conventions
         ///
         ///   arity       Total number of arguments the host receives, including
@@ -121,7 +121,7 @@ pub enum Commands {
         ///   global_style   (bool)           True if callable as func(args)
         ///                                   or ns.func(args).
         ///   receiver_style (bool)           True if callable as value.func(args).
-        ///                                   Receiver is always args[0].
+        ///                                   Receiver is always args\[0\].
         ///   num_args       (number)         Total argument count including
         ///                                   receiver for receiver-style calls.
         ///

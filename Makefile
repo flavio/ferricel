@@ -1,4 +1,4 @@
-.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-tests-serial conformance-list conformance-% conformance-sections-% docs publish-prep
+.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-tests-serial conformance-list conformance-% conformance-sections-% docs docs-api docs-book publish-prep
 
 # Default target
 all: ferricel
@@ -273,11 +273,19 @@ conformance-list:
 	@echo "  3. CONFORMANCE_SECTION=variables make conformance-sections-basic   # See tests in section"
 	@echo "  4. CONFORMANCE_SECTION=variables make conformance-basic            # Run that section"
 
-# Build Rust documentation for all workspace components
+# Build all documentation (Rust API docs + mdbook)
+docs: docs-api docs-book
+
+# Build Rust API documentation for all workspace components
 # Depends on the runtime so the build script in ferricel-core can find the Wasm.
-docs: $(RUNTIME_TARGET)
-	@echo "Building documentation for all workspace components..."
+docs-api: $(RUNTIME_TARGET)
+	@echo "Building Rust API documentation for all workspace components..."
 	cargo doc --workspace --no-deps
+
+# Build the mdbook user guide
+docs-book:
+	@echo "Building mdbook user guide..."
+	mdbook build docs/
 
 # Prepare ferricel-core for publishing to crates.io.
 # Copies the pre-built runtime Wasm into ferricel-core/ so it is picked up by
@@ -323,7 +331,9 @@ help:
 	@echo "  conformance-<name> - Run specific conformance test suite"
 	@echo "  conformance-sections-<name> - List sections in a conformance test suite"
 	@echo "  conformance-list - List available conformance test suites"
-	@echo "  docs             - Build Rust documentation for all workspace components"
+	@echo "  docs             - Build all documentation (Rust API docs + mdbook user guide)"
+	@echo "  docs-api         - Build Rust API documentation for all workspace components"
+	@echo "  docs-book        - Build mdbook user guide (requires mdbook)"
 	@echo "  publish-prep     - Copy runtime.wasm into ferricel-core/ before cargo publish"
 	@echo "  fmt              - Check code formatting (does not modify files)"
 	@echo "  lint             - Run clippy lints with warnings as errors"
