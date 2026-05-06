@@ -305,12 +305,14 @@ fmt:
 .PHONY: lint
 lint: $(RUNTIME_TARGET)
 	cargo +nightly fmt --all -- --check
+	taplo fmt --check
 	cargo clippy --workspace -- -D warnings
 
 # Auto-fix clippy warnings where possible
 .PHONY: lint-fix
 lint-fix: $(RUNTIME_TARGET)
 	cargo clippy --workspace --fix --allow-dirty --allow-staged
+	taplo fmt
 
 # Check that the code compiles without building artifacts
 .PHONY: check
