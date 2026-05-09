@@ -109,3 +109,8 @@ Or install from source using Cargo:
 ```sh
 cargo install ferricel
 ```
+
+## Name
+
+The name "Ferricel" is a pun combining "ferrous" (relating to iron and Rust,
+the programming language) and "CEL" (Common Expression Language).
