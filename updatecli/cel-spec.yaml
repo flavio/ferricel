@@ -1,0 +1,52 @@
+name: Bump cel-spec to latest GitHub release
+
+scms:
+  ferricel:
+    kind: github
+    spec:
+      owner: "flavio"
+      repository: "ferricel"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      username: '{{ requiredEnv "GITHUB_USERNAME" }}'
+      branch: "main"
+
+sources:
+  cel-spec-release:
+    name: Get latest cel-spec GitHub release
+    kind: githubRelease
+    spec:
+      owner: "google"
+      repository: "cel-spec"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      versionfilter:
+        kind: semver
+
+targets:
+  update-version-file:
+    name: Update cel-spec-version.yaml
+    kind: yaml
+    scmid: ferricel
+    sourceid: cel-spec-release
+    spec:
+      file: cel-spec-version.yaml
+      key: $.version
+
+  update-submodule:
+    name: Checkout cel-spec submodule at new tag
+    kind: shell
+    scmid: ferricel
+    sourceid: cel-spec-release
+    spec:
+      command: >-
+        git -C cel-spec fetch --tags &&
+        git -C cel-spec checkout {{ source "cel-spec-release" }} &&
+        git add cel-spec
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: ferricel
+    title: 'Bump cel-spec to {{ source "cel-spec-release" }}'
+    spec:
+      labels:
+        - "dependencies"

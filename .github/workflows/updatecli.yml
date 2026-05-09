@@ -1,0 +1,32 @@
+name: Updatecli
+
+on:
+  schedule:
+    # Run once a day at 08:00 UTC
+    - cron: "0 8 * * *"
+  # Allow manual runs from the GitHub UI
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  updatecli:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: true
+          persist-credentials: false
+
+      - name: Install Updatecli
+        uses: updatecli/updatecli-action@4b17f4ea784de29f71f85f9bc4955402ba1ae53c # v2.100.0
+
+      - name: Run Updatecli
+        run: updatecli apply --config updatecli/cel-spec.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATECLI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATECLI_GITHUB_USERNAME: ${{ github.actor }}

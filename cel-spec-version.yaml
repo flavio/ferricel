@@ -1,0 +1,5 @@
+# This file tracks the version of the cel-spec git submodule currently checked out.
+# It is used by the updatecli automation (updatecli/cel-spec.yaml) to detect new
+# releases of https://github.com/google/cel-spec and open a pull request to bump
+# the submodule. The version here must always match the tag the submodule points to.
+version: v0.25.2
