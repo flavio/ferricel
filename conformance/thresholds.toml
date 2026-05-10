@@ -1,0 +1,14 @@
+# Conformance test failure thresholds.
+#
+# Each entry is the maximum number of failures allowed for that suite.
+# Suites not listed here default to 0 — they must remain at 100% passing.
+#
+# When you fix a failing test, lower the corresponding value here so regressions
+# are caught. When all failures in a suite are fixed, remove the entry entirely.
+
+[suites]
+basic          = 2
+block_ext      = 8
+namespace      = 3
+parse          = 74
+type_deduction = 1

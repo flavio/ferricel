@@ -35,6 +35,10 @@ impl TestStats {
         }
     }
 
+    pub fn failed(&self) -> usize {
+        self.failed.load(Ordering::SeqCst)
+    }
+
     pub fn print_summary(&self, test_file: &str, filtered: bool) {
         let passed = self.passed.load(Ordering::SeqCst);
         let failed = self.failed.load(Ordering::SeqCst);
