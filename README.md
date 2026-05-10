@@ -112,6 +112,9 @@ Or install from source using Cargo:
 cargo install ferricel
 ```
 
+> ![NOTE]
+> This installation method requires the `protoc` binary to be available on your system.
+
 ## Name
 
 The name "Ferricel" is a pun combining "ferrous" (relating to iron and Rust,
