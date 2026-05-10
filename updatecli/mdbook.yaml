@@ -1,0 +1,43 @@
+name: Bump mdbook to latest GitHub release
+
+scms:
+  ferricel:
+    kind: github
+    spec:
+      owner: "flavio"
+      repository: "ferricel"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      username: '{{ requiredEnv "GITHUB_USERNAME" }}'
+      branch: "main"
+
+sources:
+  mdbook-release:
+    name: Get latest mdbook GitHub release
+    kind: githubRelease
+    spec:
+      owner: "rust-lang"
+      repository: "mdBook"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      versionfilter:
+        kind: semver
+
+targets:
+  update-workflow:
+    name: Update MDBOOK_VERSION in mdbook-pages workflow
+    kind: yaml
+    scmid: ferricel
+    sourceid: mdbook-release
+    transformers:
+      - trimprefix: "v"
+    spec:
+      file: .github/workflows/mdbook-pages.yml
+      key: $.env.MDBOOK_VERSION
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: ferricel
+    title: 'Bump mdbook to {{ source "mdbook-release" }}'
+    spec:
+      labels:
+        - "dependencies"
