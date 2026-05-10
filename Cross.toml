@@ -1,0 +1,2 @@
+[build.pre-build]
+default = ["apt-get update && apt-get install -y protobuf-compiler"]

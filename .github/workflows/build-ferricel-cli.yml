@@ -2,11 +2,25 @@ name: ferricel CLI build
 
 on:
   workflow_call:
+    inputs:
+      build_only:
+        description: "Build only, skip signing/attestation/publishing"
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      build_only:
+        description: "Build only, skip signing/attestation/publishing"
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches:
+      - main
 
 env:
   CARGO_TERM_COLOR: always
-  SYFT_VERSION: "1.44.0"
 
 jobs:
   build-linux-binaries:
@@ -27,6 +41,7 @@ jobs:
           persist-credentials: false
 
       - uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+        if: ${{ !inputs.build_only }}
 
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
@@ -60,36 +75,34 @@ jobs:
         run: ./ferricel-linux-x86_64 --help
 
       - name: Generate attestations
+        if: ${{ !inputs.build_only }}
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: ferricel-linux-${{ matrix.targetarch }}
 
       - name: Sign ferricel
+        if: ${{ !inputs.build_only }}
         run: |
           cosign sign-blob --yes \
             --bundle ferricel-linux-${{ matrix.targetarch }}.bundle.sigstore \
             ferricel-linux-${{ matrix.targetarch }}
 
-      - run: zip -j9 ferricel-linux-${{ matrix.targetarch }}.zip ferricel-linux-${{ matrix.targetarch }} ferricel-linux-${{ matrix.targetarch }}.bundle.sigstore
+      - if: ${{ !inputs.build_only }}
+        run: zip -j9 ferricel-linux-${{ matrix.targetarch }}.zip ferricel-linux-${{ matrix.targetarch }} ferricel-linux-${{ matrix.targetarch }}.bundle.sigstore
 
       - name: Upload binary
+        if: ${{ !inputs.build_only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ferricel-linux-${{ matrix.targetarch }}
           path: ferricel-linux-${{ matrix.targetarch }}.zip
 
       - name: Install syft
-        run: |
-          set -e
-          echo "$SYFT_CHECKSUM  syft_${SYFT_VERSION}_linux_amd64.tar.gz" > checksum
-          curl -L -O "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
-          sha256sum -c checksum
-          tar -xzf "syft_${SYFT_VERSION}_linux_amd64.tar.gz" syft
-          sudo mv syft /usr/local/bin/syft
-        env:
-          SYFT_CHECKSUM: "0e91737aee2b5baf1d255b959630194a302335d848ff97bb07921eb6205b5f5a"
+        if: ${{ !inputs.build_only }}
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
 
       - name: Create SBOM file
+        if: ${{ !inputs.build_only }}
         run: |
           syft scan \
             --output spdx-json=ferricel-linux-${{ matrix.targetarch }}-sbom.spdx \
@@ -99,12 +112,14 @@ jobs:
             dir:.
 
       - name: Sign SBOM file
+        if: ${{ !inputs.build_only }}
         run: |
           cosign sign-blob --yes \
             --bundle ferricel-linux-${{ matrix.targetarch }}-sbom.spdx.bundle.sigstore \
             ferricel-linux-${{ matrix.targetarch }}-sbom.spdx
 
       - name: Upload ferricel SBOM files
+        if: ${{ !inputs.build_only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ferricel-linux-${{ matrix.targetarch }}-sbom
@@ -132,6 +147,7 @@ jobs:
           persist-credentials: false
 
       - uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+        if: ${{ !inputs.build_only }}
 
       - name: Install protoc
         run: brew install protobuf
@@ -157,36 +173,34 @@ jobs:
         run: ./ferricel-darwin-x86_64 --help
 
       - name: Generate attestations
+        if: ${{ !inputs.build_only }}
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: ferricel-darwin-${{ matrix.targetarch }}
 
       - name: Sign ferricel
+        if: ${{ !inputs.build_only }}
         run: |
           cosign sign-blob --yes \
             --bundle ferricel-darwin-${{ matrix.targetarch }}.bundle.sigstore \
             ferricel-darwin-${{ matrix.targetarch }}
 
-      - run: zip -j9 ferricel-darwin-${{ matrix.targetarch }}.zip ferricel-darwin-${{ matrix.targetarch }} ferricel-darwin-${{ matrix.targetarch }}.bundle.sigstore
+      - if: ${{ !inputs.build_only }}
+        run: zip -j9 ferricel-darwin-${{ matrix.targetarch }}.zip ferricel-darwin-${{ matrix.targetarch }} ferricel-darwin-${{ matrix.targetarch }}.bundle.sigstore
 
       - name: Upload binary
+        if: ${{ !inputs.build_only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ferricel-darwin-${{ matrix.targetarch }}
           path: ferricel-darwin-${{ matrix.targetarch }}.zip
 
       - name: Install syft
-        run: |
-          set -e
-          echo "$SYFT_CHECKSUM  syft_${SYFT_VERSION}_darwin_amd64.tar.gz" > checksum
-          curl -L -O "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_darwin_amd64.tar.gz"
-          shasum -a 256 -c checksum
-          tar -xzf "syft_${SYFT_VERSION}_darwin_amd64.tar.gz" syft
-          sudo mv syft /usr/local/bin/syft
-        env:
-          SYFT_CHECKSUM: "c40ece5407927327f94f35901727dbc604b46857e04f04ec94a310845fb71bde"
+        if: ${{ !inputs.build_only }}
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
 
       - name: Create SBOM file
+        if: ${{ !inputs.build_only }}
         run: |
           syft scan \
             --output spdx-json=ferricel-darwin-${{ matrix.targetarch }}-sbom.spdx \
@@ -196,12 +210,14 @@ jobs:
             dir:.
 
       - name: Sign SBOM file
+        if: ${{ !inputs.build_only }}
         run: |
           cosign sign-blob --yes \
             --bundle ferricel-darwin-${{ matrix.targetarch }}-sbom.spdx.bundle.sigstore \
             ferricel-darwin-${{ matrix.targetarch }}-sbom.spdx
 
       - name: Upload ferricel SBOM files
+        if: ${{ !inputs.build_only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ferricel-darwin-${{ matrix.targetarch }}-sbom
@@ -222,6 +238,7 @@ jobs:
           persist-credentials: false
 
       - uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+        if: ${{ !inputs.build_only }}
 
       - name: Install protoc
         run: choco install protoc
@@ -243,11 +260,13 @@ jobs:
         run: .\ferricel-windows-x86_64.exe --help
 
       - name: Generate attestations
+        if: ${{ !inputs.build_only }}
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: ferricel-windows-x86_64.exe
 
       - name: Sign ferricel
+        if: ${{ !inputs.build_only }}
         shell: bash
         run: |
           cosign sign-blob --yes \
@@ -255,29 +274,24 @@ jobs:
             ferricel-windows-x86_64.exe
 
       - name: Zip binary
+        if: ${{ !inputs.build_only }}
         shell: bash
         run: |
           "/c/Program Files/7-Zip/7z.exe" a ferricel-windows-x86_64.exe.zip ferricel-windows-x86_64.exe ferricel-windows-x86_64.bundle.sigstore
 
       - name: Upload binary
+        if: ${{ !inputs.build_only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ferricel-windows-x86_64
           path: ferricel-windows-x86_64.exe.zip
 
       - name: Install syft
-        shell: bash
-        run: |
-          set -e
-          echo "$SYFT_CHECKSUM  syft_${SYFT_VERSION}_windows_amd64.zip" > checksum
-          curl -L -O "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_windows_amd64.zip"
-          sha256sum -c checksum
-          unzip -o "syft_${SYFT_VERSION}_windows_amd64.zip" syft.exe
-          mv syft.exe /usr/local/bin/syft.exe
-        env:
-          SYFT_CHECKSUM: "195e786eb84ec145854f20528992e86637c77d1968731dfe6ce850c90e28f47a"
+        if: ${{ !inputs.build_only }}
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
 
       - name: Create SBOM file
+        if: ${{ !inputs.build_only }}
         shell: bash
         run: |
           syft scan \
@@ -288,6 +302,7 @@ jobs:
             dir:.
 
       - name: Sign SBOM file
+        if: ${{ !inputs.build_only }}
         shell: bash
         run: |
           cosign sign-blob --yes \
@@ -295,6 +310,7 @@ jobs:
             ferricel-windows-x86_64-sbom.spdx
 
       - name: Upload ferricel SBOM files
+        if: ${{ !inputs.build_only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ferricel-windows-x86_64-sbom
