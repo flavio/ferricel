@@ -2,7 +2,6 @@
 autotests = false
 build = "build.rs"
 description = "Core compiler and runtime library for ferricel (CEL → Wasm)"
-readme = "README.md"
 edition = "2024"
 include = [
   "Cargo.toml",
@@ -14,6 +13,7 @@ include = [
 ]
 license = { workspace = true }
 name = "ferricel-core"
+readme = "README.md"
 repository = { workspace = true }
 version = { workspace = true }
 
