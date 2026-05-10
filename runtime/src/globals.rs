@@ -104,9 +104,12 @@ pub unsafe extern "C" fn cel_unbound_variable_error(
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
+
     use super::*;
 
     #[test]
+    #[serial]
     fn test_init_and_get_variable() {
         let mut map = std::collections::HashMap::new();
         map.insert(CelMapKey::String("x".to_string()), CelValue::Int(42));
@@ -120,8 +123,8 @@ mod tests {
             let var_ptr = cel_get_variable(name.as_ptr(), name.len() as i32);
             assert!(!var_ptr.is_null());
 
-            let value = &*var_ptr;
-            assert!(matches!(value, CelValue::Int(42)));
+            let value = Box::from_raw(var_ptr);
+            assert!(matches!(*value, CelValue::Int(42)));
 
             // Cleanup
             let _boxed = Box::from_raw(ptr);
@@ -129,6 +132,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_variable_not_found() {
         let map = std::collections::HashMap::new();
         let bindings = Box::new(CelValue::Object(map));
@@ -147,6 +151,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_null_bindings() {
         unsafe {
             cel_init_bindings(ptr::null_mut());
