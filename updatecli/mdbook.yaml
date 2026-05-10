@@ -21,8 +21,19 @@ sources:
       versionfilter:
         kind: semver
 
+  mdbook-checksum:
+    name: Get sha256 checksum for mdbook linux x86_64
+    kind: shell
+    dependson:
+      - mdbook-release
+    spec:
+      command: >-
+        curl -sL
+        "https://github.com/rust-lang/mdBook/releases/download/{{ source "mdbook-release" }}/mdbook-{{ source "mdbook-release" }}-x86_64-unknown-linux-gnu.tar.gz"
+        | sha256sum | awk '{print $1}'
+
 targets:
-  update-workflow:
+  update-version:
     name: Update MDBOOK_VERSION in mdbook-pages workflow
     kind: yaml
     scmid: ferricel
@@ -32,6 +43,15 @@ targets:
     spec:
       file: .github/workflows/mdbook-pages.yml
       key: $.env.MDBOOK_VERSION
+
+  update-checksum:
+    name: Update MDBOOK_CHECKSUM in mdbook-pages workflow
+    kind: yaml
+    scmid: ferricel
+    sourceid: mdbook-checksum
+    spec:
+      file: .github/workflows/mdbook-pages.yml
+      key: $.jobs.build-and-publish.steps[1].env.MDBOOK_CHECKSUM
 
 actions:
   default:

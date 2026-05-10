@@ -21,8 +21,19 @@ sources:
       versionfilter:
         kind: semver
 
+  taplo-checksum:
+    name: Get sha256 checksum for taplo linux x86_64
+    kind: shell
+    dependson:
+      - taplo-release
+    spec:
+      command: >-
+        curl -sL
+        "https://github.com/tamasfe/taplo/releases/download/{{ source "taplo-release" }}/taplo-linux-x86_64.gz"
+        | sha256sum | awk '{print $1}'
+
 targets:
-  update-workflow:
+  update-version:
     name: Update TAPLO_VERSION in CI workflow
     kind: yaml
     scmid: ferricel
@@ -30,6 +41,15 @@ targets:
     spec:
       file: .github/workflows/ci.yml
       key: $.env.TAPLO_VERSION
+
+  update-checksum:
+    name: Update TAPLO_CHECKSUM in CI workflow
+    kind: yaml
+    scmid: ferricel
+    sourceid: taplo-checksum
+    spec:
+      file: .github/workflows/ci.yml
+      key: $.jobs.lint.steps[3].env.TAPLO_CHECKSUM
 
 actions:
   default:
