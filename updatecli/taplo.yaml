@@ -1,0 +1,41 @@
+name: Bump taplo to latest GitHub release
+
+scms:
+  ferricel:
+    kind: github
+    spec:
+      owner: "flavio"
+      repository: "ferricel"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      username: '{{ requiredEnv "GITHUB_USERNAME" }}'
+      branch: "main"
+
+sources:
+  taplo-release:
+    name: Get latest taplo GitHub release
+    kind: githubRelease
+    spec:
+      owner: "tamasfe"
+      repository: "taplo"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      versionfilter:
+        kind: semver
+
+targets:
+  update-workflow:
+    name: Update TAPLO_VERSION in CI workflow
+    kind: yaml
+    scmid: ferricel
+    sourceid: taplo-release
+    spec:
+      file: .github/workflows/ci.yml
+      key: $.env.TAPLO_VERSION
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: ferricel
+    title: 'Bump taplo to {{ source "taplo-release" }}'
+    spec:
+      labels:
+        - "dependencies"

@@ -8,6 +8,9 @@ on:
 
 permissions: {}
 
+env:
+  TAPLO_VERSION: "0.10.0"
+
 jobs:
   lint:
     name: Lint
@@ -20,6 +23,10 @@ jobs:
         run: sudo apt-get install -y protobuf-compiler
       - name: Install nightly rustfmt
         run: rustup toolchain install nightly --component rustfmt --no-self-update
+      - name: Install taplo
+        run: |
+          curl -sSL "https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}/taplo-linux-x86_64.gz" \
+            | gunzip > /usr/local/bin/taplo && chmod +x /usr/local/bin/taplo
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Run linter
         run: make lint
