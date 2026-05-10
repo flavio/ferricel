@@ -6,6 +6,7 @@ A file for [guiding coding agents](https://agents.md/).
 
 - **Build:** `make ferricel`
 - **Test (unit):** `make unit-tests`
+- **Test (integration):** `make integration-tests`
 - **Test (end to end):** `make e2e-tests`
 - **Test (conformance):** `make conformance-tests` (runs all conformance tests)
 - **Test (conformance - specific):** `make conformance-<name>` (e.g., `make conformance-basic`, `make conformance-string`)

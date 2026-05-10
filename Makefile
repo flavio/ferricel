@@ -1,4 +1,4 @@
-.PHONY: all clean runtime ferricel help unit-tests e2e-tests tests conformance-tests conformance-tests-serial conformance-list conformance-% conformance-sections-% docs docs-api docs-book publish-prep
+.PHONY: all clean runtime ferricel help unit-tests integration-tests e2e-tests tests conformance-tests conformance-tests-serial conformance-list conformance-% conformance-sections-% docs docs-api docs-book publish-prep
 
 # Default target
 all: ferricel
@@ -31,18 +31,24 @@ clean:
 	@echo "Cleaning build artifacts..."
 	cargo clean
 
-# Run only unit tests (compiler and runtime unit tests)
+# Run only unit tests (inline #[test] functions, excluding integration tests)
 unit-tests: $(RUNTIME_TARGET)
 	@echo "Running unit tests..."
-	cargo test --workspace --exclude conformance
+	cargo test --package ferricel-core --lib
+	cargo test --workspace --exclude conformance --exclude ferricel-core
+
+# Run ferricel-core integration tests (tests/integration.rs)
+integration-tests: $(RUNTIME_TARGET)
+	@echo "Running ferricel-core integration tests..."
+	cargo test --package ferricel-core --test integration
 
 # Run only end-to-end tests (CLI integration tests)
 e2e-tests: $(RUNTIME_TARGET)
 	@echo "Running end-to-end CLI tests..."
 	cargo test --package ferricel --test e2e
 
-# Run all tests (unit + e2e + conformance)
-tests: unit-tests e2e-tests conformance-tests
+# Run all tests (unit + integration + e2e + conformance)
+tests: unit-tests integration-tests e2e-tests conformance-tests
 
 # Run CEL conformance tests (separate crate)
 conformance-tests: $(RUNTIME_TARGET)
@@ -326,9 +332,10 @@ help:
 	@echo "  runtime          - Build only the runtime Wasm module"
 	@echo "  ferricel         - Build runtime and ferricel binary (runtime is embedded at compile-time)"
 	@echo "  clean            - Remove all build artifacts"
-	@echo "  unit-tests       - Run unit tests (ferricel-core, runtime)"
+	@echo "  unit-tests       - Run unit tests (inline #[test] only, no integration tests)"
+	@echo "  integration-tests - Run ferricel-core integration tests (tests/integration.rs)"
 	@echo "  e2e-tests        - Run CLI integration tests"
-	@echo "  tests            - Run all tests (unit + e2e + conformance)"
+	@echo "  tests            - Run all tests (unit + integration + e2e + conformance)"
 	@echo "  conformance-tests - Run all CEL conformance tests"
 	@echo "  conformance-<name> - Run specific conformance test suite"
 	@echo "  conformance-sections-<name> - List sections in a conformance test suite"
@@ -355,6 +362,7 @@ help:
 	@echo "Usage examples:"
 	@echo "  make ferricel"
 	@echo "  make unit-tests"
+	@echo "  make integration-tests"
 	@echo "  make e2e-tests"
 	@echo "  make conformance-tests"
 	@echo "  make conformance-basic"
