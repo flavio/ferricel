@@ -1,3 +1,5 @@
+[![Docs](https://img.shields.io/badge/docs-latest-blue)](https://flavio.github.io/ferricel/)
+
 Ferricel compiles [CEL (Common Expression Language)](https://cel.dev)
 expressions into WebAssembly modules.
 
@@ -30,7 +32,7 @@ For more details about Ferricel compliance, please refer to the
 docs.
 
 Ferricel also supports extending CEL programs with custom functions implemented by the WebAssembly host.
-See [Host Extensions](./docs/src/compile-cel-to-wasm.md#host-extensions) for details.
+See [Host Extensions](https://flavio.github.io/ferricel/run-cel-wasm.html#host-extensions) for details.
 
 ## Usage (CLI)
 
@@ -98,7 +100,7 @@ false
 
 You can use `ferricel-core` to compile CEL expressions and execute them from Rust.
 
-See the [ferricel-core documentation](./docs/src/) for examples and API details.
+See the [ferricel-core documentation](https://flavio.github.io/ferricel/) for examples and API details.
 
 ## Installation
 
