@@ -1,5 +1,6 @@
 [package]
 description = "CLI tool to compile CEL expressions to Wasm"
+readme      = "README.md"
 edition     = "2024"
 license     = { workspace = true }
 name        = "ferricel"

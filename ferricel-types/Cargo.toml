@@ -1,5 +1,6 @@
 [package]
 description = "Shared type definitions for the ferricel CEL compiler"
+readme      = "README.md"
 edition     = "2024"
 license     = { workspace = true }
 name        = "ferricel-types"
