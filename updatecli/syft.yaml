@@ -1,0 +1,101 @@
+name: Bump syft to latest GitHub release
+
+scms:
+  ferricel:
+    kind: github
+    spec:
+      owner: "flavio"
+      repository: "ferricel"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      username: '{{ requiredEnv "GITHUB_USERNAME" }}'
+      branch: "main"
+
+sources:
+  syft-release:
+    name: Get latest syft GitHub release
+    kind: githubRelease
+    spec:
+      owner: "anchore"
+      repository: "syft"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      versionfilter:
+        kind: semver
+
+  syft-checksum-linux:
+    name: Get sha256 checksum for syft linux_amd64
+    kind: shell
+    dependson:
+      - syft-release
+    spec:
+      command: >-
+        curl -sL
+        "https://github.com/anchore/syft/releases/download/v{{ source "syft-release" }}/syft_{{ source "syft-release" }}_checksums.txt"
+        | grep linux_amd64.tar.gz | awk '{print $1}'
+
+  syft-checksum-darwin:
+    name: Get sha256 checksum for syft darwin_amd64
+    kind: shell
+    dependson:
+      - syft-release
+    spec:
+      command: >-
+        curl -sL
+        "https://github.com/anchore/syft/releases/download/v{{ source "syft-release" }}/syft_{{ source "syft-release" }}_checksums.txt"
+        | grep darwin_amd64.tar.gz | awk '{print $1}'
+
+  syft-checksum-windows:
+    name: Get sha256 checksum for syft windows_amd64
+    kind: shell
+    dependson:
+      - syft-release
+    spec:
+      command: >-
+        curl -sL
+        "https://github.com/anchore/syft/releases/download/v{{ source "syft-release" }}/syft_{{ source "syft-release" }}_checksums.txt"
+        | grep windows_amd64.zip | awk '{print $1}'
+
+targets:
+  update-version:
+    name: Update SYFT_VERSION in build-ferricel-cli workflow
+    kind: yaml
+    scmid: ferricel
+    sourceid: syft-release
+    spec:
+      file: .github/workflows/build-ferricel-cli.yml
+      key: $.env.SYFT_VERSION
+
+  update-checksum-linux:
+    name: Update SYFT_CHECKSUM for linux in build-ferricel-cli workflow
+    kind: yaml
+    scmid: ferricel
+    sourceid: syft-checksum-linux
+    spec:
+      file: .github/workflows/build-ferricel-cli.yml
+      key: $.jobs.build-linux-binaries.steps[13].env.SYFT_CHECKSUM
+
+  update-checksum-darwin:
+    name: Update SYFT_CHECKSUM for darwin in build-ferricel-cli workflow
+    kind: yaml
+    scmid: ferricel
+    sourceid: syft-checksum-darwin
+    spec:
+      file: .github/workflows/build-ferricel-cli.yml
+      key: $.jobs.build-darwin-binaries.steps[13].env.SYFT_CHECKSUM
+
+  update-checksum-windows:
+    name: Update SYFT_CHECKSUM for windows in build-ferricel-cli workflow
+    kind: yaml
+    scmid: ferricel
+    sourceid: syft-checksum-windows
+    spec:
+      file: .github/workflows/build-ferricel-cli.yml
+      key: $.jobs.build-windows-x86_64.steps[12].env.SYFT_CHECKSUM
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: ferricel
+    title: 'Bump syft to {{ source "syft-release" }}'
+    spec:
+      labels:
+        - "dependencies"

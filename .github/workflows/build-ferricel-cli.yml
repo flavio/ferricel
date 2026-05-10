@@ -1,0 +1,294 @@
+name: ferricel CLI build
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  SYFT_VERSION: "1.44.0"
+
+jobs:
+  build-linux-binaries:
+    name: Build linux binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        targetarch:
+          - aarch64
+          - x86_64
+    permissions:
+      id-token: write
+      attestations: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - name: Install wasm32-unknown-unknown target
+        run: rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+      - name: Build runtime Wasm
+        run: make runtime
+
+      - name: Install cross-rs
+        run: |
+          set -e
+          echo "$CROSS_CHECKSUM  cross-x86_64-unknown-linux-musl.tar.gz" > checksum
+          curl -L -O https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz
+          sha512sum -c checksum
+          tar -xvf cross-x86_64-unknown-linux-musl.tar.gz
+        env:
+          CROSS_CHECKSUM: "70b31b207e981aa31925a7519a0ad125c5d97b84afe0e8e81b0664df5c3a7978558d83f9fcd0c36dc2176fc2a4d0caed67f8cf9fd689f9935f84449cd4922ceb"
+          CROSS_VERSION: "v0.2.5"
+
+      - name: Build ferricel
+        run: ./cross build --release --target ${{ matrix.targetarch }}-unknown-linux-musl -p ferricel
+
+      - run: mv target/${{ matrix.targetarch }}-unknown-linux-musl/release/ferricel ferricel-linux-${{ matrix.targetarch }}
+
+      - name: Smoke test build
+        if: matrix.targetarch == 'x86_64'
+        run: ./ferricel-linux-x86_64 --help
+
+      - name: Generate attestations
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: ferricel-linux-${{ matrix.targetarch }}
+
+      - name: Sign ferricel
+        run: |
+          cosign sign-blob --yes \
+            --bundle ferricel-linux-${{ matrix.targetarch }}.bundle.sigstore \
+            ferricel-linux-${{ matrix.targetarch }}
+
+      - run: zip -j9 ferricel-linux-${{ matrix.targetarch }}.zip ferricel-linux-${{ matrix.targetarch }} ferricel-linux-${{ matrix.targetarch }}.bundle.sigstore
+
+      - name: Upload binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ferricel-linux-${{ matrix.targetarch }}
+          path: ferricel-linux-${{ matrix.targetarch }}.zip
+
+      - name: Install syft
+        run: |
+          set -e
+          echo "$SYFT_CHECKSUM  syft_${SYFT_VERSION}_linux_amd64.tar.gz" > checksum
+          curl -L -O "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          sha256sum -c checksum
+          tar -xzf "syft_${SYFT_VERSION}_linux_amd64.tar.gz" syft
+          sudo mv syft /usr/local/bin/syft
+        env:
+          SYFT_CHECKSUM: "0e91737aee2b5baf1d255b959630194a302335d848ff97bb07921eb6205b5f5a"
+
+      - name: Create SBOM file
+        run: |
+          syft scan \
+            --output spdx-json=ferricel-linux-${{ matrix.targetarch }}-sbom.spdx \
+            --source-name ferricel-linux-${{ matrix.targetarch }} \
+            --source-version ${{ github.sha }} \
+            -vv \
+            dir:.
+
+      - name: Sign SBOM file
+        run: |
+          cosign sign-blob --yes \
+            --bundle ferricel-linux-${{ matrix.targetarch }}-sbom.spdx.bundle.sigstore \
+            ferricel-linux-${{ matrix.targetarch }}-sbom.spdx
+
+      - name: Upload ferricel SBOM files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ferricel-linux-${{ matrix.targetarch }}-sbom
+          path: |
+            ferricel-linux-${{ matrix.targetarch }}-sbom.spdx
+            ferricel-linux-${{ matrix.targetarch }}-sbom.spdx.bundle.sigstore
+
+  build-darwin-binaries:
+    name: Build darwin binaries
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        targetarch:
+          - aarch64
+          - x86_64
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    permissions:
+      id-token: write
+      attestations: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - name: Install wasm32-unknown-unknown target
+        run: rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+      - name: Build runtime Wasm
+        run: make runtime
+
+      - name: Install cross-compilation target
+        run: rustup target add ${{ matrix.targetarch }}-apple-darwin
+
+      - name: Build ferricel
+        run: cargo build --target=${{ matrix.targetarch }}-apple-darwin --release -p ferricel
+
+      - run: mv target/${{ matrix.targetarch }}-apple-darwin/release/ferricel ferricel-darwin-${{ matrix.targetarch }}
+
+      - name: Smoke test build
+        if: matrix.targetarch == 'x86_64'
+        run: ./ferricel-darwin-x86_64 --help
+
+      - name: Generate attestations
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: ferricel-darwin-${{ matrix.targetarch }}
+
+      - name: Sign ferricel
+        run: |
+          cosign sign-blob --yes \
+            --bundle ferricel-darwin-${{ matrix.targetarch }}.bundle.sigstore \
+            ferricel-darwin-${{ matrix.targetarch }}
+
+      - run: zip -j9 ferricel-darwin-${{ matrix.targetarch }}.zip ferricel-darwin-${{ matrix.targetarch }} ferricel-darwin-${{ matrix.targetarch }}.bundle.sigstore
+
+      - name: Upload binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ferricel-darwin-${{ matrix.targetarch }}
+          path: ferricel-darwin-${{ matrix.targetarch }}.zip
+
+      - name: Install syft
+        run: |
+          set -e
+          echo "$SYFT_CHECKSUM  syft_${SYFT_VERSION}_darwin_amd64.tar.gz" > checksum
+          curl -L -O "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_darwin_amd64.tar.gz"
+          shasum -a 256 -c checksum
+          tar -xzf "syft_${SYFT_VERSION}_darwin_amd64.tar.gz" syft
+          sudo mv syft /usr/local/bin/syft
+        env:
+          SYFT_CHECKSUM: "c40ece5407927327f94f35901727dbc604b46857e04f04ec94a310845fb71bde"
+
+      - name: Create SBOM file
+        run: |
+          syft scan \
+            --output spdx-json=ferricel-darwin-${{ matrix.targetarch }}-sbom.spdx \
+            --source-name ferricel-darwin-${{ matrix.targetarch }} \
+            --source-version ${{ github.sha }} \
+            -vv \
+            dir:.
+
+      - name: Sign SBOM file
+        run: |
+          cosign sign-blob --yes \
+            --bundle ferricel-darwin-${{ matrix.targetarch }}-sbom.spdx.bundle.sigstore \
+            ferricel-darwin-${{ matrix.targetarch }}-sbom.spdx
+
+      - name: Upload ferricel SBOM files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ferricel-darwin-${{ matrix.targetarch }}-sbom
+          path: |
+            ferricel-darwin-${{ matrix.targetarch }}-sbom.spdx
+            ferricel-darwin-${{ matrix.targetarch }}-sbom.spdx.bundle.sigstore
+
+  build-windows-x86_64:
+    name: Build windows (x86_64) binary
+    runs-on: windows-latest
+    permissions:
+      id-token: write
+      attestations: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - name: Install wasm32-unknown-unknown target
+        run: rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+      - name: Build runtime Wasm
+        run: make runtime
+
+      - name: Build ferricel
+        run: cargo build --target=x86_64-pc-windows-msvc --release -p ferricel
+
+      - run: mv target/x86_64-pc-windows-msvc/release/ferricel.exe ferricel-windows-x86_64.exe
+
+      - name: Smoke test build
+        run: .\ferricel-windows-x86_64.exe --help
+
+      - name: Generate attestations
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: ferricel-windows-x86_64.exe
+
+      - name: Sign ferricel
+        shell: bash
+        run: |
+          cosign sign-blob --yes \
+            --bundle ferricel-windows-x86_64.bundle.sigstore \
+            ferricel-windows-x86_64.exe
+
+      - name: Zip binary
+        shell: bash
+        run: |
+          "/c/Program Files/7-Zip/7z.exe" a ferricel-windows-x86_64.exe.zip ferricel-windows-x86_64.exe ferricel-windows-x86_64.bundle.sigstore
+
+      - name: Upload binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ferricel-windows-x86_64
+          path: ferricel-windows-x86_64.exe.zip
+
+      - name: Install syft
+        shell: bash
+        run: |
+          set -e
+          echo "$SYFT_CHECKSUM  syft_${SYFT_VERSION}_windows_amd64.zip" > checksum
+          curl -L -O "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_windows_amd64.zip"
+          sha256sum -c checksum
+          unzip -o "syft_${SYFT_VERSION}_windows_amd64.zip" syft.exe
+          mv syft.exe /usr/local/bin/syft.exe
+        env:
+          SYFT_CHECKSUM: "195e786eb84ec145854f20528992e86637c77d1968731dfe6ce850c90e28f47a"
+
+      - name: Create SBOM file
+        shell: bash
+        run: |
+          syft scan \
+            --output spdx-json=ferricel-windows-x86_64-sbom.spdx \
+            --source-name ferricel-windows-x86_64 \
+            --source-version ${{ github.sha }} \
+            -vv \
+            dir:.
+
+      - name: Sign SBOM file
+        shell: bash
+        run: |
+          cosign sign-blob --yes \
+            --bundle ferricel-windows-x86_64-sbom.spdx.bundle.sigstore \
+            ferricel-windows-x86_64-sbom.spdx
+
+      - name: Upload ferricel SBOM files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ferricel-windows-x86_64-sbom
+          path: |
+            ferricel-windows-x86_64-sbom.spdx
+            ferricel-windows-x86_64-sbom.spdx.bundle.sigstore

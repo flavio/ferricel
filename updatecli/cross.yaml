@@ -1,0 +1,61 @@
+name: Bump cross-rs to latest GitHub release
+
+scms:
+  ferricel:
+    kind: github
+    spec:
+      owner: "flavio"
+      repository: "ferricel"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      username: '{{ requiredEnv "GITHUB_USERNAME" }}'
+      branch: "main"
+
+sources:
+  cross-release:
+    name: Get latest cross-rs GitHub release
+    kind: githubRelease
+    spec:
+      owner: "cross-rs"
+      repository: "cross"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      versionfilter:
+        kind: semver
+
+  cross-checksum:
+    name: Get sha512 checksum for cross-rs linux musl tarball
+    kind: shell
+    dependson:
+      - cross-release
+    spec:
+      command: >-
+        curl -sL
+        "https://github.com/cross-rs/cross/releases/download/{{ source "cross-release" }}/cross-x86_64-unknown-linux-musl.tar.gz"
+        | sha512sum | awk '{print $1}'
+
+targets:
+  update-version:
+    name: Update CROSS_VERSION in build-ferricel-cli workflow
+    kind: yaml
+    scmid: ferricel
+    sourceid: cross-release
+    spec:
+      file: .github/workflows/build-ferricel-cli.yml
+      key: $.jobs.build-linux-binaries.steps[5].env.CROSS_VERSION
+
+  update-checksum:
+    name: Update CROSS_CHECKSUM in build-ferricel-cli workflow
+    kind: yaml
+    scmid: ferricel
+    sourceid: cross-checksum
+    spec:
+      file: .github/workflows/build-ferricel-cli.yml
+      key: $.jobs.build-linux-binaries.steps[5].env.CROSS_CHECKSUM
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: ferricel
+    title: 'Bump cross-rs to {{ source "cross-release" }}'
+    spec:
+      labels:
+        - "dependencies"
