@@ -306,6 +306,7 @@ publish-prep: $(RUNTIME_TARGET)
 .PHONY: fmt
 fmt:
 	cargo +nightly fmt --all
+	taplo format
 
 # Run clippy lints with warnings treated as errors
 .PHONY: lint
