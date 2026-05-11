@@ -17,16 +17,26 @@ readme = "README.md"
 repository = { workspace = true }
 version = { workspace = true }
 
+[package.metadata.docs.rs]
+all-features = true
+
+[features]
+default = ["k8s-vap"]
+k8s-vap = ["dep:k8s-openapi", "dep:yaml_serde"]
+
 [dependencies]
 anyhow         = { workspace = true }
 cel            = "0.13"
 ferricel-types = { workspace = true }
+k8s-openapi    = { workspace = true, features = ["v1_32"], optional = true }
 prost          = { workspace = true }
 prost-types    = { workspace = true }
+serde          = { workspace = true }
 serde_json     = { workspace = true }
 slog           = { workspace = true }
 walrus         = "0.26"
 wasmtime       = "44.0"
+yaml_serde     = { workspace = true, optional = true }
 
 [dev-dependencies]
 rstest    = { workspace = true }

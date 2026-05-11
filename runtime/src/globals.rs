@@ -6,7 +6,10 @@
 
 use std::ptr;
 
-use crate::types::{CelMapKey, CelValue};
+use crate::{
+    error::abort_with_error,
+    types::{CelMapKey, CelValue},
+};
 
 /// Global storage for all variable bindings as a Map
 /// Initialized by validate() before expression evaluation
@@ -74,6 +77,51 @@ pub unsafe extern "C" fn cel_get_variable(name_ptr: *const u8, name_len: i32) ->
         match map.get(&key) {
             Some(value) => Box::into_raw(Box::new(value.clone())),
             None => ptr::null_mut(),
+        }
+    }
+}
+
+/// Insert or update a named variable in the global bindings map.
+///
+/// This is used by the VAP compiler to incrementally build the `variables` map:
+/// after evaluating each variable expression the result is stored here so
+/// subsequent expressions can reference it via `variables.<name>`.
+///
+/// # Parameters
+/// - `name_ptr`: Pointer to UTF-8 string containing the variable name
+/// - `name_len`: Length of the variable name in bytes
+/// - `value_ptr`: Pointer to a boxed CelValue to store (must be non-null)
+///
+/// # Safety
+/// - Must be called after `cel_init_bindings`
+/// - `value_ptr` must be a valid, non-null CelValue pointer
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_set_variable(
+    name_ptr: *const u8,
+    name_len: i32,
+    value_ptr: *mut CelValue,
+) {
+    unsafe {
+        if BINDINGS.is_null() {
+            abort_with_error("cel_set_variable called before cel_init_bindings");
+        }
+
+        let name_slice = std::slice::from_raw_parts(name_ptr, name_len as usize);
+        let name = match std::str::from_utf8(name_slice) {
+            Ok(s) => s,
+            Err(_) => abort_with_error("cel_set_variable: variable name is not valid UTF-8"),
+        };
+
+        let key = CelMapKey::String(name.to_string());
+        let value = if value_ptr.is_null() {
+            CelValue::Null
+        } else {
+            (*value_ptr).clone()
+        };
+
+        if let CelValue::Object(ref mut map) = *BINDINGS {
+            map.insert(key, value);
         }
     }
 }
@@ -159,6 +207,31 @@ mod tests {
             let name = b"x";
             let var_ptr = cel_get_variable(name.as_ptr(), name.len() as i32);
             assert!(var_ptr.is_null());
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_set_variable() {
+        let map = std::collections::HashMap::new();
+        let bindings = Box::new(CelValue::Object(map));
+        let ptr = Box::into_raw(bindings);
+
+        unsafe {
+            cel_init_bindings(ptr);
+
+            let name = b"myvar";
+            let value = Box::into_raw(Box::new(CelValue::Int(99)));
+            cel_set_variable(name.as_ptr(), name.len() as i32, value);
+
+            let var_ptr = cel_get_variable(name.as_ptr(), name.len() as i32);
+            assert!(!var_ptr.is_null());
+            let got = Box::from_raw(var_ptr);
+            assert!(matches!(*got, CelValue::Int(99)));
+
+            // Cleanup
+            let _ = Box::from_raw(ptr);
+            let _ = Box::from_raw(value);
         }
     }
 }

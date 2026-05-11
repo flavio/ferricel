@@ -45,6 +45,9 @@ pub enum RuntimeFunction {
     // Globals
     InitBindings,
     GetVariable,
+    /// Insert or update a named variable in the global bindings map at runtime.
+    /// Used by the VAP compiler to store evaluated variable expressions.
+    SetVariable,
     UnboundVariableError,
 
     // Field Access
@@ -311,6 +314,13 @@ pub enum RuntimeFunction {
     TimestampGetSecondsTz,
     TimestampGetMilliseconds,
     TimestampGetMillisecondsTz,
+
+    // VAP (ValidatingAdmissionPolicy) response serialization
+    /// Serialize `{"accepted":true}` and return as packed ptr+len i64.
+    VapSerializeAccept,
+    /// Serialize `{"accepted":false,"message":"...","code":N}` and return as packed ptr+len i64.
+    /// Arguments: (message: *mut CelValue, code: i32)
+    VapSerializeReject,
 }
 
 impl RuntimeFunction {
@@ -347,6 +357,7 @@ impl RuntimeFunction {
 
             Self::InitBindings => "cel_init_bindings",
             Self::GetVariable => "cel_get_variable",
+            Self::SetVariable => "cel_set_variable",
             Self::UnboundVariableError => "cel_unbound_variable_error",
 
             Self::GetField => "cel_get_field",
@@ -575,6 +586,9 @@ impl RuntimeFunction {
             Self::TimestampGetSecondsTz => "cel_timestamp_get_seconds_tz",
             Self::TimestampGetMilliseconds => "cel_timestamp_get_milliseconds",
             Self::TimestampGetMillisecondsTz => "cel_timestamp_get_milliseconds_tz",
+
+            Self::VapSerializeAccept => "cel_serialize_vap_accept",
+            Self::VapSerializeReject => "cel_serialize_vap_reject",
         }
     }
 

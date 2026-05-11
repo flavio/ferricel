@@ -4,7 +4,7 @@ use walrus::{InstrSeqBuilder, ValType};
 
 use crate::compiler::{
     context::{CompilerContext, CompilerEnv},
-    helpers::{emit_string_const, get_memory_id},
+    helpers::{emit_get_variable, emit_string_const, get_memory_id},
 };
 
 /// Resolves a type name using container-based hierarchical resolution.
@@ -108,7 +108,6 @@ fn emit_variable_lookup_chain_raw(
     env: &CompilerEnv,
     module: &mut walrus::Module,
 ) -> Result<walrus::LocalId, anyhow::Error> {
-    let memory_id = get_memory_id(module)?;
     let result_local = module.locals.add(ValType::I32);
 
     // Helper: emit `cel_get_variable(name)` and store into result_local.
@@ -116,32 +115,8 @@ fn emit_variable_lookup_chain_raw(
                     body: &mut InstrSeqBuilder,
                     module: &mut walrus::Module|
      -> Result<(), anyhow::Error> {
-        let name_bytes = name.as_bytes();
-        let name_len = name_bytes.len() as i32;
-        let ptr_local = module.locals.add(ValType::I32);
-
-        body.i32_const(name_len)
-            .call(env.get(RuntimeFunction::Malloc))
-            .local_set(ptr_local);
-
-        for (offset, &byte) in name_bytes.iter().enumerate() {
-            body.local_get(ptr_local);
-            body.i32_const(byte as i32);
-            body.store(
-                memory_id,
-                walrus::ir::StoreKind::I32_8 { atomic: false },
-                walrus::ir::MemArg {
-                    align: 1,
-                    offset: offset as u64,
-                },
-            );
-        }
-
-        body.local_get(ptr_local)
-            .i32_const(name_len)
-            .call(env.get(RuntimeFunction::GetVariable))
-            .local_set(result_local);
-
+        emit_get_variable(name, body, env, module)?;
+        body.local_set(result_local);
         Ok(())
     };
 
@@ -158,7 +133,7 @@ fn emit_variable_lookup_chain_raw(
     }
 
     emit_get(&candidates[0], body, module)?;
-    build_fallback_chain(&candidates[1..], result_local, body, env, module, memory_id)?;
+    build_fallback_chain(&candidates[1..], result_local, body, env, module)?;
 
     body.local_get(result_local);
     Ok(result_local)
@@ -304,7 +279,6 @@ fn build_fallback_chain(
     body: &mut InstrSeqBuilder,
     env: &CompilerEnv,
     module: &mut walrus::Module,
-    memory_id: walrus::MemoryId,
 ) -> Result<(), anyhow::Error> {
     if remaining.is_empty() {
         return Ok(());
@@ -328,42 +302,10 @@ fn build_fallback_chain(
     {
         let mut then_body = body.instr_seq(then_id);
         let name = &remaining[0];
-        let name_bytes = name.as_bytes();
-        let name_len = name_bytes.len() as i32;
-        let ptr_local = module.locals.add(ValType::I32);
+        emit_get_variable(name, &mut then_body, env, module)?;
+        then_body.local_set(result_local);
 
-        then_body
-            .i32_const(name_len)
-            .call(env.get(RuntimeFunction::Malloc))
-            .local_set(ptr_local);
-
-        for (offset, &byte) in name_bytes.iter().enumerate() {
-            then_body.local_get(ptr_local);
-            then_body.i32_const(byte as i32);
-            then_body.store(
-                memory_id,
-                walrus::ir::StoreKind::I32_8 { atomic: false },
-                walrus::ir::MemArg {
-                    align: 1,
-                    offset: offset as u64,
-                },
-            );
-        }
-
-        then_body
-            .local_get(ptr_local)
-            .i32_const(name_len)
-            .call(env.get(RuntimeFunction::GetVariable))
-            .local_set(result_local);
-
-        build_fallback_chain(
-            &remaining[1..],
-            result_local,
-            &mut then_body,
-            env,
-            module,
-            memory_id,
-        )?;
+        build_fallback_chain(&remaining[1..], result_local, &mut then_body, env, module)?;
     }
 
     // Else branch: result is already set (non-null), nothing to do

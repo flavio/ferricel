@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     rc::Rc,
 };
 
@@ -44,7 +44,7 @@ impl CompilerContext {
         schema: Option<ProtoSchema>,
         container: Option<String>,
         logger: slog::Logger,
-        extensions: &[ExtensionDecl],
+        extensions: &BTreeSet<ExtensionDecl>,
     ) -> Self {
         Self {
             local_vars: HashMap::new(),
@@ -99,7 +99,7 @@ pub struct ExtensionRegistry {
 }
 
 impl ExtensionRegistry {
-    pub fn new(extensions: &[ExtensionDecl]) -> Self {
+    pub fn new(extensions: &BTreeSet<ExtensionDecl>) -> Self {
         let mut by_name = HashMap::new();
         let mut namespaces = HashSet::new();
         for decl in extensions {

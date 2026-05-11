@@ -6,8 +6,11 @@ pub mod functions;
 pub mod helpers;
 pub mod literals;
 pub mod operators;
+#[cfg(feature = "k8s-vap")]
+#[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
+pub mod vap;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use anyhow::Context;
 use cel::{common::ast::Expr, parser::Parser};
@@ -45,7 +48,7 @@ pub struct Builder {
     proto_descriptor: Option<Vec<u8>>,
     container: Option<String>,
     logger: slog::Logger,
-    extensions: Vec<ExtensionDecl>,
+    extensions: BTreeSet<ExtensionDecl>,
 }
 
 impl Builder {
@@ -58,7 +61,7 @@ impl Builder {
             proto_descriptor: None,
             container: None,
             logger: slog::Logger::root(slog::Discard, slog::o!()),
-            extensions: vec![],
+            extensions: BTreeSet::new(),
         }
     }
 
@@ -89,7 +92,7 @@ impl Builder {
     ///
     /// May be called multiple times to register several extensions.
     pub fn with_extension(mut self, decl: ExtensionDecl) -> Self {
-        self.extensions.push(decl);
+        self.extensions.insert(decl);
         self
     }
 
@@ -126,7 +129,7 @@ pub struct Compiler {
     schema: Option<ProtoSchema>,
     container: Option<String>,
     logger: slog::Logger,
-    extensions: Vec<ExtensionDecl>,
+    extensions: BTreeSet<ExtensionDecl>,
 }
 
 impl Compiler {
@@ -205,6 +208,92 @@ impl Compiler {
         // 7. Emit the module as bytes
         Ok(module.emit_wasm())
     }
+
+    /// Compile a Kubernetes `ValidatingAdmissionPolicy` from its YAML manifest
+    /// into a self-contained WebAssembly module.
+    ///
+    /// The resulting module exports:
+    ///
+    /// - `evaluate(i64) -> i64` — JSON-encoded bindings input
+    ///
+    /// The result JSON is a **Kubewarden `ValidationResponse`**:
+    ///
+    /// ```json
+    /// {"accepted": true}
+    /// // or
+    /// {"accepted": false, "message": "...", "code": 422}
+    /// ```
+    ///
+    /// The YAML must contain exactly one `ValidatingAdmissionPolicy` document.
+    /// The caller must pass, at minimum, `object` in the bindings. When the
+    /// policy references `namespaceObject` or `params`, the host must also
+    /// register `kubernetes.get` / `kubernetes.list` extension implementations
+    /// on the `Engine`.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ferricel_core::compiler::Builder;
+    ///
+    /// let yaml = std::fs::read_to_string("policy.yaml").unwrap();
+    /// let compiler = Builder::new().build();
+    /// let wasm_bytes = compiler.compile_vap(&yaml).unwrap();
+    /// ```
+    #[cfg(feature = "k8s-vap")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
+    pub fn compile_vap(&self, vap_yaml: &str) -> Result<Vec<u8>, anyhow::Error> {
+        let spec = parse_vap_yaml(vap_yaml)?;
+        self.compile_vap_from_spec(&spec)
+    }
+
+    /// Compile a `ValidatingAdmissionPolicySpec` directly (bypassing YAML parsing).
+    ///
+    /// Useful when the caller has already parsed or constructed the spec
+    /// programmatically from a `k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicySpec`.
+    #[cfg(feature = "k8s-vap")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
+    pub fn compile_vap_from_spec(
+        &self,
+        spec: &k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicySpec,
+    ) -> Result<Vec<u8>, anyhow::Error> {
+        // Collect implicit extension declarations required by the spec
+        let mut extensions = self.extensions.clone();
+        extensions.insert((*vap::KUBERNETES_GET).clone());
+        extensions.insert((*vap::KUBERNETES_LIST).clone());
+
+        // Load runtime template
+        let mut module = ModuleConfig::new().parse(RUNTIME_BYTES)?;
+
+        // Build CompilerEnv
+        let mut functions = HashMap::new();
+        for func in RuntimeFunction::iter() {
+            let id = module.exports.get_func(func.name()).with_context(|| {
+                format!(
+                    "Runtime function '{}' not found in module exports",
+                    func.name()
+                )
+            })?;
+            functions.insert(func, id);
+            if !func.is_exported() {
+                module.exports.remove(func.name())?;
+            }
+        }
+        let env = CompilerEnv { functions };
+
+        let ctx = CompilerContext::new(
+            self.schema.clone(),
+            self.container.clone(),
+            self.logger.clone(),
+            &extensions,
+        );
+
+        // Build `evaluate` (JSON bindings)
+        let evaluate_id = vap::build_vap_evaluate_function(&mut module, &env, &ctx, spec)?;
+        module.exports.add("evaluate", evaluate_id);
+
+        walrus::passes::gc::run(&mut module);
+        Ok(module.emit_wasm())
+    }
 }
 
 /// Build the `evaluate` Wasm function `(i64) -> i64` using JSON-encoded bindings.
@@ -259,4 +348,46 @@ fn build_evaluate_proto_function(
     body.call(env.get(RuntimeFunction::SerializeResult));
 
     Ok(func.finish(vec![bindings_encoded_arg], &mut module.funcs))
+}
+
+// ─── VAP YAML parsing ─────────────────────────────────────────────────────────
+
+/// Parse a `ValidatingAdmissionPolicy` YAML string into a
+/// `ValidatingAdmissionPolicySpec`.
+///
+/// The YAML must contain exactly one `ValidatingAdmissionPolicy` document; an
+/// error is returned if zero or more than one document is found.
+#[cfg(feature = "k8s-vap")]
+pub(crate) fn parse_vap_yaml(
+    yaml: &str,
+) -> Result<k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicySpec, anyhow::Error>
+{
+    use k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicy;
+    use serde::Deserialize as _;
+
+    let mut iter = yaml_serde::Deserializer::from_str(yaml);
+
+    // Deserialize the first document.
+    let first = iter
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("YAML is empty, expected a ValidatingAdmissionPolicy"))?;
+    let policy = ValidatingAdmissionPolicy::deserialize(first)
+        .map_err(|e| anyhow::anyhow!("Failed to parse ValidatingAdmissionPolicy YAML: {}", e))?;
+
+    // Reject multi-document YAML files.
+    if iter.next().is_some() {
+        anyhow::bail!(
+            "Expected exactly one ValidatingAdmissionPolicy document, but found more than one"
+        );
+    }
+
+    let spec = policy
+        .spec
+        .ok_or_else(|| anyhow::anyhow!("ValidatingAdmissionPolicy has no spec"))?;
+
+    if spec.validations.as_deref().unwrap_or(&[]).is_empty() {
+        anyhow::bail!("ValidatingAdmissionPolicy must have at least one validation");
+    }
+
+    Ok(spec)
 }

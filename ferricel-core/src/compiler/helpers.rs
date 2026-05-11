@@ -103,6 +103,35 @@ pub fn emit_string_const(
     body.i32_const(len);
 }
 
+/// Emit `cel_get_variable(ptr, len)` and leave a `*mut CelValue` (i32) on the
+/// Wasm stack.
+pub fn emit_get_variable(
+    name: &str,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    let memory_id = get_memory_id(module)?;
+    emit_string_const(name, body, env, memory_id, module);
+    body.call(env.get(RuntimeFunction::GetVariable));
+    Ok(())
+}
+
+/// Emit `cel_set_variable(ptr, len, value)`.
+pub fn emit_set_variable(
+    name: &str,
+    value_local: LocalId,
+    body: &mut InstrSeqBuilder,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+) -> Result<(), anyhow::Error> {
+    let memory_id = get_memory_id(module)?;
+    emit_string_const(name, body, env, memory_id, module);
+    body.local_get(value_local)
+        .call(env.get(RuntimeFunction::SetVariable));
+    Ok(())
+}
+
 /// Compile a method/function call that takes one receiver (no extra arguments).
 ///
 /// - Method style:   `receiver.fn()`  — `target` is `Some`, `args` is empty

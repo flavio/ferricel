@@ -11,7 +11,7 @@ pub(crate) fn encode_ptr_len(ptr: i32, len: i32) -> i64 {
 }
 
 /// Serialize a CelValue to JSON and return (ptr, len) encoded in i64.
-fn serialize_to_json(value: &CelValue) -> i64 {
+pub(crate) fn serialize_to_json(value: &CelValue) -> i64 {
     // Serialize to JSON bytes
     let json_bytes = serde_json::to_vec(value).expect("Failed to serialize CelValue to JSON");
 

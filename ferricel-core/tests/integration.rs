@@ -32,3 +32,4 @@ mod variable_tests;
 
 mod ext;
 mod kubernetes;
+mod vap_tests;

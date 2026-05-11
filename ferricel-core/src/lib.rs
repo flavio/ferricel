@@ -9,6 +9,7 @@
 //! - **Runtime**: Executes Wasm modules with variable bindings
 //! - **Type Support**: Handles integers, unsigned integers, doubles, strings, booleans, lists, and maps
 //! - **Extensions**: Host-provided functions callable from CEL expressions
+//! - **`k8s-vap`** *(default)*: Compiles Kubernetes `ValidatingAdmissionPolicy` YAML to Wasm
 //!
 //! ## Example
 //!
@@ -29,6 +30,8 @@
 //! # Ok(())
 //! # }
 //! ```
+
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod compiler;
 pub mod runtime;

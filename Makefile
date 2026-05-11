@@ -286,7 +286,7 @@ docs: docs-api docs-book
 # Depends on the runtime so the build script in ferricel-core can find the Wasm.
 docs-api: $(RUNTIME_TARGET)
 	@echo "Building Rust API documentation for all workspace components..."
-	cargo doc --workspace --no-deps
+	RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo +nightly doc --workspace --all-features --no-deps
 
 # Build the mdbook user guide
 docs-book:

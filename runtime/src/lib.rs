@@ -29,10 +29,11 @@ mod membership;
 mod memory;
 pub mod optional;
 pub(crate) mod proto_wire;
-mod serialization;
+pub(crate) mod serialization;
 mod string;
 mod temporal;
 mod types;
+mod vap;
 
 // Shared test helpers available to all test modules within this crate.
 #[cfg(test)]
