@@ -5,7 +5,7 @@ expressions into WebAssembly modules.
 
 The produced `.wasm` files can then be executed in any Wasm runtime.
 
-> ![NOTE]
+> [!NOTE]
 > **Development Transparency**: Ferricel has been developed with the aid of a
 > code assistant (Claude Sonnet/Opus 4.6).
 >
@@ -112,7 +112,7 @@ Or install from source using Cargo:
 cargo install ferricel
 ```
 
-> ![NOTE]
+> [!NOTE]
 > This installation method requires the `protoc` binary to be available on your system.
 
 ## Name

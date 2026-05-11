@@ -16,7 +16,7 @@ or install from source:
 cargo install ferricel
 ```
 
-> ![NOTE]
+> [!NOTE]
 > This installation method requires the `protoc` binary to be available on your system.
 
 ## Usage
