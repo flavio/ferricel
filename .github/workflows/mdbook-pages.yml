@@ -7,9 +7,6 @@ on:
       - "docs/**"
       - ".github/workflows/mdbook-pages.yml"
 
-env:
-  MDBOOK_VERSION: "0.5.2"
-
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
@@ -32,6 +29,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read mdbook version
+        id: mdbook-version
+        run: |
+          echo "version=$(grep '^version:' mdbook-version.yaml | awk '{print $2}' | tr -d '\"')" >> "$GITHUB_OUTPUT"
+          echo "checksum=$(grep '^checksum:' mdbook-version.yaml | awk '{print $2}' | tr -d '\"')" >> "$GITHUB_OUTPUT"
+
       - name: Install mdbook
         run: |
           set -e
@@ -39,7 +42,8 @@ jobs:
           echo "$MDBOOK_CHECKSUM  mdbook.tar.gz" | sha256sum -c
           tar -xzf mdbook.tar.gz --directory=/usr/local/bin
         env:
-          MDBOOK_CHECKSUM: "084e4342ba564db270108763e404a7d1f309d932651a22484e93c0dc1a071f6d"
+          MDBOOK_VERSION: ${{ steps.mdbook-version.outputs.version }}
+          MDBOOK_CHECKSUM: ${{ steps.mdbook-version.outputs.checksum }}
 
       - name: Setup Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0

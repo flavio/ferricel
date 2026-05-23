@@ -34,24 +34,24 @@ sources:
 
 targets:
   update-version:
-    name: Update MDBOOK_VERSION in mdbook-pages workflow
+    name: Update version in mdbook-version.yaml
     kind: yaml
     scmid: ferricel
     sourceid: mdbook-release
     transformers:
       - trimprefix: "v"
     spec:
-      file: .github/workflows/mdbook-pages.yml
-      key: $.env.MDBOOK_VERSION
+      file: mdbook-version.yaml
+      key: $.version
 
   update-checksum:
-    name: Update MDBOOK_CHECKSUM in mdbook-pages workflow
+    name: Update checksum in mdbook-version.yaml
     kind: yaml
     scmid: ferricel
     sourceid: mdbook-checksum
     spec:
-      file: .github/workflows/mdbook-pages.yml
-      key: $.jobs.build-and-publish.steps[1].env.MDBOOK_CHECKSUM
+      file: mdbook-version.yaml
+      key: $.checksum
 
 actions:
   default:
