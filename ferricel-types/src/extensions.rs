@@ -132,7 +132,7 @@ impl BuilderStep {
 /// Declaration of a complete fluent builder chain (e.g. `kw.k8s`, `kw.sigstore`).
 ///
 /// Pass one `BuilderChainDecl` per library to
-/// [`Builder::with_builder_chain`](ferricel_core::compiler::Builder::with_builder_chain).
+/// `ferricel_core::compiler::Builder::with_builder_chain`.
 ///
 /// # Example — declaring `kw.k8s`
 ///

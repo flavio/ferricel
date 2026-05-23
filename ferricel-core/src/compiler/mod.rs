@@ -232,11 +232,16 @@ impl Compiler {
     ///
     /// - `evaluate(i64) -> i64` — JSON-encoded bindings input
     ///
-    /// The result JSON is a **Kubewarden `ValidationResponse`**:
+    /// The result JSON is a [Kubewarden](https://kubewarden.io/)
+    /// [`ValidationResponse`](https://docs.kubewarden.io/admission-controller/1.35/en/reference/spec/03-validating-policies.html#_the_validationresponse_object):
     ///
+    /// Accepted response:
     /// ```json
     /// {"accepted": true}
-    /// // or
+    /// ```
+    ///
+    /// Rejected response:
+    /// ```json
     /// {"accepted": false, "message": "...", "code": 422}
     /// ```
     ///

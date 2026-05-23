@@ -3,13 +3,17 @@
 //! This crate provides the core functionality for compiling Common Expression Language (CEL)
 //! expressions into WebAssembly modules and executing them.
 //!
-//! ## Features
+//! ## Capabilities
 //!
 //! - **Compiler**: Compiles CEL expressions to standalone Wasm modules
 //! - **Runtime**: Executes Wasm modules with variable bindings
 //! - **Type Support**: Handles integers, unsigned integers, doubles, strings, booleans, lists, and maps
 //! - **Extensions**: Host-provided functions callable from CEL expressions
-//! - **`k8s-vap`** *(default)*: Compiles Kubernetes `ValidatingAdmissionPolicy` YAML to Wasm
+//!
+//! ## Crate Features
+//! - **`k8s-vap`** *(default)*: Compiles Kubernetes
+//!   [`ValidatingAdmissionPolicy`](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#validatingadmissionpolicy)
+//!   YAML to Wasm
 //!
 //! ## Example
 //!

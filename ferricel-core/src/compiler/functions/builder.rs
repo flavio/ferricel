@@ -178,7 +178,7 @@ pub fn compile_builder_chain(
 
 /// Compile a builder **Terminal** step.
 ///
-/// Terminal steps emit a host extension call ([`ExtCall1`] or [`ExtCall2`])
+/// Terminal steps emit a host extension call ([`RuntimeFunction::ExtCall1`] or [`RuntimeFunction::ExtCall2`])
 /// with the accumulated state map (and optional extra argument folded in).
 ///
 /// For `.list()` (no extra arg):
