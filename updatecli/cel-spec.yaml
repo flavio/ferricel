@@ -39,6 +39,7 @@ targets:
     spec:
       command: >-
         git submodule update --init cel-spec &&
+        git -C cel-spec fetch --unshallow https://github.com/google/cel-spec.git || true &&
         git -C cel-spec fetch --force https://github.com/google/cel-spec.git 'refs/tags/*:refs/tags/*' &&
         git -C cel-spec checkout "tags/{{ source "cel-spec-release" }}" &&
         git add cel-spec
