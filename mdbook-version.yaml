@@ -1,4 +1,4 @@
 # This file tracks the version of mdbook used to build the docs.
 # It is updated automatically by the updatecli automation (updatecli/mdbook.yaml).
-version: "0.5.2"
+version: 0.5.3
 checksum: "084e4342ba564db270108763e404a7d1f309d932651a22484e93c0dc1a071f6d"
