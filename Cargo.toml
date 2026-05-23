@@ -11,13 +11,13 @@ resolver = "2"
 [workspace.package]
 license    = "Apache-2.0"
 repository = "https://github.com/flavio/ferricel"
-version    = "0.1.4"
+version    = "0.2.0-rc.1"
 
 [workspace.dependencies]
 anyhow         = "1.0"
 base64         = "0.22"
-ferricel-core  = { version = "0.1.0", path = "ferricel-core" }
-ferricel-types = { version = "0.1.0", path = "ferricel-types" }
+ferricel-core  = { version = "0.2.0-rc.1", path = "ferricel-core" }
+ferricel-types = { version = "0.2.0-rc.1", path = "ferricel-types" }
 k8s-openapi    = "0.27"
 prost          = "0.14"
 prost-types    = "0.14"
