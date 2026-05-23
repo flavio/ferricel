@@ -25,7 +25,7 @@ jobs:
         uses: updatecli/updatecli-action@e71be7554f3f940bc439cf720b3e4e379823c562 # v3.2.0
 
       - name: Run Updatecli
-        run: updatecli apply --config updatecli/
+        run: updatecli pipeline apply --config updatecli/
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATECLI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
