@@ -13,7 +13,7 @@ scms:
 sources:
   taplo-release:
     name: Get latest taplo GitHub release
-    kind: githubRelease
+    kind: githubrelease
     spec:
       owner: "tamasfe"
       repository: "taplo"

@@ -13,7 +13,7 @@ scms:
 sources:
   mdbook-release:
     name: Get latest mdbook GitHub release
-    kind: githubRelease
+    kind: githubrelease
     spec:
       owner: "rust-lang"
       repository: "mdBook"

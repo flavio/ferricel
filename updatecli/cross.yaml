@@ -13,7 +13,7 @@ scms:
 sources:
   cross-release:
     name: Get latest cross-rs GitHub release
-    kind: githubRelease
+    kind: githubrelease
     spec:
       owner: "cross-rs"
       repository: "cross"

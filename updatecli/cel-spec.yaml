@@ -13,7 +13,7 @@ scms:
 sources:
   cel-spec-release:
     name: Get latest cel-spec GitHub release
-    kind: githubRelease
+    kind: githubrelease
     spec:
       owner: "google"
       repository: "cel-spec"
