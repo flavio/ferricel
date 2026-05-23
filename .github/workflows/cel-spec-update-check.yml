@@ -1,0 +1,66 @@
+name: Check for new cel-spec release
+
+on:
+  schedule:
+    # Run once a day at 08:00 UTC
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Get latest cel-spec release
+        id: latest
+        run: |
+          version=$(curl -sf \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/google/cel-spec/releases/latest" \
+            | jq -r '.tag_name')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Get current cel-spec version
+        id: current
+        run: |
+          version=$(grep '^version:' cel-spec-version.yaml | awk '{print $2}')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Open issue if new version available
+        if: steps.latest.outputs.version != steps.current.outputs.version
+        run: |
+          # Avoid duplicate issues
+          existing=$(gh issue list \
+            --label "dependencies" \
+            --state open \
+            --search "Bump cel-spec to ${{ steps.latest.outputs.version }}" \
+            --json number \
+            --jq 'length')
+          if [ "$existing" -eq 0 ]; then
+            gh issue create \
+              --title "Bump cel-spec to ${{ steps.latest.outputs.version }}" \
+              --body "A new cel-spec release is available.
+
+          **Latest version:** ${{ steps.latest.outputs.version }}
+          **Current version:** ${{ steps.current.outputs.version }}
+          **Release page:** https://github.com/google/cel-spec/releases/tag/${{ steps.latest.outputs.version }}
+
+          To update:
+          1. Update \`cel-spec-version.yaml\` with the new version
+          2. Update the submodule:
+             \`\`\`sh
+             git -C cel-spec fetch --tags https://github.com/google/cel-spec.git
+             git -C cel-spec checkout tags/${{ steps.latest.outputs.version }}
+             git add cel-spec
+             \`\`\`" \
+              --label "dependencies"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
