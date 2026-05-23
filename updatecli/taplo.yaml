@@ -7,7 +7,7 @@ scms:
       owner: "flavio"
       repository: "ferricel"
       token: '{{ requiredEnv "GITHUB_TOKEN" }}'
-      username: '{{ requiredEnv "GITHUB_USERNAME" }}'
+      username: '{{ requiredEnv "UPDATECLI_GITHUB_USERNAME" }}'
       branch: "main"
 
 sources:
