@@ -3,7 +3,10 @@ use std::{
     rc::Rc,
 };
 
-use ferricel_types::{extensions::ExtensionDecl, functions::RuntimeFunction};
+use ferricel_types::{
+    extensions::{BuilderChainDecl, BuilderStep, ExtensionDecl},
+    functions::RuntimeFunction,
+};
 use walrus::{FunctionId, LocalId};
 
 use crate::schema::ProtoSchema;
@@ -45,13 +48,14 @@ impl CompilerContext {
         container: Option<String>,
         logger: slog::Logger,
         extensions: &BTreeSet<ExtensionDecl>,
+        builder_chains: &[BuilderChainDecl],
     ) -> Self {
         Self {
             local_vars: HashMap::new(),
             schema,
             container,
             logger,
-            extensions: Rc::new(ExtensionRegistry::new(extensions)),
+            extensions: Rc::new(ExtensionRegistry::new(extensions, builder_chains)),
         }
     }
 
@@ -92,14 +96,23 @@ impl ExtensionKey {
 /// the start of compilation.  Enables fast lookup by `ExtensionKey` and
 /// quick detection of registered namespace prefixes.
 pub struct ExtensionRegistry {
-    /// Map from `ExtensionKey` to the declaration.
+    /// Map from `ExtensionKey` to the declaration (flat extensions).
     pub by_name: HashMap<ExtensionKey, ExtensionDecl>,
     /// Set of all registered namespace strings (e.g. `"math"`).
     pub namespaces: HashSet<String>,
+    /// Builder entry-point steps, keyed by their full dotted function name
+    /// (e.g. `"kw.k8s.apiVersion"`).
+    pub builder_entries: HashMap<String, BuilderStep>,
+    /// Builder chain and terminal steps, keyed by their short method name
+    /// (e.g. `"kind"`, `"list"`, `"get"`, `"verify"`).
+    ///
+    /// When a function name matches here and the call has a target (receiver),
+    /// it is dispatched as a builder step rather than a flat extension.
+    pub builder_steps: HashMap<String, Vec<BuilderStep>>,
 }
 
 impl ExtensionRegistry {
-    pub fn new(extensions: &BTreeSet<ExtensionDecl>) -> Self {
+    pub fn new(extensions: &BTreeSet<ExtensionDecl>, builder_chains: &[BuilderChainDecl]) -> Self {
         let mut by_name = HashMap::new();
         let mut namespaces = HashSet::new();
         for decl in extensions {
@@ -111,14 +124,37 @@ impl ExtensionRegistry {
                 decl.clone(),
             );
         }
+
+        let mut builder_entries: HashMap<String, BuilderStep> = HashMap::new();
+        let mut builder_steps: HashMap<String, Vec<BuilderStep>> = HashMap::new();
+
+        for chain in builder_chains {
+            for step in &chain.steps {
+                match step {
+                    BuilderStep::Entry { function, .. } => {
+                        builder_entries.insert(function.clone(), step.clone());
+                    }
+                    BuilderStep::Chain { function, .. }
+                    | BuilderStep::Terminal { function, .. } => {
+                        builder_steps
+                            .entry(function.clone())
+                            .or_default()
+                            .push(step.clone());
+                    }
+                }
+            }
+        }
+
         Self {
             by_name,
             namespaces,
+            builder_entries,
+            builder_steps,
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.by_name.is_empty()
+        self.by_name.is_empty() && self.builder_entries.is_empty()
     }
 }
 

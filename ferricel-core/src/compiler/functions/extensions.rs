@@ -5,6 +5,7 @@ use walrus::InstrSeqBuilder;
 use crate::compiler::{
     context::{CallShape, CompilerContext, CompilerEnv, ExtensionKey},
     expr::compile_expr,
+    functions::builder::try_compile_builder_call,
     helpers::{emit_string_const, get_memory_id},
 };
 
@@ -53,9 +54,26 @@ pub fn compile_extension_call(
     ctx: &CompilerContext,
     module: &mut walrus::Module,
 ) -> Result<(), anyhow::Error> {
+    // ── Builder chain dispatch ────────────────────────────────────────────────
+    //
+    // Build the full dotted name for Entry-step lookup.  For a call like
+    // `kw.k8s.apiVersion("v1")` the parser emits:
+    //   func_name = "apiVersion"
+    //   target    = Some(Select{ field="k8s", operand=Ident("kw") })
+    //
+    // We reconstruct the full name by walking the target chain and prepending
+    // each segment.  If the reconstructed name matches a registered Entry step
+    // we dispatch there; otherwise we continue to the flat extension path.
+    let full_dotted = build_full_name(call_expr);
+    if try_compile_builder_call(&full_dotted, call_expr, body, env, ctx, module)? {
+        return Ok(());
+    }
+
     if ctx.extensions.is_empty() {
         return emit_unknown_function_error(&call_expr.func_name, body, env, module);
     }
+
+    // ── Flat extension dispatch ───────────────────────────────────────────────
 
     // Determine call shape.
     let shape = match &call_expr.target {
@@ -174,4 +192,36 @@ pub fn compile_extension_call(
     body.call(env.get(ext_fn));
 
     Ok(())
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Reconstruct the full dotted function name from a `CallExpr`.
+///
+/// For `kw.k8s.apiVersion("v1")` the parser produces:
+/// - `func_name = "apiVersion"`
+/// - `target    = Some(Select{ field="k8s", operand=Select{ field="kw" } })`  (simplified)
+///
+/// We walk the target chain to collect `["kw", "k8s"]` and append `func_name`,
+/// yielding `"kw.k8s.apiVersion"`.
+///
+/// For plain receiver-style calls like `client.kind("Pod")` the target is an
+/// ident, not a chain of selects — the result is just `"kind"`.
+fn build_full_name(call_expr: &CallExpr) -> String {
+    let mut segments: Vec<&str> = Vec::new();
+    collect_select_segments(call_expr.target.as_deref().map(|e| &e.expr), &mut segments);
+    segments.push(&call_expr.func_name);
+    segments.join(".")
+}
+
+fn collect_select_segments<'a>(expr: Option<&'a Expr>, out: &mut Vec<&'a str>) {
+    use cel::common::ast::Expr;
+    match expr {
+        Some(Expr::Ident(name)) => out.push(name.as_str()),
+        Some(Expr::Select(sel)) => {
+            collect_select_segments(Some(&sel.operand.expr), out);
+            out.push(&sel.field);
+        }
+        _ => {}
+    }
 }

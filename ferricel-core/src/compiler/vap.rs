@@ -15,13 +15,16 @@
 //!
 //! ## K8s resource fetching (params)
 //!
-//! The host must always register `kubernetes.get` and `kubernetes.list`
-//! implementations on the `Engine`. Both are unconditionally declared in every
-//! compiled module.
+//! The host must register a `kw.k8s` builder-chain implementation on the
+//! `Engine`. The chain is declared via [`kw_k8s_chain`] and injected
+//! automatically by [`compile_vap_from_spec`].
 
 use anyhow::Context as _;
 use cel::parser::Parser;
-use ferricel_types::{extensions::ExtensionDecl, functions::RuntimeFunction};
+use ferricel_types::{
+    extensions::{BuilderChainDecl, BuilderStep, ExtensionDecl},
+    functions::RuntimeFunction,
+};
 use k8s_openapi::api::admissionregistration::v1::{
     MatchCondition, ParamKind, ValidatingAdmissionPolicySpec, Validation, Variable,
 };
@@ -36,27 +39,118 @@ use crate::compiler::{
     },
 };
 
-// ─── Extension constants ──────────────────────────────────────────────────────
+// ─── kw.k8s builder chain ─────────────────────────────────────────────────────
 
-/// `kubernetes.get(apiVersion, kind, name, namespace)` extension declaration.
-pub static KUBERNETES_GET: std::sync::LazyLock<ExtensionDecl> =
-    std::sync::LazyLock::new(|| ExtensionDecl {
-        namespace: Some("kubernetes".to_string()),
+/// Return the [`BuilderChainDecl`] for the `kw.k8s` fluent API.
+///
+/// This mirrors the Go `library.Kubernetes()` cel-go library:
+///
+/// ```text
+/// kw.k8s.apiVersion(<string>) → kw.k8s.ClientBuilder
+///   .kind(<string>)            → kw.k8s.Client
+///   .namespace(<string>)       → kw.k8s.Client
+///   .labelSelector(<string>)   → kw.k8s.Client
+///   .fieldSelector(<string>)   → kw.k8s.Client
+///   .fieldMask(<string>)       → kw.k8s.Client   (accumulates into array)
+///   .list()                    → dyn  (host call)
+///   .get(<string>)             → dyn  (host call)
+/// ```
+pub fn kw_k8s_chain() -> BuilderChainDecl {
+    BuilderChainDecl {
+        steps: vec![
+            BuilderStep::Entry {
+                function: "kw.k8s.apiVersion".to_string(),
+                state_key: "apiVersion".to_string(),
+                output_type: "kw.k8s.ClientBuilder".to_string(),
+            },
+            BuilderStep::Chain {
+                function: "kind".to_string(),
+                input_type: "kw.k8s.ClientBuilder".to_string(),
+                state_key: "kind".to_string(),
+                output_type: "kw.k8s.Client".to_string(),
+                accumulate: false,
+            },
+            BuilderStep::Chain {
+                function: "namespace".to_string(),
+                input_type: "kw.k8s.Client".to_string(),
+                state_key: "namespace".to_string(),
+                output_type: "kw.k8s.Client".to_string(),
+                accumulate: false,
+            },
+            BuilderStep::Chain {
+                function: "labelSelector".to_string(),
+                input_type: "kw.k8s.Client".to_string(),
+                state_key: "labelSelector".to_string(),
+                output_type: "kw.k8s.Client".to_string(),
+                accumulate: false,
+            },
+            BuilderStep::Chain {
+                function: "fieldSelector".to_string(),
+                input_type: "kw.k8s.Client".to_string(),
+                state_key: "fieldSelector".to_string(),
+                output_type: "kw.k8s.Client".to_string(),
+                accumulate: false,
+            },
+            BuilderStep::Chain {
+                function: "fieldMask".to_string(),
+                input_type: "kw.k8s.Client".to_string(),
+                state_key: "fieldMasks".to_string(),
+                output_type: "kw.k8s.Client".to_string(),
+                accumulate: true,
+            },
+            BuilderStep::Terminal {
+                function: "list".to_string(),
+                input_type: "kw.k8s.Client".to_string(),
+                extra_arg_key: None,
+                host_namespace: "kw.k8s".to_string(),
+                host_function: "list".to_string(),
+            },
+            BuilderStep::Terminal {
+                function: "get".to_string(),
+                input_type: "kw.k8s.Client".to_string(),
+                extra_arg_key: Some("name".to_string()),
+                host_namespace: "kw.k8s".to_string(),
+                host_function: "get".to_string(),
+            },
+        ],
+    }
+}
+
+/// Return the [`ExtensionDecl`] for the `kw.k8s.get` terminal step.
+///
+/// Pass this to [`runtime::Builder::with_extension`] to register a host
+/// implementation that resolves single-resource fetches made by policies
+/// compiled with [`kw_k8s_chain`].
+///
+/// [`runtime::Builder::with_extension`]: crate::runtime::Builder::with_extension
+#[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
+pub fn kw_k8s_get_extension() -> ExtensionDecl {
+    ExtensionDecl {
+        namespace: Some("kw.k8s".to_string()),
         function: "get".to_string(),
-        global_style: true,
+        global_style: false,
         receiver_style: false,
-        num_args: 4,
-    });
+        num_args: 1,
+    }
+}
 
-/// `kubernetes.list(apiVersion, kind, labelSelector)` extension declaration.
-pub static KUBERNETES_LIST: std::sync::LazyLock<ExtensionDecl> =
-    std::sync::LazyLock::new(|| ExtensionDecl {
-        namespace: Some("kubernetes".to_string()),
+/// Return the [`ExtensionDecl`] for the `kw.k8s.list` terminal step.
+///
+/// Pass this to [`runtime::Builder::with_extension`] to register a host
+/// implementation that resolves list fetches made by policies compiled
+/// with [`kw_k8s_chain`].
+///
+/// [`runtime::Builder::with_extension`]: crate::runtime::Builder::with_extension
+#[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
+pub fn kw_k8s_list_extension() -> ExtensionDecl {
+    ExtensionDecl {
+        namespace: Some("kw.k8s".to_string()),
         function: "list".to_string(),
-        global_style: true,
+        global_style: false,
         receiver_style: false,
-        num_args: 3,
-    });
+        num_args: 1,
+    }
+}
 
 // ─── HTTP reason codes ────────────────────────────────────────────────────────
 
@@ -332,8 +426,25 @@ fn build_orchestrator(
 
 // ─── K8s resource fetch emitters ─────────────────────────────────────────────
 
-/// Emit code to fetch `params` via `kubernetes.get` using the runtime
-/// `paramRef` binding passed by the host.
+/// Emit code to fetch `params` via `kw.k8s.apiVersion(...).kind(...).get(name)`.
+///
+/// The `paramRef.name` and `paramRef.namespace` are read from the bindings map
+/// at runtime (injected by the host).
+///
+/// Emitted pseudo-code:
+/// ```text
+/// paramRef = get_variable("paramRef")
+/// name_val = paramRef["name"]
+/// ns_val   = paramRef["namespace"]
+///
+/// // kw.k8s.apiVersion(api_version).kind(kind).namespace(ns).get(name)
+/// builder = cel_builder_step(null, "kw.k8s.ClientBuilder", "apiVersion", api_version_str, 0)
+/// builder = cel_builder_step(builder, "kw.k8s.Client", "kind", kind_str, 0)
+/// builder = cel_builder_step(builder, "kw.k8s.Client", "namespace", ns_val, 0)
+/// builder = cel_builder_step(builder, "kw.k8s.Client", "name", name_val, 0)
+/// params  = ExtCall1("kw.k8s", "get", builder)
+/// set_variable("params", params)
+/// ```
 fn emit_fetch_params(
     param_kind: &ParamKind,
     body: &mut walrus::InstrSeqBuilder,
@@ -345,6 +456,7 @@ fn emit_fetch_params(
     let param_ref = module.locals.add(ValType::I32);
     let name_val = module.locals.add(ValType::I32);
     let ns_val = module.locals.add(ValType::I32);
+    let builder = module.locals.add(ValType::I32);
     let result = module.locals.add(ValType::I32);
 
     // Read paramRef from bindings
@@ -362,18 +474,60 @@ fn emit_fetch_params(
     body.call(env.get(RuntimeFunction::GetField))
         .local_set(ns_val);
 
-    // kubernetes.get(apiVersion, kind, name, namespace)
     let api_version = param_kind.api_version.as_deref().unwrap_or("");
     let kind = param_kind.kind.as_deref().unwrap_or("");
-    emit_string_const("kubernetes", body, env, mem, module);
+
+    // Step 1: kw.k8s.apiVersion(api_version) → ClientBuilder
+    {
+        let api_version_local = compile_string_to_local(api_version, body, env, module)?;
+        body.i32_const(0); // null receiver
+        emit_string_const("kw.k8s.ClientBuilder", body, env, mem, module);
+        emit_string_const("apiVersion", body, env, mem, module);
+        body.local_get(api_version_local);
+        body.i32_const(0); // accumulate = false
+        body.call(env.get(RuntimeFunction::BuilderStepCall))
+            .local_set(builder);
+    }
+
+    // Step 2: .kind(kind) → Client
+    {
+        let kind_local = compile_string_to_local(kind, body, env, module)?;
+        body.local_get(builder);
+        emit_string_const("kw.k8s.Client", body, env, mem, module);
+        emit_string_const("kind", body, env, mem, module);
+        body.local_get(kind_local);
+        body.i32_const(0);
+        body.call(env.get(RuntimeFunction::BuilderStepCall))
+            .local_set(builder);
+    }
+
+    // Step 3: .namespace(ns_val) — ns_val is a *mut CelValue from runtime
+    {
+        body.local_get(builder);
+        emit_string_const("kw.k8s.Client", body, env, mem, module);
+        emit_string_const("namespace", body, env, mem, module);
+        body.local_get(ns_val);
+        body.i32_const(0);
+        body.call(env.get(RuntimeFunction::BuilderStepCall))
+            .local_set(builder);
+    }
+
+    // Step 4: fold name into the map so the host gets it
+    {
+        body.local_get(builder);
+        emit_string_const("kw.k8s.Client", body, env, mem, module);
+        emit_string_const("name", body, env, mem, module);
+        body.local_get(name_val);
+        body.i32_const(0);
+        body.call(env.get(RuntimeFunction::BuilderStepCall))
+            .local_set(builder);
+    }
+
+    // Terminal: ExtCall1("kw.k8s", "get", builder)
+    emit_string_const("kw.k8s", body, env, mem, module);
     emit_string_const("get", body, env, mem, module);
-    let api_version_local = compile_string_to_local(api_version, body, env, module)?;
-    body.local_get(api_version_local);
-    let kind_local = compile_string_to_local(kind, body, env, module)?;
-    body.local_get(kind_local);
-    body.local_get(name_val);
-    body.local_get(ns_val);
-    body.call(env.get(RuntimeFunction::ExtCall4))
+    body.local_get(builder);
+    body.call(env.get(RuntimeFunction::ExtCall1))
         .local_set(result);
 
     emit_set_variable("params", result, body, env, module)

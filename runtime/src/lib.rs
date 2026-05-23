@@ -9,6 +9,7 @@ static ALLOCATOR: lol_alloc::AssumeSingleThreaded<lol_alloc::LeakingAllocator> =
 // Module declarations
 mod arithmetic;
 mod array;
+mod builder;
 mod bytes;
 mod chrono_helpers;
 mod comparison;

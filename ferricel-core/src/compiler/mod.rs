@@ -17,7 +17,10 @@ use cel::{common::ast::Expr, parser::Parser};
 // Re-export the public API types
 pub use context::ExtensionKey;
 use context::{CompilerContext, CompilerEnv};
-use ferricel_types::{extensions::ExtensionDecl, functions::RuntimeFunction};
+use ferricel_types::{
+    extensions::{BuilderChainDecl, ExtensionDecl},
+    functions::RuntimeFunction,
+};
 use walrus::{FunctionBuilder, FunctionId, ModuleConfig, ValType};
 
 // Embed the runtime Wasm at compile time.
@@ -49,6 +52,7 @@ pub struct Builder {
     container: Option<String>,
     logger: slog::Logger,
     extensions: BTreeSet<ExtensionDecl>,
+    builder_chains: Vec<BuilderChainDecl>,
 }
 
 impl Builder {
@@ -62,6 +66,7 @@ impl Builder {
             container: None,
             logger: slog::Logger::root(slog::Discard, slog::o!()),
             extensions: BTreeSet::new(),
+            builder_chains: Vec::new(),
         }
     }
 
@@ -96,6 +101,14 @@ impl Builder {
         self
     }
 
+    /// Register a fluent builder chain extension family (e.g. `kw.k8s`, `kw.sigstore`).
+    ///
+    /// May be called multiple times to register several chains.
+    pub fn with_builder_chain(mut self, decl: BuilderChainDecl) -> Self {
+        self.builder_chains.push(decl);
+        self
+    }
+
     /// Consume the builder and produce an immutable [`Compiler`].
     ///
     /// This is infallible — all fallible work (descriptor parsing) is done in
@@ -111,6 +124,7 @@ impl Builder {
             container: self.container,
             logger: self.logger,
             extensions: self.extensions,
+            builder_chains: self.builder_chains,
         }
     }
 }
@@ -130,6 +144,7 @@ pub struct Compiler {
     container: Option<String>,
     logger: slog::Logger,
     extensions: BTreeSet<ExtensionDecl>,
+    builder_chains: Vec<BuilderChainDecl>,
 }
 
 impl Compiler {
@@ -191,6 +206,7 @@ impl Compiler {
             self.container.clone(),
             self.logger.clone(),
             &self.extensions,
+            &self.builder_chains,
         );
 
         // 4. Build the 'evaluate' function (i64) -> (i32, i64) — JSON bindings path
@@ -256,10 +272,11 @@ impl Compiler {
         &self,
         spec: &k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicySpec,
     ) -> Result<Vec<u8>, anyhow::Error> {
-        // Collect implicit extension declarations required by the spec
-        let mut extensions = self.extensions.clone();
-        extensions.insert((*vap::KUBERNETES_GET).clone());
-        extensions.insert((*vap::KUBERNETES_LIST).clone());
+        let extensions = self.extensions.clone();
+
+        // Merge user-supplied builder chains with the implicit kw.k8s chain.
+        let mut builder_chains = self.builder_chains.clone();
+        builder_chains.push(vap::kw_k8s_chain());
 
         // Load runtime template
         let mut module = ModuleConfig::new().parse(RUNTIME_BYTES)?;
@@ -285,6 +302,7 @@ impl Compiler {
             self.container.clone(),
             self.logger.clone(),
             &extensions,
+            &builder_chains,
         );
 
         // Build `evaluate` (JSON bindings)

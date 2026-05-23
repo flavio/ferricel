@@ -321,6 +321,19 @@ pub enum RuntimeFunction {
     /// Serialize `{"accepted":false,"message":"...","code":N}` and return as packed ptr+len i64.
     /// Arguments: (message: *mut CelValue, code: i32)
     VapSerializeReject,
+
+    // Fluent builder chain support
+    /// Produce or update a builder state map for a fluent-chain extension step.
+    ///
+    /// Arguments:
+    /// - `receiver: *mut CelValue` — existing state map, or null to create a fresh one
+    /// - `type_tag_ptr: i32, type_tag_len: i32` — `"__type__"` value for the output map
+    /// - `key_ptr: i32, key_len: i32` — field name to set/append
+    /// - `value: *mut CelValue` — value to store
+    /// - `accumulate: i32` — 0 = overwrite, 1 = append to array
+    ///
+    /// Returns a new `*mut CelValue` (Object map).
+    BuilderStepCall,
 }
 
 impl RuntimeFunction {
@@ -589,6 +602,8 @@ impl RuntimeFunction {
 
             Self::VapSerializeAccept => "cel_serialize_vap_accept",
             Self::VapSerializeReject => "cel_serialize_vap_reject",
+
+            Self::BuilderStepCall => "cel_builder_step",
         }
     }
 
