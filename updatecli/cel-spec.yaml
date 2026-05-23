@@ -38,7 +38,8 @@ targets:
     sourceid: cel-spec-release
     spec:
       command: >-
-        git -C cel-spec fetch --tags --force &&
+        git submodule update --init cel-spec &&
+        git -C cel-spec fetch --force https://github.com/google/cel-spec.git 'refs/tags/*:refs/tags/*' &&
         git -C cel-spec checkout "tags/{{ source "cel-spec-release" }}" &&
         git add cel-spec
 
