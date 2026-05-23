@@ -974,7 +974,189 @@ spec:
     assert_accepted(&result);
 }
 
-/// .namespace() + .get() — both namespace and name reach the host; validation
+// ─── kw.k8s chain step coverage ──────────────────────────────────────────────
+
+/// `.fieldSelector()` chain step is forwarded to the host inside the builder map.
+///
+/// Cases:
+/// - `matching_result_accepted`  — host returns one Pod  → `size() >= 1` → accepted.
+/// - `empty_result_rejected`     — host returns no Pods  → `size() >= 1` → rejected.
+#[rstest]
+#[case::matching_result_accepted(
+    serde_json::json!({ "items": [{ "metadata": { "name": "pod-a" } }] }),
+    true
+)]
+#[case::empty_result_rejected(
+    serde_json::json!({ "items": [] }),
+    false
+)]
+fn test_vap_kw_k8s_field_selector(
+    #[case] host_response: serde_json::Value,
+    #[case] accepted: bool,
+) {
+    let yaml = r#"
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: test-field-selector
+spec:
+  variables:
+    - name: pods
+      expression: "kw.k8s.apiVersion('v1').kind('Pod').fieldSelector('status.phase=Running').list()"
+  validations:
+    - expression: "variables.pods.items.size() >= 1"
+      message: "no running pods found"
+"#;
+
+    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } });
+    let logger = test_logger();
+    let wasm_bytes = Builder::new()
+        .with_logger(logger.clone())
+        .build()
+        .compile_vap(yaml)
+        .unwrap();
+
+    let result_str = runtime::Builder::new()
+        .with_logger(logger)
+        .with_log_level(LogLevel::Info)
+        .with_wasm(wasm_bytes)
+        .with_extension(make_kw_k8s_list_decl(), {
+            let resp = host_response.clone();
+            move |args| {
+                let map = &args[0];
+                assert_eq!(map["apiVersion"], "v1", "wrong apiVersion");
+                assert_eq!(map["kind"], "Pod", "wrong kind");
+                assert_eq!(
+                    map["fieldSelector"], "status.phase=Running",
+                    "fieldSelector not forwarded to host"
+                );
+                Ok(resp.clone())
+            }
+        })
+        .build()
+        .unwrap()
+        .eval(Some(&bindings.to_string()))
+        .unwrap();
+
+    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
+    if accepted {
+        assert_accepted(&result);
+    } else {
+        assert_rejected(&result, Some("no running pods found"), Some(422));
+    }
+}
+
+/// `.fieldMask()` chain step with a single mask — host receives `fieldMasks`
+/// as a single-element array.
+///
+/// Exercises the `accumulate = true` code path in `cel_builder_step` for the
+/// first call (None → Array([val])).
+#[test]
+fn test_vap_kw_k8s_field_mask_single() {
+    let yaml = r#"
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: test-field-mask-single
+spec:
+  variables:
+    - name: cms
+      expression: "kw.k8s.apiVersion('v1').kind('ConfigMap').fieldMask('metadata.name').list()"
+  validations:
+    - expression: "variables.cms.items.size() >= 1"
+      message: "no ConfigMaps found"
+"#;
+
+    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } });
+    let logger = test_logger();
+    let wasm_bytes = Builder::new()
+        .with_logger(logger.clone())
+        .build()
+        .compile_vap(yaml)
+        .unwrap();
+
+    let result_str = runtime::Builder::new()
+        .with_logger(logger)
+        .with_log_level(LogLevel::Info)
+        .with_wasm(wasm_bytes)
+        .with_extension(make_kw_k8s_list_decl(), |args| {
+            let map = &args[0];
+            assert_eq!(map["apiVersion"], "v1");
+            assert_eq!(map["kind"], "ConfigMap");
+            assert_eq!(
+                map["fieldMasks"],
+                serde_json::json!(["metadata.name"]),
+                "expected single-element fieldMasks array"
+            );
+            Ok(serde_json::json!({
+                "items": [{ "metadata": { "name": "cm-a" } }]
+            }))
+        })
+        .build()
+        .unwrap()
+        .eval(Some(&bindings.to_string()))
+        .unwrap();
+
+    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
+    assert_accepted(&result);
+}
+
+/// `.fieldMask()` chain step called twice — host receives `fieldMasks` as a
+/// two-element array.
+///
+/// Exercises the `accumulate = true` array-append path in `cel_builder_step`:
+/// the second call turns `Array([a])` into `Array([a, b])`.
+#[test]
+fn test_vap_kw_k8s_field_mask_accumulated() {
+    let yaml = r#"
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: test-field-mask-accumulated
+spec:
+  variables:
+    - name: cms
+      expression: "kw.k8s.apiVersion('v1').kind('ConfigMap').fieldMask('metadata.name').fieldMask('data').list()"
+  validations:
+    - expression: "variables.cms.items.size() >= 1"
+      message: "no ConfigMaps found"
+"#;
+
+    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } });
+    let logger = test_logger();
+    let wasm_bytes = Builder::new()
+        .with_logger(logger.clone())
+        .build()
+        .compile_vap(yaml)
+        .unwrap();
+
+    let result_str = runtime::Builder::new()
+        .with_logger(logger)
+        .with_log_level(LogLevel::Info)
+        .with_wasm(wasm_bytes)
+        .with_extension(make_kw_k8s_list_decl(), |args| {
+            let map = &args[0];
+            assert_eq!(map["apiVersion"], "v1");
+            assert_eq!(map["kind"], "ConfigMap");
+            assert_eq!(
+                map["fieldMasks"],
+                serde_json::json!(["metadata.name", "data"]),
+                "fieldMask calls must accumulate into an array in call order"
+            );
+            Ok(serde_json::json!({
+                "items": [{ "metadata": { "name": "cm-a" } }]
+            }))
+        })
+        .build()
+        .unwrap()
+        .eval(Some(&bindings.to_string()))
+        .unwrap();
+
+    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
+    assert_accepted(&result);
+}
+
+/// `.namespace()` + `.get()` — both namespace and name reach the host; validation
 /// reads a field from the returned resource.
 #[test]
 fn test_vap_kw_k8s_get_with_namespace() {
