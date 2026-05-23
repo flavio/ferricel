@@ -38,8 +38,8 @@ targets:
     sourceid: cel-spec-release
     spec:
       command: >-
-        git -C cel-spec fetch --tags &&
-        git -C cel-spec checkout {{ source "cel-spec-release" }} &&
+        git -C cel-spec fetch --tags --force &&
+        git -C cel-spec checkout "tags/{{ source "cel-spec-release" }}" &&
         git add cel-spec
 
 actions:
