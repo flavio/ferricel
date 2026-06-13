@@ -28,19 +28,20 @@ k8s-vap = ["dep:k8s-openapi", "dep:yaml_serde"]
 anyhow         = { workspace = true }
 cel            = "0.13"
 ferricel-types = { workspace = true }
-k8s-openapi    = { workspace = true, features = ["v1_32"], optional = true }
+k8s-openapi    = { workspace = true, optional = true }
 prost          = { workspace = true }
 prost-types    = { workspace = true }
 serde          = { workspace = true }
 serde_json     = { workspace = true }
 slog           = { workspace = true }
 walrus         = "0.26"
-wasmtime       = "44.0"
+wasmtime       = "45.0"
 yaml_serde     = { workspace = true, optional = true }
 
 [dev-dependencies]
-rstest    = { workspace = true }
-slog-term = { workspace = true }
+k8s-openapi = { workspace = true, features = ["v1_35"] }
+rstest      = { workspace = true }
+slog-term   = { workspace = true }
 
 [[test]]
 name = "integration"

@@ -4,6 +4,8 @@
 all: ferricel
 
 # Variables
+K8S_VERSION := 1.35
+
 RUNTIME_TARGET := target/wasm32-unknown-unknown/release/runtime.wasm
 RUNTIME_SOURCES := $(shell find runtime/src -type f -name '*.rs' 2>/dev/null)
 RUNTIME_CARGO := runtime/Cargo.toml
@@ -286,7 +288,7 @@ docs: docs-api docs-book
 # Depends on the runtime so the build script in ferricel-core can find the Wasm.
 docs-api: $(RUNTIME_TARGET)
 	@echo "Building Rust API documentation for all workspace components..."
-	RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo +nightly doc --workspace --all-features --no-deps
+	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo +nightly doc --workspace --all-features --no-deps
 
 # Build the mdbook user guide
 docs-book:
@@ -313,18 +315,18 @@ fmt:
 lint: $(RUNTIME_TARGET)
 	cargo +nightly fmt --all -- --check
 	taplo fmt --check
-	cargo clippy --workspace -- -D warnings
+	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo clippy --workspace -- -D warnings
 
 # Auto-fix clippy warnings where possible
 .PHONY: lint-fix
 lint-fix: $(RUNTIME_TARGET)
-	cargo clippy --workspace --fix --allow-dirty --allow-staged
+	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo clippy --workspace --fix --allow-dirty --allow-staged
 	taplo fmt
 
 # Check that the code compiles without building artifacts
 .PHONY: check
 check: $(RUNTIME_TARGET)
-	cargo check --workspace
+	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo check --workspace
 
 # Help target
 help:

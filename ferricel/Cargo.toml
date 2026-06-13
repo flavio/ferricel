@@ -15,6 +15,7 @@ anyhow         = { workspace = true }
 clap           = { version = "4.6", features = ["derive"] }
 ferricel-core  = { workspace = true, features = ["k8s-vap"] }
 ferricel-types = { workspace = true }
+k8s-openapi    = { workspace = true, features = ["v1_35"] }
 prost          = { workspace = true }
 prost-types    = { workspace = true }
 serde_json     = { workspace = true }
