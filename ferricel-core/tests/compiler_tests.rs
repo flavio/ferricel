@@ -32,3 +32,31 @@ fn test_invalid_cel_expression() {
         "Invalid CEL expression should return error"
     );
 }
+
+#[test]
+fn test_producers_custom_section_present() {
+    let wasm_bytes = Builder::new()
+        .build()
+        .compile("42")
+        .expect("Failed to compile");
+
+    // The producers section is encoded as a WebAssembly custom section whose
+    // field names and versioned-name strings appear verbatim as LEB128-prefixed
+    // UTF-8 in the binary.  Searching for the raw bytes of each expected string
+    // is sufficient to verify the section content without depending on an
+    // external parser or walrus internals.
+    let contains = |needle: &[u8]| wasm_bytes.windows(needle.len()).any(|w| w == needle);
+
+    assert!(contains(b"producers"), "producers section name not found");
+    assert!(contains(b"language"), "'language' field not found");
+    assert!(contains(b"CEL"), "'CEL' language entry not found");
+    assert!(contains(b"processed-by"), "'processed-by' field not found");
+    assert!(contains(b"ferricel"), "'ferricel' tool entry not found");
+
+    let version = env!("CARGO_PKG_VERSION").as_bytes();
+    assert!(
+        contains(version),
+        "ferricel version '{}' not found in producers section",
+        env!("CARGO_PKG_VERSION"),
+    );
+}

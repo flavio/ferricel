@@ -204,3 +204,47 @@ used, this import can be satisfied with a stub that traps.
 
 > [!NOTE]
 > This import is only present if the compiled CEL expression uses host extensions.
+
+## Producers Metadata
+
+Each compiled module includes a standard WebAssembly
+[`producers`](https://github.com/WebAssembly/tool-conventions/blob/main/ProducersSection.md)
+custom section that records which tools produced it. The section has no
+semantic effect on execution and can be safely stripped, but it is useful for
+debugging and toolchain analytics.
+
+Ferricel adds the following entries:
+
+| Field          | Name       | Version |
+|----------------|------------|---------|
+| `language`     | `CEL`      | *(empty)* |
+| `processed-by` | `ferricel` | crate version (e.g. `0.2.0-rc.1`) |
+
+These are merged with entries already present in the embedded runtime template
+(contributed by the Rust toolchain), so the final section typically contains:
+
+```text
+language:
+    Rust
+    CEL
+processed-by:
+    rustc: 1.95.0 (59807616e 2026-04-14)
+    walrus: 0.26.1
+    ferricel: 0.2.0-rc.1
+```
+
+### Inspecting the section
+
+Use [`wasm-tools`](https://github.com/bytecodealliance/wasm-tools) to print the
+producers section in a human-readable form:
+
+```sh
+wasm-tools metadata show policy.wasm
+```
+
+Alternatively, [`wabt`](https://github.com/WebAssembly/wabt)'s `wasm-objdump`
+can dump the raw bytes of the section:
+
+```sh
+wasm-objdump -s -j producers policy.wasm
+```

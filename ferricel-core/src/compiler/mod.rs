@@ -221,7 +221,10 @@ impl Compiler {
         // 6. Run garbage collection to remove unreferenced items (dead code elimination)
         walrus::passes::gc::run(&mut module);
 
-        // 7. Emit the module as bytes
+        // 7. Populate the producers custom section
+        add_producers_entries(&mut module);
+
+        // 8. Emit the module as bytes
         Ok(module.emit_wasm())
     }
 
@@ -315,8 +318,28 @@ impl Compiler {
         module.exports.add("evaluate", evaluate_id);
 
         walrus::passes::gc::run(&mut module);
+        add_producers_entries(&mut module);
         Ok(module.emit_wasm())
     }
+}
+
+/// Populate the standardised WebAssembly `producers` section.
+///
+/// Entries are **added to** (not replaced) whatever the embedded `runtime.wasm`
+/// template already recorded (typically `rustc` / `LLVM` entries from the Rust
+/// toolchain).  This follows the tool-conventions spec, which explicitly states
+/// that "it is possible (and common) for multiple tools to be used in the
+/// overall pipeline that produces and optimizes a given wasm module".
+///
+/// Adds:
+/// - `language`:     `"CEL"` (empty version — CEL has no distinct release cycle
+///   separate from this compiler)
+/// - `processed-by`: `"ferricel"` with the crate version from `CARGO_PKG_VERSION`
+fn add_producers_entries(module: &mut walrus::Module) {
+    module.producers.add_language("CEL", "");
+    module
+        .producers
+        .add_processed_by("ferricel", env!("CARGO_PKG_VERSION"));
 }
 
 /// Build the `evaluate` Wasm function `(i64) -> i64` using JSON-encoded bindings.
