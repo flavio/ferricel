@@ -202,18 +202,20 @@ impl Builder {
         self
     }
 
-    /// Consume the builder and produce an immutable [`Engine`].
+    /// Consume the builder and produce an [`EnginePre`].
     ///
-    /// This creates (or reuses) a [`wasmtime::Engine`], parses the Wasm module,
-    /// registers all host functions, and calls [`Linker::instantiate_pre`] so that
-    /// subsequent [`eval`](Engine::eval) calls only pay the cost of instantiation,
-    /// not compilation.
+    /// This creates (or reuses) a [`wasmtime::Engine`], resolves the Wasm module
+    /// (compiling from bytes if needed), registers all host functions into a
+    /// [`Linker`], and calls [`Linker::instantiate_pre`] to produce a
+    /// pre-linked [`wasmtime::InstancePre`].
     ///
-    /// If no [`wasmtime::Engine`] was supplied via [`with_engine`](Self::with_engine),
-    /// a default one is created via [`wasmtime::Engine::default`].
+    /// The resulting [`EnginePre`] can be cloned cheaply (all internals are
+    /// `Arc`-backed) and rehydrated into a ready-to-use [`Engine`] at any time
+    /// via [`EnginePre::rehydrate`], which is where per-evaluation-context state
+    /// (e.g. extension function implementations) is injected.
     ///
-    /// Returns `Err` if no Wasm bytes were provided or if the bytes are invalid.
-    pub fn build(self) -> Result<Engine, anyhow::Error> {
+    /// Returns `Err` if no Wasm was provided or if compilation/linking fails.
+    pub fn build_pre(self) -> Result<EnginePre, anyhow::Error> {
         let wasm_engine = self.wasm_engine.unwrap_or_default();
 
         let module = if let Some(module) = self.wasm_module {
@@ -221,7 +223,7 @@ impl Builder {
         } else {
             let bytes = self.wasm_bytes.ok_or_else(|| {
                 anyhow::anyhow!(
-                    "no Wasm provided: call with_wasm() or with_module() before build()"
+                    "no Wasm provided: call with_wasm() or with_module() before build_pre()"
                 )
             })?;
             Module::from_binary(&wasm_engine, &bytes)?
@@ -232,13 +234,21 @@ impl Builder {
 
         let instance_pre = linker.instantiate_pre(&module)?;
 
-        Ok(Engine {
+        Ok(EnginePre {
             wasm_engine,
             instance_pre,
-            extensions_impl: self.extensions,
             logger: self.logger,
             log_level: self.log_level,
         })
+    }
+
+    /// Consume the builder and produce an immutable [`Engine`].
+    ///
+    /// Returns `Err` if no Wasm bytes were provided or if the bytes are invalid.
+    pub fn build(self) -> Result<Engine, anyhow::Error> {
+        let extensions = self.extensions.clone();
+        let pre = self.build_pre()?;
+        Ok(pre.rehydrate(extensions))
     }
 
     /// Register all host functions into the linker.
@@ -415,6 +425,47 @@ impl Builder {
 impl Default for Builder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// A pre-linked, ready-to-rehydrate CEL engine.
+///
+/// Created via [`Builder::build_pre`]. Contains the pre-compiled
+/// [`wasmtime::InstancePre`] but no extension function implementations yet.
+///
+/// Clone is cheap: both [`wasmtime::Engine`] and [`wasmtime::InstancePre`] are
+/// internally `Arc`-backed.
+///
+/// Call [`EnginePre::rehydrate`] to produce a ready-to-use [`Engine`], injecting
+/// per-evaluation-context state (extension function implementations) at that point.
+#[derive(Clone)]
+pub struct EnginePre {
+    wasm_engine: WasmEngine,
+    instance_pre: InstancePre<HostState>,
+    logger: slog::Logger,
+    log_level: LogLevel,
+}
+
+impl EnginePre {
+    /// Produce an [`Engine`] by injecting extension function implementations.
+    ///
+    /// This is infallible: all fallible work (compilation, linking,
+    /// pre-instantiation) was done in [`Builder::build_pre`]. This method only
+    /// pairs the pre-linked [`wasmtime::InstancePre`] with the provided
+    /// extension map.
+    ///
+    /// Pass an empty `HashMap` if the policy uses no extension functions.
+    pub fn rehydrate(
+        &self,
+        extensions: std::collections::HashMap<ExtensionKey, ExtensionFn>,
+    ) -> Engine {
+        Engine {
+            wasm_engine: self.wasm_engine.clone(),
+            instance_pre: self.instance_pre.clone(),
+            extensions_impl: extensions,
+            logger: self.logger.clone(),
+            log_level: self.log_level,
+        }
     }
 }
 

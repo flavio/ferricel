@@ -43,5 +43,5 @@ pub mod schema;
 
 // Re-export commonly used types for convenience
 pub use compiler::{Compiler, ExtensionKey};
-pub use runtime::Engine;
+pub use runtime::{Engine, EnginePre};
 pub use schema::ProtoSchema;
