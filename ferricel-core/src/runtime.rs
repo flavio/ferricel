@@ -110,6 +110,7 @@ pub struct Builder {
     log_level: LogLevel,
     extensions: std::collections::HashMap<ExtensionKey, ExtensionFn>,
     wasm_bytes: Option<Vec<u8>>,
+    wasm_module: Option<Module>,
     wasm_engine: Option<WasmEngine>,
 }
 
@@ -125,6 +126,7 @@ impl Builder {
             log_level: LogLevel::Error,
             extensions: std::collections::HashMap::new(),
             wasm_bytes: None,
+            wasm_module: None,
             wasm_engine: None,
         }
     }
@@ -186,6 +188,20 @@ impl Builder {
         self
     }
 
+    /// Provide a pre-compiled [`wasmtime::Module`] to execute.
+    ///
+    /// Use this when the caller has already compiled the module (e.g. via
+    /// [`wasmtime::Module::from_file`]) and wants to avoid re-parsing the Wasm
+    /// binary. A [`wasmtime::Engine`] must be supplied via
+    /// [`with_engine`](Self::with_engine) and must be the same engine used to
+    /// compile the module.
+    ///
+    /// Takes priority over [`with_wasm`](Self::with_wasm) when both are set.
+    pub fn with_module(mut self, module: Module) -> Self {
+        self.wasm_module = Some(module);
+        self
+    }
+
     /// Consume the builder and produce an immutable [`Engine`].
     ///
     /// This creates (or reuses) a [`wasmtime::Engine`], parses the Wasm module,
@@ -198,12 +214,18 @@ impl Builder {
     ///
     /// Returns `Err` if no Wasm bytes were provided or if the bytes are invalid.
     pub fn build(self) -> Result<Engine, anyhow::Error> {
-        let bytes = self.wasm_bytes.ok_or_else(|| {
-            anyhow::anyhow!("no Wasm bytes provided: call with_wasm() before build()")
-        })?;
-
         let wasm_engine = self.wasm_engine.unwrap_or_default();
-        let module = Module::from_binary(&wasm_engine, &bytes)?;
+
+        let module = if let Some(module) = self.wasm_module {
+            module
+        } else {
+            let bytes = self.wasm_bytes.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no Wasm provided: call with_wasm() or with_module() before build()"
+                )
+            })?;
+            Module::from_binary(&wasm_engine, &bytes)?
+        };
 
         let mut linker = Linker::<HostState>::new(&wasm_engine);
         Self::add_to_linker(&mut linker)?;
