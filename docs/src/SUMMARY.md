@@ -5,10 +5,9 @@
 - [Wasm Spec](./wasm-spec.md)
 - [Compiling a CEL program to Wasm](./compile-cel-to-wasm.md)
 - [Running a CEL program compiled to Wasm](./run-cel-wasm.md)
-- [Compiling a ValidatingAdmissionPolicy to Wasm](./compile-vap-to-wasm.md)
-<!-- <review> -->
-<!-- A Kubernetes ValidatingAdmissionPolicy -->
-<!-- </review> -->
+- [Kubernetes ValidatingAdmissionPolicy Support](./vap.md)
+  - [Compiling a ValidatingAdmissionPolicy to Wasm](./compile-vap-to-wasm.md)
+  - [Running a Compiled ValidatingAdmissionPolicy](./run-vap-wasm.md)
 
 ## Developer Guide
 
