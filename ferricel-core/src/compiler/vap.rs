@@ -17,7 +17,7 @@
 //!
 //! The host must register a `kw.k8s` builder-chain implementation on the
 //! `Engine`. The chain is declared via [`kw_k8s_chain`] and injected
-//! automatically by [`crate::compiler::Compiler::compile_vap_from_spec`].
+//! automatically by [`crate::compiler::Compiler::compile_vap_from_policy`].
 
 use anyhow::Context as _;
 use cel::parser::Parser;

@@ -24,17 +24,17 @@ let wasm_bytes = Builder::new().build().compile_vap(&yaml)?;
 
 The YAML must contain exactly one `ValidatingAdmissionPolicy` document.
 
-### From a Parsed Spec
+### From a Parsed Policy
 
-The `ValidatingAdmissionPolicySpec` type is defined by the
+The `ValidatingAdmissionPolicy` type is defined by the
 [`k8s-openapi`](https://crates.io/crates/k8s-openapi) crate.
 
 ```rust
 use ferricel_core::compiler::Builder;
-use k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicySpec;
+use k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicy;
 
-let spec: ValidatingAdmissionPolicySpec = /* ... */;
-let wasm_bytes = Builder::new().build().compile_vap_from_spec(&spec)?;
+let policy: ValidatingAdmissionPolicy = /* ... */;
+let wasm_bytes = Builder::new().build().compile_vap_from_policy(&policy)?;
 ```
 
 ## Response Shape

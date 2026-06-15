@@ -224,7 +224,13 @@ impl Compiler {
         // 7. Populate the producers custom section
         add_producers_entries(&mut module);
 
-        // 8. Emit the module as bytes
+        // 8. Embed the original CEL source for tooling and debugging
+        module.customs.add(walrus::RawCustomSection {
+            name: "ferricel.cel-source".to_string(),
+            data: cel_code.as_bytes().to_vec(),
+        });
+
+        // 9. Emit the module as bytes
         Ok(module.emit_wasm())
     }
 
@@ -266,20 +272,42 @@ impl Compiler {
     #[cfg(feature = "k8s-vap")]
     #[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
     pub fn compile_vap(&self, vap_yaml: &str) -> Result<Vec<u8>, anyhow::Error> {
-        let spec = parse_vap_yaml(vap_yaml)?;
-        self.compile_vap_from_spec(&spec)
+        let policy = parse_vap_yaml(vap_yaml)?;
+        self.compile_vap_from_policy(&policy)
     }
 
-    /// Compile a `ValidatingAdmissionPolicySpec` directly (bypassing YAML parsing).
+    /// Compile a `ValidatingAdmissionPolicy` directly (bypassing YAML parsing).
     ///
-    /// Useful when the caller has already parsed or constructed the spec
-    /// programmatically from a `k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicySpec`.
+    /// Useful when the caller has already parsed or constructed the policy
+    /// programmatically from a `k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicy`.
+    ///
+    /// The full policy is serialized back to YAML and embedded as a
+    /// `ferricel.vap-source` custom section for tooling and debugging.
     #[cfg(feature = "k8s-vap")]
     #[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
-    pub fn compile_vap_from_spec(
+    pub fn compile_vap_from_policy(
         &self,
-        spec: &k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicySpec,
+        policy: &k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicy,
     ) -> Result<Vec<u8>, anyhow::Error> {
+        Ok(self.build_vap_module(policy)?.emit_wasm())
+    }
+
+    /// Internal helper: compile a VAP policy into a walrus [`Module`] and embed
+    /// the full policy serialized as YAML in the `ferricel.vap-source` custom section.
+    #[cfg(feature = "k8s-vap")]
+    fn build_vap_module(
+        &self,
+        policy: &k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicy,
+    ) -> Result<walrus::Module, anyhow::Error> {
+        let spec = policy
+            .spec
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("ValidatingAdmissionPolicy has no spec"))?;
+
+        if spec.validations.as_deref().unwrap_or(&[]).is_empty() {
+            anyhow::bail!("ValidatingAdmissionPolicy must have at least one validation");
+        }
+
         let extensions = self.extensions.clone();
 
         // Merge user-supplied builder chains with the implicit kw.k8s chain.
@@ -319,7 +347,16 @@ impl Compiler {
 
         walrus::passes::gc::run(&mut module);
         add_producers_entries(&mut module);
-        Ok(module.emit_wasm())
+
+        // Embed the full policy serialized as YAML for tooling and debugging.
+        let vap_yaml = yaml_serde::to_string(policy)
+            .context("Failed to serialize ValidatingAdmissionPolicy to YAML")?;
+        module.customs.add(walrus::RawCustomSection {
+            name: "ferricel.vap-source".to_string(),
+            data: vap_yaml.into_bytes(),
+        });
+
+        Ok(module)
     }
 }
 
@@ -398,15 +435,14 @@ fn build_evaluate_proto_function(
 
 // ─── VAP YAML parsing ─────────────────────────────────────────────────────────
 
-/// Parse a `ValidatingAdmissionPolicy` YAML string into a
-/// `ValidatingAdmissionPolicySpec`.
+/// Parse a `ValidatingAdmissionPolicy` YAML string.
 ///
 /// The YAML must contain exactly one `ValidatingAdmissionPolicy` document; an
 /// error is returned if zero or more than one document is found.
 #[cfg(feature = "k8s-vap")]
 pub(crate) fn parse_vap_yaml(
     yaml: &str,
-) -> Result<k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicySpec, anyhow::Error>
+) -> Result<k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicy, anyhow::Error>
 {
     use k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicy;
     use serde::Deserialize as _;
@@ -427,13 +463,5 @@ pub(crate) fn parse_vap_yaml(
         );
     }
 
-    let spec = policy
-        .spec
-        .ok_or_else(|| anyhow::anyhow!("ValidatingAdmissionPolicy has no spec"))?;
-
-    if spec.validations.as_deref().unwrap_or(&[]).is_empty() {
-        anyhow::bail!("ValidatingAdmissionPolicy must have at least one validation");
-    }
-
-    Ok(spec)
+    Ok(policy)
 }

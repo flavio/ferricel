@@ -248,3 +248,30 @@ can dump the raw bytes of the section:
 ```sh
 wasm-objdump -s -j producers policy.wasm
 ```
+
+## Source Custom Sections
+
+Each compiled module embeds the original source as a raw UTF-8 custom section,
+making it possible to recover the source from a `.wasm` file without any
+external metadata.
+
+| Section name | Content | Produced by |
+|--------------|---------|-------------|
+| `ferricel.cel-source` | The original CEL expression | [`compile()`] |
+| `ferricel.vap-source` | The full `ValidatingAdmissionPolicy` serialized as YAML | [`compile_vap()`], [`compile_vap_from_policy()`] |
+
+### Inspecting source sections
+
+```sh
+# Print the CEL expression embedded in a compiled module
+wasm-objdump -s -j ferricel.cel-source policy.wasm
+
+# Print the VAP YAML embedded in a compiled module
+wasm-objdump -s -j ferricel.vap-source policy.wasm
+```
+
+With `wasm-tools`, the raw UTF-8 content can be extracted directly:
+
+```sh
+wasm-tools dump policy.wasm | grep -A1 "ferricel.cel-source"
+```
