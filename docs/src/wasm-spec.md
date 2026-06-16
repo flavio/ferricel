@@ -251,14 +251,50 @@ wasm-objdump -s -j producers policy.wasm
 
 ## Source Custom Sections
 
-Each compiled module embeds the original source as a raw UTF-8 custom section,
-making it possible to recover the source from a `.wasm` file without any
-external metadata.
+Each compiled module embeds the original source and a manifest of host
+extensions as raw UTF-8 custom sections, making it possible to recover this
+information from a `.wasm` file without any external metadata.
 
 | Section name | Content | Produced by |
 |--------------|---------|-------------|
 | `ferricel.cel-source` | The original CEL expression | [`compile()`] |
 | `ferricel.vap-source` | The full `ValidatingAdmissionPolicy` serialized as YAML | [`compile_vap()`], [`compile_vap_from_policy()`] |
+| `ferricel.extensions` | JSON array of host extensions used by this module | all compile paths |
+
+### `ferricel.extensions` section
+
+The `ferricel.extensions` section contains a JSON array of objects, sorted by
+`(namespace, function)`, listing every host extension that the module may call
+at evaluation time:
+
+```json
+[
+  { "namespace": null,     "function": "abs"        },
+  { "namespace": "kw.k8s", "function": "get"        },
+  { "namespace": "kw.k8s", "function": "list"       },
+  { "namespace": "kw.net", "function": "lookupHost" }
+]
+```
+
+`namespace` is `null` for flat (non-namespaced) extensions. The section is
+always present; it is an empty array `[]` when the module uses no host
+extensions.
+
+The section records extensions that **may** be called — due to CEL's short-circuit
+operators (`&&`, `||`), an extension in the list might not be invoked for every
+evaluation. A host should use the list to decide which extension implementations
+to register, not as a guarantee that all listed extensions will be called.
+
+Read the section at runtime with `ferricel_core::extensions_used`:
+
+```rust
+use ferricel_core::extensions_used;
+
+let wasm = std::fs::read("policy.wasm")?;
+for ext in extensions_used(&wasm)? {
+    println!("{}/{}", ext.namespace.as_deref().unwrap_or("(none)"), ext.function);
+}
+```
 
 ### Inspecting source sections
 
@@ -268,6 +304,9 @@ wasm-objdump -s -j ferricel.cel-source policy.wasm
 
 # Print the VAP YAML embedded in a compiled module
 wasm-objdump -s -j ferricel.vap-source policy.wasm
+
+# Print the extensions manifest
+wasm-objdump -s -j ferricel.extensions policy.wasm
 ```
 
 With `wasm-tools`, the raw UTF-8 content can be extracted directly:

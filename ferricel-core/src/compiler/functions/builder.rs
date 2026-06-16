@@ -301,6 +301,10 @@ pub fn compile_builder_terminal(
     body.local_get(map_local);
 
     body.call(env.get(RuntimeFunction::ExtCall1));
+
+    // Record this terminal extension as used in the compiled module.
+    ctx.record_extension(Some(host_namespace), host_function);
+
     Ok(())
 }
 

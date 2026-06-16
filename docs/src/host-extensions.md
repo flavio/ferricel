@@ -423,3 +423,50 @@ let result = runtime::Builder::new()
 
 For a real-world example, see the built-in [`kw.k8s` builder chain](./run-vap-wasm.md#fetching-data-from-the-kubernetes-api)
 used by ValidatingAdmissionPolicy support.
+
+## Inspecting Used Extensions
+
+The compiler embeds a `ferricel.extensions` custom section into every compiled
+Wasm module. It contains a JSON array listing every host extension the module
+**may** call at evaluation time — one entry per unique `(namespace, function)`
+pair, sorted and deduplicated.
+
+```json
+[
+  { "namespace": null,     "function": "abs"        },
+  { "namespace": "kw.k8s", "function": "get"        },
+  { "namespace": "kw.net", "function": "lookupHost" }
+]
+```
+
+The section is always present; it is an empty array `[]` for modules that use no
+host extensions.
+
+> **Note:** because CEL's `&&` and `||` operators do not short-circuit at
+> compile time, an extension listed here may not be called for every evaluation.
+> The list records what the module *can* call, not what it *will* call.
+
+### Reading the section from Rust
+
+Use `ferricel_core::extensions_used` to read the section back:
+
+```rust
+use ferricel_core::extensions_used;
+
+let wasm = std::fs::read("policy.wasm")?;
+for ext in extensions_used(&wasm)? {
+    println!("{}/{}", ext.namespace.as_deref().unwrap_or("(none)"), ext.function);
+}
+```
+
+Returns an empty `Vec` if the section is absent (e.g. modules produced by an
+older version of ferricel).
+
+### Reading the section from the command line
+
+```sh
+wasm-objdump -s -j ferricel.extensions policy.wasm
+```
+
+For the full specification of all custom sections ferricel embeds, see the
+[Wasm Spec](./wasm-spec.md#source-custom-sections) chapter.

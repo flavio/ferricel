@@ -25,7 +25,7 @@ use cel::{common::ast::Expr, parser::Parser};
 pub use context::ExtensionKey;
 use context::{CompilerContext, CompilerEnv};
 use ferricel_types::{
-    extensions::{BuilderChainDecl, ExtensionDecl},
+    extensions::{BuilderChainDecl, ExtensionDecl, UsedExtension},
     functions::RuntimeFunction,
 };
 use walrus::{FunctionBuilder, FunctionId, ModuleConfig, ValType};
@@ -243,7 +243,14 @@ impl Compiler {
             data: cel_code.as_bytes().to_vec(),
         });
 
-        // 9. Emit the module as bytes
+        // 9. Embed the set of host extensions used by this module.
+        let used: Vec<UsedExtension> = ctx.used_extensions.borrow().iter().cloned().collect();
+        module.customs.add(walrus::RawCustomSection {
+            name: "ferricel.extensions".to_string(),
+            data: serde_json::to_vec(&used).context("Failed to serialize used extensions")?,
+        });
+
+        // 10. Emit the module as bytes
         Ok(module.emit_wasm())
     }
 
@@ -358,6 +365,13 @@ impl Compiler {
         let evaluate_id = vap::build_vap_evaluate_function(&mut module, &env, &ctx, spec)?;
         module.exports.add("evaluate", evaluate_id);
 
+        // If the policy uses paramKind, the compiler emits a hardcoded kw.k8s.get
+        // call that doesn't go through the normal extension-call instrumentation.
+        // Record it explicitly here.
+        if spec.param_kind.is_some() {
+            ctx.record_extension(Some("kw.k8s"), "get");
+        }
+
         walrus::passes::gc::run(&mut module);
         add_producers_entries(&mut module);
 
@@ -367,6 +381,13 @@ impl Compiler {
         module.customs.add(walrus::RawCustomSection {
             name: "ferricel.vap-source".to_string(),
             data: vap_yaml.into_bytes(),
+        });
+
+        // Embed the set of host extensions used by this module.
+        let used: Vec<UsedExtension> = ctx.used_extensions.borrow().iter().cloned().collect();
+        module.customs.add(walrus::RawCustomSection {
+            name: "ferricel.extensions".to_string(),
+            data: serde_json::to_vec(&used).context("Failed to serialize used extensions")?,
         });
 
         Ok(module)
@@ -390,6 +411,46 @@ fn add_producers_entries(module: &mut walrus::Module) {
     module
         .producers
         .add_processed_by("ferricel", env!("CARGO_PKG_VERSION"));
+}
+
+/// Read the list of host extensions used by a compiled Wasm module.
+///
+/// Parses the `ferricel.extensions` custom section embedded by the compiler and
+/// returns the recorded set of [`UsedExtension`] entries, sorted by
+/// `(namespace, function)`.
+///
+/// Returns an empty `Vec` if the section is absent (e.g. for modules compiled
+/// without any host extensions, or by an older version of ferricel).
+///
+/// # Errors
+///
+/// Returns an error if `wasm` is not a valid WebAssembly module, or if the
+/// `ferricel.extensions` section cannot be deserialized.
+///
+/// # Example
+///
+/// ```no_run
+/// use ferricel_core::extensions_used;
+///
+/// let wasm = std::fs::read("policy.wasm").unwrap();
+/// let used = extensions_used(&wasm).unwrap();
+/// for ext in &used {
+///     println!("{}/{}", ext.namespace.as_deref().unwrap_or("(none)"), ext.function);
+/// }
+/// ```
+pub fn extensions_used(wasm: &[u8]) -> Result<Vec<UsedExtension>, anyhow::Error> {
+    let module = walrus::Module::from_buffer(wasm).context("Failed to parse Wasm module")?;
+
+    for (_id, section) in module.customs.iter() {
+        if section.name() == "ferricel.extensions" {
+            let data = section.data(&Default::default());
+            let entries: Vec<UsedExtension> = serde_json::from_slice(&data)
+                .context("Failed to deserialize ferricel.extensions")?;
+            return Ok(entries);
+        }
+    }
+
+    Ok(vec![])
 }
 
 /// Build the `evaluate` Wasm function `(i64) -> i64` using JSON-encoded bindings.

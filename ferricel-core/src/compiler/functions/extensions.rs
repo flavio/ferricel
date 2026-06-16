@@ -199,6 +199,9 @@ pub fn compile_extension_call(
     };
     body.call(env.get(ext_fn));
 
+    // Record this extension as used in the compiled module.
+    ctx.record_extension(namespace_str, &call_expr.func_name);
+
     Ok(())
 }
 

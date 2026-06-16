@@ -1,10 +1,11 @@
 use std::{
+    cell::RefCell,
     collections::{BTreeSet, HashMap, HashSet},
     rc::Rc,
 };
 
 use ferricel_types::{
-    extensions::{BuilderChainDecl, BuilderStep, ExtensionDecl},
+    extensions::{BuilderChainDecl, BuilderStep, ExtensionDecl, UsedExtension},
     functions::RuntimeFunction,
 };
 use walrus::{FunctionId, LocalId};
@@ -39,6 +40,9 @@ pub struct CompilerContext {
     pub logger: slog::Logger,
     /// Registry of host-provided extension functions (shared via Arc for cheap cloning)
     pub extensions: Rc<ExtensionRegistry>,
+    /// Set of host extensions actually emitted into this module (shared across child contexts
+    /// so entries collected inside comprehensions are visible to the top-level context).
+    pub used_extensions: Rc<RefCell<BTreeSet<UsedExtension>>>,
 }
 
 impl CompilerContext {
@@ -56,6 +60,7 @@ impl CompilerContext {
             container,
             logger,
             extensions: Rc::new(ExtensionRegistry::new(extensions, builder_chains)),
+            used_extensions: Rc::new(RefCell::new(BTreeSet::new())),
         }
     }
 
@@ -70,7 +75,16 @@ impl CompilerContext {
             container: self.container.clone(),
             logger: self.logger.clone(),
             extensions: self.extensions.clone(),
+            used_extensions: self.used_extensions.clone(),
         }
+    }
+
+    /// Record that a host extension call was emitted into the module.
+    pub fn record_extension(&self, namespace: Option<&str>, function: &str) {
+        self.used_extensions.borrow_mut().insert(UsedExtension {
+            namespace: namespace.map(|s| s.to_string()),
+            function: function.to_string(),
+        });
     }
 }
 

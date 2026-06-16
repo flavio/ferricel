@@ -198,8 +198,6 @@ pub struct BuilderChainDecl {
 }
 
 /// Wire format payload sent from the Wasm guest to the host when calling an extension.
-///
-/// Serialized as JSON and passed through the `cel_call_extension` host import.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionCallPayload {
     /// Namespace of the function, or `null` for non-namespaced functions.
@@ -209,4 +207,20 @@ pub struct ExtensionCallPayload {
     /// Serialized arguments (same JSON representation as `cel_serialize_value` produces).
     /// For receiver-style calls, the receiver is always `args[0]`.
     pub args: Vec<serde_json::Value>,
+}
+
+/// One entry in the `ferricel.extensions` custom section.
+///
+/// Records a host extension that the compiled Wasm module may call at
+/// evaluation time. The list is embedded at compile time and can be read back
+/// with `ferricel_core::extensions_used`.
+///
+/// See the [Inspecting used extensions](https://flavio.github.io/ferricel/host-extensions.html#inspecting-used-extensions)
+/// section of the user guide.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UsedExtension {
+    /// Namespace of the extension, or `None` for flat (non-namespaced) functions.
+    pub namespace: Option<String>,
+    /// Function name.
+    pub function: String,
 }

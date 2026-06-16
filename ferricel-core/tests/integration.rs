@@ -32,5 +32,6 @@ mod variable_tests;
 
 mod builder_chain_tests;
 mod ext;
+mod extensions_used_tests;
 mod kubernetes;
 mod vap_tests;
