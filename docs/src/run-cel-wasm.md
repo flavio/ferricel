@@ -95,13 +95,13 @@ JSON-encoded result string.
 
 ### Host extensions
 
-Register host-provided functions that the CEL expression can call:
+Register host-provided functions that the CEL expression can call. Extensions
+are declared at compile time and implemented at runtime:
 
 ```rust
 use ferricel_core::{compiler, runtime};
 use ferricel_types::extensions::ExtensionDecl;
 
-// Declare the extension at compile time
 let abs_decl = ExtensionDecl {
     namespace: None,
     function: "abs".to_string(),
@@ -110,13 +110,11 @@ let abs_decl = ExtensionDecl {
     num_args: 1,
 };
 
-// Compile the CEL expression with the extension
 let wasm = compiler::Builder::new()
     .with_extension(abs_decl.clone())
     .build()
     .compile("abs(x)")?;
 
-// Register the implementation at runtime
 let result = runtime::Builder::new()
     .with_extension(abs_decl, |args| {
         let n = args[0].as_i64().unwrap_or(0);
@@ -129,9 +127,8 @@ let result = runtime::Builder::new()
 assert_eq!(result, "42");
 ```
 
-The extension declaration specifies the function signature at compile time (for
-validation), and the implementation is provided at runtime. The host is
-responsible for marshalling JSON values to and from the extension function.
+For full documentation on flat extensions, dotted namespaces, and builder
+chains, see the [Host Extensions](./host-extensions.md) chapter.
 
 ### Logging
 

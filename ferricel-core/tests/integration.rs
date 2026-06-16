@@ -30,6 +30,7 @@ mod string_tests;
 mod struct_tests;
 mod variable_tests;
 
+mod builder_chain_tests;
 mod ext;
 mod kubernetes;
 mod vap_tests;

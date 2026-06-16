@@ -81,6 +81,11 @@ let result_str = runtime::Builder::new()
 
 ### Fetching Data from the Kubernetes API
 
+> The `kw.k8s` API is implemented as a
+> [builder chain](./host-extensions.md#builder-chains). See the
+> [Host Extensions](./host-extensions.md) chapter for general documentation on
+> declaring and consuming builder chains.
+
 Policy `variables` (and other expressions) can call `kw.k8s` directly to fetch
 arbitrary resources. The API mirrors the
 [`kw.k8s` Kubernetes library](https://pkg.go.dev/github.com/kubewarden/policies/policies/cel-policy/internal/cel/library#Kubernetes)

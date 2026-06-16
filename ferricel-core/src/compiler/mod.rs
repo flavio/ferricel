@@ -1,3 +1,10 @@
+//! CEL to Wasm compiler.
+//!
+//! Use [`Builder`] to configure and compile CEL expressions into standalone
+//! WebAssembly modules. The compiler supports host-provided
+//! [flat extensions](https://flavio.github.io/ferricel/host-extensions.html#flat-extensions)
+//! and [builder chains](https://flavio.github.io/ferricel/host-extensions.html#builder-chains).
+
 pub mod access;
 pub mod collections;
 pub mod context;
@@ -96,6 +103,9 @@ impl Builder {
     /// Append one extension function declaration.
     ///
     /// May be called multiple times to register several extensions.
+    ///
+    /// See the [Host Extensions](https://flavio.github.io/ferricel/host-extensions.html#flat-extensions)
+    /// user guide for details.
     pub fn with_extension(mut self, decl: ExtensionDecl) -> Self {
         self.extensions.insert(decl);
         self
@@ -104,6 +114,9 @@ impl Builder {
     /// Register a fluent builder chain extension family (e.g. `kw.k8s`, `kw.sigstore`).
     ///
     /// May be called multiple times to register several chains.
+    ///
+    /// See the [Builder Chains](https://flavio.github.io/ferricel/host-extensions.html#builder-chains)
+    /// user guide for details on step types, multi-arg steps, and disambiguation.
     pub fn with_builder_chain(mut self, decl: BuilderChainDecl) -> Self {
         self.builder_chains.push(decl);
         self

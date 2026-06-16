@@ -1,3 +1,12 @@
+//! Wasm runtime for compiled CEL modules.
+//!
+//! Use [`Builder`] to configure and execute Wasm modules produced by the
+//! [compiler](crate::compiler). Register host-provided extension functions
+//! with [`Builder::with_extension`].
+//!
+//! See the [Host Extensions](https://flavio.github.io/ferricel/host-extensions.html)
+//! chapter of the user guide for details on flat extensions and builder chains.
+
 use ferricel_types::{
     LogLevel,
     extensions::{ExtensionCallPayload, ExtensionDecl},
@@ -150,6 +159,9 @@ impl Builder {
     /// [`crate::compiler::Builder::with_extension`].
     ///
     /// May be called multiple times to register several extensions.
+    ///
+    /// See the [Host Extensions](https://flavio.github.io/ferricel/host-extensions.html)
+    /// user guide for details.
     pub fn with_extension(
         mut self,
         decl: ExtensionDecl,

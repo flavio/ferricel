@@ -334,6 +334,19 @@ pub enum RuntimeFunction {
     ///
     /// Returns a new `*mut CelValue` (Object map).
     BuilderStepCall,
+
+    /// Insert a runtime key→value pair into a nested map within the builder
+    /// state, used for dynamic-key accumulation (e.g. `.annotation("env","prod")`).
+    ///
+    /// Arguments:
+    /// - `receiver: *mut CelValue` — existing state map, or null to create a fresh one
+    /// - `type_tag_ptr: i32, type_tag_len: i32` — `"__type__"` value for the output map
+    /// - `field_ptr: i32, field_len: i32` — field name of the nested map (e.g. `"annotations"`)
+    /// - `map_key: *mut CelValue` — runtime key (arg0, must be a valid map key type)
+    /// - `value: *mut CelValue` — runtime value (arg1)
+    ///
+    /// Returns a new `*mut CelValue` (Object map).
+    BuilderMapEntryCall,
 }
 
 impl RuntimeFunction {
@@ -604,6 +617,7 @@ impl RuntimeFunction {
             Self::VapSerializeReject => "cel_serialize_vap_reject",
 
             Self::BuilderStepCall => "cel_builder_step",
+            Self::BuilderMapEntryCall => "cel_builder_map_entry",
         }
     }
 

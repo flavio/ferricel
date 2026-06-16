@@ -99,3 +99,89 @@ pub unsafe extern "C" fn cel_builder_step(
 
     Box::into_raw(Box::new(CelValue::Object(map)))
 }
+
+/// Insert a runtime key→value pair into a nested map within the builder state.
+///
+/// Used for dynamic-key accumulation steps like `.annotation("env", "prod")`.
+/// Repeated calls merge into the same nested map:
+///   `.annotation("env","prod").annotation("team","sec")`
+///   → `{ "annotations": { "env":"prod", "team":"sec" } }`
+///
+/// # Arguments
+/// - `receiver`      — existing state map (`*mut CelValue`), or `0` (null) to start fresh
+/// - `type_tag_ptr / type_tag_len` — UTF-8 bytes of the `"__type__"` tag for the output map
+/// - `field_ptr / field_len`       — UTF-8 bytes of the nested map field name (e.g. `"annotations"`)
+/// - `map_key`       — runtime key (`*mut CelValue`, must be a valid map-key type)
+/// - `value`         — runtime value (`*mut CelValue`)
+///
+/// # Returns
+/// A heap-allocated `*mut CelValue` holding the updated `CelValue::Object`.
+///
+/// # Safety
+/// - `map_key` and `value` must be valid, non-null `*mut CelValue` pointers.
+/// - `type_tag_ptr`, `field_ptr` must point to valid UTF-8 memory.
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_builder_map_entry(
+    receiver: *mut CelValue,
+    type_tag_ptr: i32,
+    type_tag_len: i32,
+    field_ptr: i32,
+    field_len: i32,
+    map_key: *mut CelValue,
+    value: *mut CelValue,
+) -> *mut CelValue {
+    if map_key.is_null() {
+        abort_with_error("cel_builder_map_entry: map_key pointer is null");
+    }
+    if value.is_null() {
+        abort_with_error("cel_builder_map_entry: value pointer is null");
+    }
+
+    // Clone or create the outer state map.
+    let mut map: HashMap<CelMapKey, CelValue> = if receiver.is_null() {
+        HashMap::new()
+    } else {
+        match &*receiver {
+            CelValue::Object(m) => m.clone(),
+            other => {
+                let _ = other;
+                abort_with_error("cel_builder_map_entry: receiver is not an Object map");
+            }
+        }
+    };
+
+    // Update the __type__ tag.
+    let type_tag = read_str(type_tag_ptr, type_tag_len).to_string();
+    map.insert(
+        CelMapKey::String("__type__".to_string()),
+        CelValue::String(type_tag),
+    );
+
+    // Convert arg0 to a CelMapKey.
+    let key_val = &*map_key;
+    let cel_key = CelMapKey::from_cel_value(key_val).unwrap_or_else(|| {
+        abort_with_error("cel_builder_map_entry: arg0 is not a valid map key type");
+    });
+
+    // Get or create the nested map under `field`.
+    let field = read_str(field_ptr, field_len).to_string();
+    let field_key = CelMapKey::String(field);
+    let nested = map
+        .entry(field_key)
+        .or_insert_with(|| CelValue::Object(HashMap::new()));
+
+    match nested {
+        CelValue::Object(inner) => {
+            inner.insert(cel_key, (*value).clone());
+        }
+        _ => {
+            // Field exists but is not a map — overwrite with a fresh map.
+            let mut inner = HashMap::new();
+            inner.insert(cel_key, (*value).clone());
+            *nested = CelValue::Object(inner);
+        }
+    }
+
+    Box::into_raw(Box::new(CelValue::Object(map)))
+}

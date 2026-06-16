@@ -135,6 +135,7 @@ impl ExtensionRegistry {
                         builder_entries.insert(function.clone(), step.clone());
                     }
                     BuilderStep::Chain { function, .. }
+                    | BuilderStep::MapEntry { function, .. }
                     | BuilderStep::Terminal { function, .. } => {
                         builder_steps
                             .entry(function.clone())

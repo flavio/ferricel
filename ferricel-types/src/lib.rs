@@ -1,4 +1,6 @@
-//! Shared types used across ferricel workspace
+//! Shared types used across the ferricel workspace.
+//!
+//! User guide: <https://flavio.github.io/ferricel/>
 
 pub mod extensions;
 pub mod functions;

@@ -3,6 +3,8 @@
 //! This crate provides the core functionality for compiling Common Expression Language (CEL)
 //! expressions into WebAssembly modules and executing them.
 //!
+//! User guide: <https://flavio.github.io/ferricel/>
+//!
 //! ## Capabilities
 //!
 //! - **Compiler**: Compiles CEL expressions to standalone Wasm modules
