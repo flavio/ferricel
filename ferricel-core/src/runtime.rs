@@ -249,7 +249,6 @@ impl Builder {
         Ok(EnginePre {
             wasm_engine,
             instance_pre,
-            logger: self.logger,
             log_level: self.log_level,
         })
     }
@@ -259,8 +258,9 @@ impl Builder {
     /// Returns `Err` if no Wasm bytes were provided or if the bytes are invalid.
     pub fn build(self) -> Result<Engine, anyhow::Error> {
         let extensions = self.extensions.clone();
+        let logger = self.logger.clone();
         let pre = self.build_pre()?;
-        Ok(pre.rehydrate(extensions))
+        Ok(pre.rehydrate(extensions, logger))
     }
 
     /// Register all host functions into the linker.
@@ -449,33 +449,37 @@ impl Default for Builder {
 /// internally `Arc`-backed.
 ///
 /// Call [`EnginePre::rehydrate`] to produce a ready-to-use [`Engine`], injecting
-/// per-evaluation-context state (extension function implementations) at that point.
+/// per-evaluation-context state (extension function implementations and logger)
+/// at that point.
 #[derive(Clone)]
 pub struct EnginePre {
     wasm_engine: WasmEngine,
     instance_pre: InstancePre<HostState>,
-    logger: slog::Logger,
     log_level: LogLevel,
 }
 
 impl EnginePre {
-    /// Produce an [`Engine`] by injecting extension function implementations.
+    /// Produce an [`Engine`] by injecting per-evaluation-context state.
+    ///
+    /// Both the extension function implementations and the `logger` are
+    /// supplied here — not at `build_pre` time — so callers can attach
+    /// request-scoped context (e.g. a policy identifier) to every log event
+    /// the guest emits via `cel_log`.
     ///
     /// This is infallible: all fallible work (compilation, linking,
-    /// pre-instantiation) was done in [`Builder::build_pre`]. This method only
-    /// pairs the pre-linked [`wasmtime::InstancePre`] with the provided
-    /// extension map.
+    /// pre-instantiation) was done in [`Builder::build_pre`].
     ///
     /// Pass an empty `HashMap` if the policy uses no extension functions.
     pub fn rehydrate(
         &self,
         extensions: std::collections::HashMap<ExtensionKey, ExtensionFn>,
+        logger: slog::Logger,
     ) -> Engine {
         Engine {
             wasm_engine: self.wasm_engine.clone(),
             instance_pre: self.instance_pre.clone(),
             extensions_impl: extensions,
-            logger: self.logger.clone(),
+            logger,
             log_level: self.log_level,
         }
     }
