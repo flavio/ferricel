@@ -162,10 +162,10 @@ impl ExtensionRegistry {
 ///
 /// Used during extension function resolution to determine the call shape:
 /// - `Global`     – a plain global call, e.g. `myFunc(x)`
-/// - `Namespaced` – a namespaced call, e.g. `math.abs(x)`
+/// - `Namespaced` – a namespaced call, e.g. `math.abs(x)` or `kw.net.lookupHost(x)`
 /// - `Receiver`   – a receiver/method call, e.g. `x.myFunc()`
 pub enum CallShape<'a> {
     Global,
-    Namespaced(&'a str),
+    Namespaced(String),
     Receiver(Option<&'a cel::common::ast::IdedExpr>),
 }

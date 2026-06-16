@@ -350,3 +350,119 @@ fn test_extension_with_bindings() {
     let value: serde_json::Value = serde_json::from_str(&result).unwrap();
     assert_eq!(value.as_i64().unwrap(), 99);
 }
+
+#[test]
+fn test_extension_size_on_returned_array() {
+    // Extension returns a bare JSON array; size() should return its length.
+    let logger = create_test_logger();
+    let decl = ExtensionDecl {
+        namespace: None,
+        function: "getItems".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 1,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl.clone())
+        .build()
+        .compile("size(getItems('x'))")
+        .expect("compile failed");
+    let result = runtime::Builder::new()
+        .with_logger(logger)
+        .with_extension(decl, |_args| Ok(serde_json::json!(["a", "b", "c"])))
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None)
+        .expect("eval failed");
+    let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(value.as_i64().unwrap(), 3);
+}
+
+#[test]
+fn test_extension_size_on_returned_array_comparison() {
+    // Extension returns a bare JSON array; size(...) >= 1 should be true.
+    let logger = create_test_logger();
+    let decl = ExtensionDecl {
+        namespace: Some("kw.net".to_string()),
+        function: "lookupHost".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 1,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl.clone())
+        .build()
+        .compile("size(kw.net.lookupHost('example.com')) >= 1")
+        .expect("compile failed");
+    let result = runtime::Builder::new()
+        .with_logger(logger)
+        .with_extension(decl, |_args| Ok(serde_json::json!(["1.1.1.1", "8.8.8.8"])))
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None)
+        .expect("eval failed");
+    let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(value.as_bool().unwrap(), true);
+}
+
+#[test]
+fn test_extension_size_on_returned_map() {
+    // Extension returns a JSON object; size() should return the number of keys.
+    let logger = create_test_logger();
+    let decl = ExtensionDecl {
+        namespace: None,
+        function: "getMap".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 1,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl.clone())
+        .build()
+        .compile("size(getMap('x'))")
+        .expect("compile failed");
+    let result = runtime::Builder::new()
+        .with_logger(logger)
+        .with_extension(decl, |_args| Ok(serde_json::json!({"a": 1, "b": 2})))
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None)
+        .expect("eval failed");
+    let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(value.as_i64().unwrap(), 2);
+}
+
+#[test]
+fn test_extension_index_into_returned_array() {
+    // Extension returns a bare JSON array; indexing [0] should work.
+    let logger = create_test_logger();
+    let decl = ExtensionDecl {
+        namespace: None,
+        function: "getItems".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 1,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl.clone())
+        .build()
+        .compile(r#"getItems('x')[0]"#)
+        .expect("compile failed");
+    let result = runtime::Builder::new()
+        .with_logger(logger)
+        .with_extension(decl, |_args| Ok(serde_json::json!(["first", "second"])))
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None)
+        .expect("eval failed");
+    let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(value.as_str().unwrap(), "first");
+}

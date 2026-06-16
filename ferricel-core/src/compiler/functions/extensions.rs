@@ -76,12 +76,20 @@ pub fn compile_extension_call(
     // ── Flat extension dispatch ───────────────────────────────────────────────
 
     // Determine call shape.
+    //
+    // For single-segment namespaces (e.g. `math.abs(x)`) the target is a
+    // bare `Ident("math")`.  For multi-segment / dotted namespaces (e.g.
+    // `kw.net.lookupHost(x)`) the target is a chain of `Select` nodes:
+    //   Select { field: "net", operand: Ident("kw") }
+    //
+    // We reconstruct the full dotted target name and check it against the
+    // registered namespace set.
     let shape = match &call_expr.target {
         None => CallShape::Global,
         Some(target) => {
-            if let Expr::Ident(name) = &target.expr {
-                if ctx.extensions.namespaces.contains(name.as_str()) {
-                    CallShape::Namespaced(name.as_str())
+            if let Some(ns) = build_target_name(&target.expr) {
+                if ctx.extensions.namespaces.contains(ns.as_str()) {
+                    CallShape::Namespaced(ns)
                 } else {
                     CallShape::Receiver(Some(target.as_ref()))
                 }
@@ -93,7 +101,7 @@ pub fn compile_extension_call(
 
     let (namespace_str, receiver_expr) = match &shape {
         CallShape::Global => (None, None),
-        CallShape::Namespaced(ns) => (Some(*ns), None),
+        CallShape::Namespaced(ns) => (Some(ns.as_str()), None),
         CallShape::Receiver(expr) => (None, *expr),
     };
 
@@ -215,7 +223,6 @@ fn build_full_name(call_expr: &CallExpr) -> String {
 }
 
 fn collect_select_segments<'a>(expr: Option<&'a Expr>, out: &mut Vec<&'a str>) {
-    use cel::common::ast::Expr;
     match expr {
         Some(Expr::Ident(name)) => out.push(name.as_str()),
         Some(Expr::Select(sel)) => {
@@ -223,5 +230,36 @@ fn collect_select_segments<'a>(expr: Option<&'a Expr>, out: &mut Vec<&'a str>) {
             out.push(&sel.field);
         }
         _ => {}
+    }
+}
+
+/// Reconstruct the dotted target name from the call expression's target.
+///
+/// For `kw.net.lookupHost(x)` the target is:
+///   `Select { field: "net", operand: Ident("kw") }`
+/// and we return `Some("kw.net")`.
+///
+/// For `math.abs(x)` the target is `Ident("math")` → `Some("math")`.
+///
+/// For non-name targets (e.g. an array literal or a function call result),
+/// returns `None`.
+fn build_target_name(expr: &Expr) -> Option<String> {
+    let mut segments: Vec<&str> = Vec::new();
+    collect_target_segments(expr, &mut segments);
+    if segments.is_empty() {
+        None
+    } else {
+        Some(segments.join("."))
+    }
+}
+
+fn collect_target_segments<'a>(expr: &'a Expr, out: &mut Vec<&'a str>) {
+    match expr {
+        Expr::Ident(name) => out.push(name.as_str()),
+        Expr::Select(sel) => {
+            collect_target_segments(&sel.operand.expr, out);
+            out.push(&sel.field);
+        }
+        _ => {} // not a name-like expression
     }
 }
