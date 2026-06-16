@@ -442,8 +442,7 @@ fn build_evaluate_proto_function(
 #[cfg(feature = "k8s-vap")]
 pub(crate) fn parse_vap_yaml(
     yaml: &str,
-) -> Result<k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicy, anyhow::Error>
-{
+) -> Result<k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicy, anyhow::Error> {
     use k8s_openapi::api::admissionregistration::v1::ValidatingAdmissionPolicy;
     use serde::Deserialize as _;
 

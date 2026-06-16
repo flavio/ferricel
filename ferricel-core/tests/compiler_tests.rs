@@ -73,7 +73,10 @@ fn test_cel_source_custom_section_present() {
     // UTF-8.  The section name and content both appear verbatim in the binary.
     let contains = |needle: &[u8]| wasm_bytes.windows(needle.len()).any(|w| w == needle);
 
-    assert!(contains(b"ferricel.cel-source"), "ferricel.cel-source section name not found");
+    assert!(
+        contains(b"ferricel.cel-source"),
+        "ferricel.cel-source section name not found"
+    );
     assert!(
         contains(expression.as_bytes()),
         "original CEL expression not found in ferricel.cel-source section"
