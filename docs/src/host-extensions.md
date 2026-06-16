@@ -464,9 +464,19 @@ older version of ferricel).
 
 ### Reading the section from the command line
 
+Use `ferricel inspect` for a human-readable view of all embedded metadata,
+including the extensions list with syntax-highlighted source:
+
+```sh
+ferricel inspect policy.wasm
+```
+
+Or for just the raw extensions JSON:
+
 ```sh
 wasm-objdump -s -j ferricel.extensions policy.wasm
 ```
 
-For the full specification of all custom sections ferricel embeds, see the
+For the full specification of all custom sections ferricel embeds, and
+documentation of the `ferricel inspect` command, see the
 [Wasm Spec](./wasm-spec.md#source-custom-sections) chapter.

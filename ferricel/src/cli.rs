@@ -38,7 +38,6 @@ impl From<LogLevelArg> for LogLevel {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Build a CEL expression into a WebAssembly module
     #[command(group = ArgGroup::new("cel_source")
         .required(true)
         .args(&["expression", "expression_file"]))]
@@ -162,5 +161,18 @@ pub enum Commands {
         /// Minimum log level for runtime logging
         #[arg(short = 'l', long, value_enum, default_value = "info")]
         log_level: LogLevelArg,
+    },
+    /// Inspect a compiled WebAssembly module: print embedded source, extensions, exports, and producers
+    Inspect {
+        /// Path to the Wasm file to inspect
+        wasm: PathBuf,
+
+        /// Emit output as JSON instead of human-readable text (disables color)
+        #[arg(long)]
+        json: bool,
+
+        /// Disable ANSI color and syntax highlighting in the output
+        #[arg(long)]
+        no_color: bool,
     },
 }

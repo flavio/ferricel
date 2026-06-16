@@ -35,6 +35,7 @@ serde          = { workspace = true }
 serde_json     = { workspace = true }
 slog           = { workspace = true }
 walrus         = "0.26"
+wasmparser     = { workspace = true }
 wasmtime       = "45.0"
 yaml_serde     = { workspace = true, optional = true }
 

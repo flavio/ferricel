@@ -439,18 +439,7 @@ fn add_producers_entries(module: &mut walrus::Module) {
 /// }
 /// ```
 pub fn extensions_used(wasm: &[u8]) -> Result<Vec<UsedExtension>, anyhow::Error> {
-    let module = walrus::Module::from_buffer(wasm).context("Failed to parse Wasm module")?;
-
-    for (_id, section) in module.customs.iter() {
-        if section.name() == "ferricel.extensions" {
-            let data = section.data(&Default::default());
-            let entries: Vec<UsedExtension> = serde_json::from_slice(&data)
-                .context("Failed to deserialize ferricel.extensions")?;
-            return Ok(entries);
-        }
-    }
-
-    Ok(vec![])
+    Ok(crate::inspect(wasm)?.extensions)
 }
 
 /// Build the `evaluate` Wasm function `(i64) -> i64` using JSON-encoded bindings.

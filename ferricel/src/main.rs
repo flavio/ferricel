@@ -30,5 +30,10 @@ fn main() -> Result<(), anyhow::Error> {
             bindings_file,
             log_level,
         } => cmd::run::run(&wasm, bindings_json, bindings_file, log_level),
+        cli::Commands::Inspect {
+            wasm,
+            json,
+            no_color,
+        } => cmd::inspect::run(&wasm, no_color, json),
     }
 }

@@ -11,6 +11,7 @@ use std::{fs, path::PathBuf};
 
 use assert_cmd::Command;
 use predicates::prelude::*;
+use serde_json;
 use tempfile::NamedTempFile;
 
 /// Helper function to get a Command for the ferricel binary
@@ -386,12 +387,152 @@ fn test_run_invalid_json_in_file() {
 }
 
 // ============================================================================
+// INSPECT COMMAND TESTS
+// ============================================================================
+// All assertions use --no-color to avoid ANSI codes in stdout.
+
+#[test]
+fn test_inspect_cel_source_shown() {
+    let wasm_file = NamedTempFile::new().unwrap();
+    ferricel()
+        .args(["build", "-e", "x > 10 && y < 20", "-o"])
+        .arg(wasm_file.path())
+        .assert()
+        .success();
+
+    ferricel()
+        .args(["inspect", "--no-color"])
+        .arg(wasm_file.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Source (CEL)"))
+        .stdout(predicate::str::contains("x > 10 && y < 20"));
+}
+
+#[test]
+fn test_inspect_no_extensions_shown() {
+    let wasm_file = NamedTempFile::new().unwrap();
+    ferricel()
+        .args(["build", "-e", "1 + 1", "-o"])
+        .arg(wasm_file.path())
+        .assert()
+        .success();
+
+    ferricel()
+        .args(["inspect", "--no-color"])
+        .arg(wasm_file.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Host extensions"))
+        .stdout(predicate::str::contains("(none)"));
+}
+
+#[test]
+fn test_inspect_extensions_listed() {
+    let wasm_file = NamedTempFile::new().unwrap();
+    ferricel()
+        .args([
+            "build",
+            "-e",
+            "abs(x)",
+            "--extensions",
+            "abs:global:1",
+            "-o",
+        ])
+        .arg(wasm_file.path())
+        .assert()
+        .success();
+
+    ferricel()
+        .args(["inspect", "--no-color"])
+        .arg(wasm_file.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Host extensions"))
+        .stdout(predicate::str::contains("abs"));
+}
+
+#[test]
+fn test_inspect_exports_and_producers_shown() {
+    let wasm_file = NamedTempFile::new().unwrap();
+    ferricel()
+        .args(["build", "-e", "42", "-o"])
+        .arg(wasm_file.path())
+        .assert()
+        .success();
+
+    ferricel()
+        .args(["inspect", "--no-color"])
+        .arg(wasm_file.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("evaluate"))
+        .stdout(predicate::str::contains("ferricel"));
+}
+
+#[test]
+fn test_inspect_json_output() {
+    let wasm_file = NamedTempFile::new().unwrap();
+    ferricel()
+        .args([
+            "build",
+            "-e",
+            "x * 2",
+            "--extensions",
+            "myNs.double:global:1",
+            "-o",
+        ])
+        .arg(wasm_file.path())
+        .assert()
+        .success();
+
+    let output = ferricel()
+        .args(["inspect", "--json"])
+        .arg(wasm_file.path())
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let v: serde_json::Value =
+        serde_json::from_slice(&output).expect("--json output is valid JSON");
+    assert_eq!(v["cel_source"].as_str().unwrap().trim(), "x * 2");
+    assert!(v["extensions"].is_array());
+}
+
+#[test]
+fn test_inspect_no_color_no_ansi() {
+    let wasm_file = NamedTempFile::new().unwrap();
+    ferricel()
+        .args(["build", "-e", "true", "-o"])
+        .arg(wasm_file.path())
+        .assert()
+        .success();
+
+    ferricel()
+        .args(["inspect", "--no-color"])
+        .arg(wasm_file.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\x1b").not());
+}
+
+#[test]
+fn test_inspect_missing_file() {
+    ferricel()
+        .args(["inspect", "/tmp/no_such_file_xyz123.wasm"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not found"));
+}
+
+// ============================================================================
 // EXTENSION DECLARATION TESTS
 // ============================================================================
 // Note: parsing and file-loading logic is unit-tested in src/cmd/extensions.rs.
 // Only CLI-level concerns (clap mutual exclusivity, full build→run pipeline)
 // belong here.
-
 #[test]
 fn test_build_extensions_and_extensions_file_are_mutually_exclusive() {
     let ext_file = create_json_file(r#"[]"#);

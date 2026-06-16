@@ -40,11 +40,13 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod compiler;
+pub mod inspect;
 pub mod runtime;
 pub mod schema;
 
 // Re-export commonly used types for convenience
 pub use compiler::{Compiler, ExtensionKey, extensions_used};
 pub use ferricel_types::extensions::UsedExtension;
+pub use inspect::{ModuleInfo, ProducerField, ProducerValue, inspect};
 pub use runtime::{Engine, EnginePre};
 pub use schema::ProtoSchema;

@@ -314,3 +314,47 @@ With `wasm-tools`, the raw UTF-8 content can be extracted directly:
 ```sh
 wasm-tools dump policy.wasm | grep -A1 "ferricel.cel-source"
 ```
+
+## Inspecting a Module
+
+The `ferricel inspect` command reads all embedded metadata and prints it in a
+human-readable form with syntax highlighting:
+
+```sh
+ferricel inspect policy.wasm
+```
+
+Output (with color):
+
+```text
+Module: policy.wasm
+
+Source (ValidatingAdmissionPolicy):
+  apiVersion: admissionregistration.k8s.io/v1
+  ...
+
+Host extensions (may be called):
+  - kw.k8s/get
+  - kw.net/lookupHost
+
+Exports: cel_malloc, evaluate, evaluate_proto
+Producers:
+  language: CEL, Rust
+  processed-by: rustc 1.95.0, walrus 0.26.1, ferricel 0.2.0-rc.1
+```
+
+The source is syntax-highlighted: YAML for VAP modules, CEL for plain modules.
+The theme is chosen automatically based on the terminal background
+(light or dark), using Solarized Light or Solarized Dark respectively.
+
+For machine-readable output, use `--json`:
+
+```sh
+ferricel inspect --json policy.wasm
+```
+
+Disable color with `--no-color` (e.g. for CI or piping):
+
+```sh
+ferricel inspect --no-color policy.wasm
+```
