@@ -23,7 +23,7 @@ fn assert_suite(suite: &str, failed: usize, thresholds: &Thresholds) {
 fn conformance_basic_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/basic.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/basic.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("basic", stats.failed(), &thresholds);
 }
@@ -32,7 +32,7 @@ fn conformance_basic_tests() {
 fn conformance_comparisons_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/comparisons.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/comparisons.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("comparisons", stats.failed(), &thresholds);
 }
@@ -41,7 +41,7 @@ fn conformance_comparisons_tests() {
 fn conformance_integer_math_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/integer_math.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/integer_math.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("integer_math", stats.failed(), &thresholds);
 }
@@ -50,7 +50,7 @@ fn conformance_integer_math_tests() {
 fn conformance_fp_math_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/fp_math.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/fp_math.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("fp_math", stats.failed(), &thresholds);
 }
@@ -59,7 +59,7 @@ fn conformance_fp_math_tests() {
 fn conformance_string_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/string.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/string.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("string", stats.failed(), &thresholds);
 }
@@ -68,7 +68,7 @@ fn conformance_string_tests() {
 fn conformance_logic_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/logic.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/logic.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("logic", stats.failed(), &thresholds);
 }
@@ -77,7 +77,7 @@ fn conformance_logic_tests() {
 fn conformance_lists_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/lists.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/lists.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("lists", stats.failed(), &thresholds);
 }
@@ -86,7 +86,7 @@ fn conformance_lists_tests() {
 fn conformance_conversions_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/conversions.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/conversions.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("conversions", stats.failed(), &thresholds);
 }
@@ -95,7 +95,7 @@ fn conformance_conversions_tests() {
 fn conformance_timestamps_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/timestamps.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/timestamps.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("timestamps", stats.failed(), &thresholds);
 }
@@ -104,7 +104,7 @@ fn conformance_timestamps_tests() {
 fn conformance_string_ext_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/string_ext.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/string_ext.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("string_ext", stats.failed(), &thresholds);
 }
@@ -113,7 +113,7 @@ fn conformance_string_ext_tests() {
 fn conformance_network_ext_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/network_ext.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/network_ext.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("network_ext", stats.failed(), &thresholds);
 }
@@ -122,7 +122,7 @@ fn conformance_network_ext_tests() {
 fn conformance_optionals_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/optionals.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/optionals.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("optionals", stats.failed(), &thresholds);
 }
@@ -131,7 +131,7 @@ fn conformance_optionals_tests() {
 fn conformance_encoders_ext_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/encoders_ext.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/encoders_ext.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("encoders_ext", stats.failed(), &thresholds);
 }
@@ -140,7 +140,7 @@ fn conformance_encoders_ext_tests() {
 fn conformance_math_ext_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/math_ext.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/math_ext.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("math_ext", stats.failed(), &thresholds);
 }
@@ -149,7 +149,7 @@ fn conformance_math_ext_tests() {
 fn conformance_bindings_ext_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/bindings_ext.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/bindings_ext.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("bindings_ext", stats.failed(), &thresholds);
 }
@@ -158,7 +158,7 @@ fn conformance_bindings_ext_tests() {
 fn conformance_block_ext_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/block_ext.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/block_ext.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("block_ext", stats.failed(), &thresholds);
 }
@@ -167,7 +167,7 @@ fn conformance_block_ext_tests() {
 fn conformance_namespace_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/namespace.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/namespace.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("namespace", stats.failed(), &thresholds);
 }
@@ -176,7 +176,7 @@ fn conformance_namespace_tests() {
 fn conformance_parse_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/parse.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/parse.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("parse", stats.failed(), &thresholds);
 }
@@ -185,7 +185,7 @@ fn conformance_parse_tests() {
 fn conformance_macros2_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/macros2.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/macros2.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("macros2", stats.failed(), &thresholds);
 }
@@ -194,7 +194,7 @@ fn conformance_macros2_tests() {
 fn conformance_macros_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/macros.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/macros.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("macros", stats.failed(), &thresholds);
 }
@@ -203,7 +203,7 @@ fn conformance_macros_tests() {
 fn conformance_type_deduction_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
-    let test_file = Path::new("../cel-spec/tests/simple/testdata/type_deduction.textproto");
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/type_deduction.textproto");
     let stats = runner.run_test_file(test_file);
     assert_suite("type_deduction", stats.failed(), &thresholds);
 }

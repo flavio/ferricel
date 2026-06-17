@@ -3,7 +3,7 @@ use std::{env, io::Result, path::PathBuf};
 
 fn main() -> Result<()> {
     // Configure prost to generate Rust code from CEL protobuf definitions
-    let proto_dir = "../cel-spec/proto";
+    let proto_dir = "../../cel-spec/proto";
 
     // Get the OUT_DIR where build script outputs go
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
         )?;
 
     // Tell cargo to re-run build script if proto files change
-    println!("cargo:rerun-if-changed=../cel-spec/proto");
+    println!("cargo:rerun-if-changed=../../cel-spec/proto");
 
     // Export the path so tests can find it
     println!(

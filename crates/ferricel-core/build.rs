@@ -9,7 +9,7 @@ fn main() {
     //      (placed there by `make publish-prep` before `cargo publish`)
     //   2. workspace target directory — present during normal workspace development
     let bundled = manifest_dir.join("runtime.wasm");
-    let workspace = manifest_dir.join("../target/wasm32-unknown-unknown/release/runtime.wasm");
+    let workspace = manifest_dir.join("../../target/wasm32-unknown-unknown/release/runtime.wasm");
 
     let source = if bundled.exists() {
         println!("cargo:rerun-if-changed=runtime.wasm");

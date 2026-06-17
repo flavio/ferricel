@@ -665,7 +665,7 @@ impl ConformanceTestRunner {
 
     pub fn load_test_file(&self, path: &Path) -> SimpleTestFile {
         // Convert textproto to binary using protoc
-        let proto_dir = Path::new("../cel-spec/proto");
+        let proto_dir = Path::new("../../cel-spec/proto");
 
         let output = std::process::Command::new("protoc")
             .arg(format!("--proto_path={}", proto_dir.display()))

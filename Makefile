@@ -7,11 +7,11 @@ all: ferricel
 K8S_VERSION := 1.35
 
 RUNTIME_TARGET := target/wasm32-unknown-unknown/release/runtime.wasm
-RUNTIME_SOURCES := $(shell find runtime/src -type f -name '*.rs' 2>/dev/null)
-RUNTIME_CARGO := runtime/Cargo.toml
+RUNTIME_SOURCES := $(shell find crates/runtime/src -type f -name '*.rs' 2>/dev/null)
+RUNTIME_CARGO := crates/runtime/Cargo.toml
 
-FERRICEL_SOURCES := $(shell find ferricel/src -type f -name '*.rs' 2>/dev/null)
-FERRICEL_CARGO := ferricel/Cargo.toml
+FERRICEL_SOURCES := $(shell find crates/ferricel/src -type f -name '*.rs' 2>/dev/null)
+FERRICEL_CARGO := crates/ferricel/Cargo.toml
 
 WORKSPACE_CARGO := Cargo.toml Cargo.lock
 
@@ -306,7 +306,7 @@ docs-book:
 # Run this immediately before `cargo publish -p ferricel-core`.
 publish-prep: $(RUNTIME_TARGET)
 	@echo "Copying runtime.wasm into ferricel-core/ for publishing..."
-	cp $(RUNTIME_TARGET) ferricel-core/runtime.wasm
+	cp $(RUNTIME_TARGET) crates/ferricel-core/runtime.wasm
 	@echo "Done. You can now run: cargo publish -p ferricel-core"
 
 # Check code formatting (does not modify files)
