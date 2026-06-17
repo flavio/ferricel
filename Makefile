@@ -160,7 +160,7 @@ conformance-%: $(RUNTIME_TARGET)
 # Usage: make conformance-sections-basic
 #        CONFORMANCE_SECTION=<name> make conformance-sections-basic
 conformance-sections-%: $(RUNTIME_TARGET)
-	@cargo build --package ferricel-core
+	@K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo build --package ferricel-core
 	@case "$*" in \
 		basic) \
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_basic_tests -- --nocapture ;; \

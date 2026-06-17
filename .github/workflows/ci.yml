@@ -99,7 +99,7 @@ jobs:
         run: |
           suites=$(make conformance-list \
             | grep -oP '(?<=conformance-)\S+' \
-            | grep -v -e '^all$' -e '^list$' \
+            | grep -v -e '^all$' -e '^list$' -e '^sections-' \
             | jq -Rcs '[split("\n") | .[] | select(length > 0)]')
           echo "suites=$suites" >> "$GITHUB_OUTPUT"
 
