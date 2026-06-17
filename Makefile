@@ -1,4 +1,4 @@
-.PHONY: all clean runtime ferricel help unit-tests integration-tests e2e-tests tests conformance-tests conformance-tests-serial conformance-list conformance-% conformance-sections-% docs docs-api docs-book publish-prep
+.PHONY: all clean runtime ferricel help unit-tests integration-tests e2e-tests tests conformance-tests conformance-tests-serial conformance-list conformance-% conformance-sections-% docs docs-api docs-book publish-prep deny
 
 # Default target
 all: ferricel
@@ -15,9 +15,10 @@ FERRICEL_CARGO := ferricel/Cargo.toml
 
 WORKSPACE_CARGO := Cargo.toml Cargo.lock
 
-.PHONY: advisories
-advisories:
-	cargo deny check advisories
+# Run all cargo deny checks (advisories, bans, licenses, sources)
+.PHONY: deny
+deny:
+	cargo deny check
 
 # Build the runtime Wasm module
 runtime: $(RUNTIME_TARGET)
@@ -320,7 +321,6 @@ lint: $(RUNTIME_TARGET)
 	cargo +nightly fmt --all -- --check
 	taplo fmt --check
 	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo clippy --workspace -- -D warnings
-	cargo deny check bans licenses sources
 
 # Auto-fix clippy warnings where possible
 .PHONY: lint-fix
@@ -337,7 +337,7 @@ check: $(RUNTIME_TARGET)
 help:
 	@echo "Available targets:"
 	@echo "  all              - Build ferricel and runtime (default)"
-	@echo "  advisories       - Check for security advisories using cargo-deny"
+	@echo "  deny             - Run all cargo deny checks (advisories, bans, licenses, sources)"
 	@echo "  runtime          - Build only the runtime Wasm module"
 	@echo "  ferricel         - Build runtime and ferricel binary (runtime is embedded at compile-time)"
 	@echo "  clean            - Remove all build artifacts"
