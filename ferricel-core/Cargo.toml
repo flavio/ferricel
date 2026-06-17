@@ -19,6 +19,7 @@ version = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true
+features     = ["k8s-openapi/v1_35"]
 
 [features]
 default = ["k8s-vap"]
