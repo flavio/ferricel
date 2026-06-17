@@ -15,6 +15,7 @@ impl FerricelDrain {
 // Host function declaration - will be provided by wasmtime
 // For tests, provide a no-op stub since we're not running in Wasm
 #[cfg(not(test))]
+#[link(wasm_import_module = "env")]
 unsafe extern "C" {
     fn cel_log(ptr: i32, len: i32);
 }
