@@ -15,6 +15,10 @@ FERRICEL_CARGO := ferricel/Cargo.toml
 
 WORKSPACE_CARGO := Cargo.toml Cargo.lock
 
+.PHONY: advisories
+advisories:
+	cargo deny check advisories
+
 # Build the runtime Wasm module
 runtime: $(RUNTIME_TARGET)
 
@@ -332,6 +336,7 @@ check: $(RUNTIME_TARGET)
 help:
 	@echo "Available targets:"
 	@echo "  all              - Build ferricel and runtime (default)"
+	@echo "  advisories       - Check for security advisories using cargo-deny"
 	@echo "  runtime          - Build only the runtime Wasm module"
 	@echo "  ferricel         - Build runtime and ferricel binary (runtime is embedded at compile-time)"
 	@echo "  clean            - Remove all build artifacts"
