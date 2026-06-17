@@ -56,20 +56,20 @@ tests: unit-tests integration-tests e2e-tests conformance-tests
 conformance-tests: $(RUNTIME_TARGET)
 	@echo "Running CEL conformance tests..."
 	@echo "Note: Building ferricel-core first..."
-	cargo build --package ferricel-core
+	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo build --package ferricel-core
 	cargo test --package conformance --test conformance -- --nocapture
 
 # Run CEL conformance tests serially (one suite at a time, cleaner output)
 conformance-tests-serial: $(RUNTIME_TARGET)
 	@echo "Running CEL conformance tests (serial)..."
 	@echo "Note: Building ferricel-core first..."
-	cargo build --package ferricel-core
+	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo build --package ferricel-core
 	cargo test --package conformance --test conformance -- --nocapture --test-threads=1
 
 # Run a specific conformance test suite
 # Usage: make conformance-basic, make conformance-string, etc.
 conformance-%: $(RUNTIME_TARGET)
-	@cargo build --package ferricel-core
+	@K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo build --package ferricel-core
 	@case "$*" in \
 		basic) \
 			cargo test --package conformance --test conformance conformance_basic_tests -- --nocapture ;; \
