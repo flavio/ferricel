@@ -320,6 +320,7 @@ lint: $(RUNTIME_TARGET)
 	cargo +nightly fmt --all -- --check
 	taplo fmt --check
 	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo clippy --workspace -- -D warnings
+	cargo deny check bans licenses sources
 
 # Auto-fix clippy warnings where possible
 .PHONY: lint-fix
