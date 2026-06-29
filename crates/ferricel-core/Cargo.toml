@@ -27,7 +27,7 @@ k8s-vap = ["dep:k8s-openapi", "dep:yaml_serde"]
 
 [dependencies]
 anyhow         = { workspace = true }
-cel            = "0.13"
+cel            = "0.14"
 ferricel-types = { workspace = true }
 k8s-openapi    = { workspace = true, optional = true }
 prost          = { workspace = true }
@@ -37,7 +37,7 @@ serde_json     = { workspace = true }
 slog           = { workspace = true }
 walrus         = "0.26"
 wasmparser     = { workspace = true }
-wasmtime       = "45.0"
+wasmtime       = "46.0"
 yaml_serde     = { workspace = true, optional = true }
 
 [dev-dependencies]
