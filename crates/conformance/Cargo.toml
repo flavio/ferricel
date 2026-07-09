@@ -3,7 +3,7 @@ edition = "2024"
 license = { workspace = true }
 name    = "conformance"
 publish = false
-version = "0.1.0"
+version = { workspace = true }
 
 [dependencies]
 base64         = { workspace = true }
