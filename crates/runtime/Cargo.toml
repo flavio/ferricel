@@ -37,4 +37,4 @@ lol_alloc = "0.4"
 
 [dev-dependencies]
 rstest      = { workspace = true }
-serial_test = "3"
+serial_test = "4"
