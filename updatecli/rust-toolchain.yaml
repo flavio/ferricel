@@ -1,0 +1,42 @@
+name: Update Rust version in rust-toolchain.toml
+
+scms:
+  ferricel:
+    kind: github
+    spec:
+      owner: "flavio"
+      repository: "ferricel"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      username: '{{ requiredEnv "UPDATECLI_GITHUB_USERNAME" }}'
+      branch: "main"
+
+sources:
+  rust-release:
+    name: Get latest Rust release from rust-lang
+    kind: githubrelease
+    spec:
+      owner: "rust-lang"
+      repository: "rust"
+      token: '{{ requiredEnv "GITHUB_TOKEN" }}'
+      versionfilter:
+        kind: semver
+        pattern: "*"
+
+targets:
+  update-channel:
+    name: 'Update Rust toolchain channel to {{ source "rust-release" }}'
+    kind: toml
+    scmid: ferricel
+    sourceid: rust-release
+    spec:
+      file: "rust-toolchain.toml"
+      key: toolchain.channel
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: ferricel
+    title: 'Bump Rust toolchain to {{ source "rust-release" }}'
+    spec:
+      labels:
+        - "dependencies"
