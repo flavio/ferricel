@@ -368,7 +368,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "conformance"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64 0.23.1",
  "ferricel-core",
@@ -843,7 +843,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferricel"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -865,7 +865,7 @@ dependencies = [
 
 [[package]]
 name = "ferricel-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "cel",
@@ -879,14 +879,14 @@ dependencies = [
  "slog",
  "slog-term",
  "walrus",
- "wasmparser 0.255.0",
+ "wasmparser 0.256.0",
  "wasmtime",
  "yaml_serde",
 ]
 
 [[package]]
 name = "ferricel-types"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "prost",
  "prost-build",
@@ -2093,7 +2093,7 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -2939,6 +2939,17 @@ name = "wasmparser"
 version = "0.255.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8e329ef4b5d46e73b91d3ac6924417cad55a8cbbf869c199283383427c3320b"
+dependencies = [
+ "bitflags 2.13.1",
+ "indexmap",
+ "semver",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.256.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60bd825ffedc6cba8a642924ba7ae424afbc47811cffbcb7b92031ec24e59b4c"
 dependencies = [
  "bitflags 2.13.1",
  "hashbrown 0.17.1",
