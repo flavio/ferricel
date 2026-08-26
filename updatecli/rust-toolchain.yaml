@@ -32,6 +32,21 @@ targets:
       file: "rust-toolchain.toml"
       key: toolchain.channel
 
+  format-toolchain:
+    name: Format rust-toolchain.toml with taplo
+    kind: shell
+    scmid: ferricel
+    disablesourceinput: true
+    dependson:
+      - update-channel
+    spec:
+      command: taplo format rust-toolchain.toml
+      changedif:
+        kind: file/checksum
+        spec:
+          files:
+            - rust-toolchain.toml
+
 actions:
   default:
     kind: github/pullrequest
