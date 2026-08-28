@@ -664,26 +664,25 @@ impl ConformanceTestRunner {
     }
 
     pub fn load_test_file(&self, path: &Path) -> SimpleTestFile {
-        // Convert textproto to binary using protoc
-        let proto_dir = Path::new("../../cel-spec/proto");
+        // Parse the textproto file using prost-reflect (pure Rust, no `protoc`
+        // binary required). The descriptor set is generated at build time.
+        let descriptor_bytes = self
+            .proto_descriptor
+            .as_deref()
+            .expect("proto descriptor not found; it should be generated at build time");
+        let pool = prost_reflect::DescriptorPool::decode(descriptor_bytes)
+            .expect("Failed to decode proto descriptor set");
+        let message_descriptor = pool
+            .get_message_by_name("cel.expr.conformance.test.SimpleTestFile")
+            .expect("SimpleTestFile message not found in descriptor set");
 
-        let output = std::process::Command::new("protoc")
-            .arg(format!("--proto_path={}", proto_dir.display()))
-            .arg("--encode=cel.expr.conformance.test.SimpleTestFile")
-            .arg("cel/expr/conformance/test/simple.proto")
-            .arg("cel/expr/conformance/proto2/test_all_types.proto")
-            .arg("cel/expr/conformance/proto3/test_all_types.proto")
-            .stdin(std::process::Stdio::from(
-                std::fs::File::open(path).unwrap(),
-            ))
-            .output()
-            .expect("Failed to run protoc");
+        let text = std::fs::read_to_string(path).expect("Failed to read test file");
+        let dynamic_message =
+            prost_reflect::DynamicMessage::parse_text_format(message_descriptor, &text)
+                .unwrap_or_else(|e| panic!("Failed to parse textproto {}: {e}", path.display()));
 
-        if !output.status.success() {
-            panic!("protoc failed: {}", String::from_utf8_lossy(&output.stderr));
-        }
-
-        // Decode with prost
-        prost::Message::decode(&output.stdout[..]).expect("Failed to decode protobuf")
+        // Transcode the dynamic message into the prost-generated type
+        prost::Message::decode(dynamic_message.encode_to_vec().as_slice())
+            .expect("Failed to decode protobuf")
     }
 }

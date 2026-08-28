@@ -19,3 +19,4 @@ strum       = { version = "0.28", features = ["derive"] }
 
 [build-dependencies]
 prost-build = "0.14"
+protox      = "0.9"

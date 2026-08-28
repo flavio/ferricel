@@ -43,9 +43,6 @@ jobs:
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         if: ${{ !inputs.build_only }}
 
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
-
       - name: Install wasm32-unknown-unknown target
         run: rustup target add wasm32-unknown-unknown
 
@@ -147,9 +144,6 @@ jobs:
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         if: ${{ !inputs.build_only }}
 
-      - name: Install protoc
-        run: brew install protobuf
-
       - name: Install wasm32-unknown-unknown target
         run: rustup target add wasm32-unknown-unknown
 
@@ -237,9 +231,6 @@ jobs:
 
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         if: ${{ !inputs.build_only }}
-
-      - name: Install protoc
-        run: choco install protoc
 
       - name: Install wasm32-unknown-unknown target
         run: rustup target add wasm32-unknown-unknown
