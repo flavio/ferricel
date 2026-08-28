@@ -75,6 +75,14 @@ fn print_human(path: &Path, info: &ModuleInfo, hl: Option<&Highlighter>) {
         }
     }
 
+    // VAP variables
+    if !info.vap_variables.is_empty() {
+        println!("\nVAP variables (referenced):");
+        for var in &info.vap_variables {
+            println!("  - {var}");
+        }
+    }
+
     // Exports
     if !info.exports.is_empty() {
         println!("\nExports: {}", info.exports.join(", "));

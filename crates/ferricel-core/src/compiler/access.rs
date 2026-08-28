@@ -372,6 +372,23 @@ pub fn compile_ident(
             body.call(env.get(RuntimeFunction::CreateType));
         }
         _ => {
+            // Record this as a referenced variable (subject to the context's
+            // allowlist, if any — see `CompilerContext::record_variable`).
+            //
+            // This is a valid choke point even for dotted chains resolved by
+            // `compile_select` (e.g. `namespaceObject.metadata.name`), which
+            // tries the *full* dotted name as a variable first without ever
+            // calling `compile_ident`. However, `compile_select` always emits
+            // (at compile time) a field-access fallback branch alongside that
+            // lookup, and that fallback branch recursively compiles the
+            // operand down to its root `Expr::Ident` via `compile_expr`,
+            // which calls `compile_ident` on the root. So both branches of
+            // the emitted `IfElse` are generated at compile time regardless
+            // of which one wins at runtime, and the root identifier always
+            // passes through here — making this the single correct place to
+            // record variable references.
+            ctx.record_variable(name);
+
             // Build the ordered list of candidates using container resolution
             let candidates = variable_candidates(name, &ctx.container);
             emit_variable_lookup_chain(&candidates, body, env, module)?;
@@ -391,6 +408,12 @@ pub fn compile_ident(
 ///    - If found, use it
 /// 4. Fall back to field access: resolve the operand (recursively applying same rules),
 ///    then call cel_get_field
+///
+/// Note on variable-usage recording: this function emits *both* branches (3) and (4)
+/// unconditionally at compile time, wrapped in a runtime `IfElse`. Branch (4) recurses
+/// via `compile_expr`/`compile_ident` down to the chain's root identifier, so
+/// `compile_ident`'s call to `ctx.record_variable` always sees the root name — even
+/// though at runtime only one branch's value is actually used. See the comment there.
 pub fn compile_select(
     select_expr: &cel::common::ast::SelectExpr,
     body: &mut InstrSeqBuilder,

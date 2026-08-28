@@ -46,6 +46,9 @@ pub mod schema;
 
 // Re-export commonly used types for convenience
 pub use compiler::{Compiler, ExtensionKey, extensions_used};
+#[cfg(feature = "k8s-vap")]
+#[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
+pub use compiler::{WELL_KNOWN_VAP_VARIABLES, vap_variables_used};
 pub use ferricel_types::extensions::UsedExtension;
 pub use inspect::{ModuleInfo, ProducerField, ProducerValue, inspect};
 pub use runtime::{Engine, EnginePre};

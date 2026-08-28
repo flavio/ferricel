@@ -36,3 +36,4 @@ mod ext;
 mod extensions_used_tests;
 mod kubernetes;
 mod vap_tests;
+mod vap_variables_tests;
