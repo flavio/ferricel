@@ -20,6 +20,7 @@
 //   namespace_tests.rs     — Container/namespace name resolution (qualified vars, container prefixes, comprehension shadowing)
 //   extension_tests.rs     — Extension function registration and invocation
 //   kubernetes_tests.rs    — Kubernetes list extension tests
+//   epoch_interruption_tests.rs — wasmtime epoch-deadline propagation and interruption behavior
 
 use ferricel_core::{compiler::Builder, runtime};
 use ferricel_types::LogLevel;
