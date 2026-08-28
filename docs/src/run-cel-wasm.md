@@ -173,6 +173,49 @@ let result = runtime::Builder::new()
     .eval(None)?;
 ```
 
+#### Timeouts via epoch interruption
+
+To bound evaluation time, enable `Config::epoch_interruption` on the engine,
+set a deadline via `with_epoch_deadline`, and drive `Engine::increment_epoch()`
+from a background thread:
+
+```rust
+use ferricel_core::{compiler, runtime};
+use wasmtime::{Config, Engine as WasmEngine};
+use std::time::Duration;
+
+let mut config = Config::new();
+config.epoch_interruption(true);
+
+let wasm_engine = WasmEngine::new(&config)?;
+let wasm = compiler::Builder::new().build().compile("1 + 1")?;
+
+// Drive the epoch forward periodically; this determines the granularity of
+// the timeout below.
+let ticker_engine = wasm_engine.clone();
+std::thread::spawn(move || {
+    loop {
+        std::thread::sleep(Duration::from_millis(10));
+        ticker_engine.increment_epoch();
+    }
+});
+
+let result = runtime::Builder::new()
+    .with_engine(wasm_engine)
+    // Trap once the epoch advances by 1 tick beyond the current one, i.e.
+    // after roughly one ticker interval (~10ms here).
+    .with_epoch_deadline(1)
+    .with_wasm(wasm)
+    .build()?
+    .eval(None)?;
+```
+
+> [!IMPORTANT]
+> If the supplied engine has `epoch_interruption(true)` set but no deadline is
+> configured via `with_epoch_deadline`, every evaluation traps immediately —
+> this is `wasmtime`'s documented behavior for a `Store` with no configured
+> deadline on an interruption-enabled engine.
+
 ### Protobuf bindings
 
 For type-safe variable bindings that preserve full fidelity (bytes, uint,

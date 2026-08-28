@@ -114,6 +114,42 @@ struct HostState {
 /// # Ok(())
 /// # }
 /// ```
+///
+/// ## Epoch-based interruption
+///
+/// To bound evaluation time, enable `Config::epoch_interruption` on the
+/// supplied engine and pair it with [`with_epoch_deadline`](Self::with_epoch_deadline).
+/// The deadline is expressed in ticks beyond the current epoch; an embedder
+/// thread must call `wasmtime::Engine::increment_epoch()` periodically for
+/// the deadline to be reached and the evaluation to trap.
+///
+/// **Warning:** if `epoch_interruption` is enabled but no deadline is set
+/// (via `with_epoch_deadline`), evaluation traps immediately — this is
+/// `wasmtime`'s documented behavior for a `Store` with no configured
+/// deadline on an interruption-enabled engine.
+///
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// use ferricel_core::{compiler, runtime};
+/// use wasmtime::{Config, Engine as WasmEngine};
+///
+/// let mut config = Config::new();
+/// config.epoch_interruption(true);
+///
+/// let wasm_engine = WasmEngine::new(&config)?;
+/// let wasm = compiler::Builder::new().build().compile("1 + 1")?;
+///
+/// // No ticker thread is started here, so the deadline is never reached
+/// // and this evaluation completes normally.
+/// let result = runtime::Builder::new()
+///     .with_engine(wasm_engine)
+///     .with_epoch_deadline(1)
+///     .with_wasm(wasm)
+///     .build()?
+///     .eval(None)?;
+/// # Ok(())
+/// # }
+/// ```
 pub struct Builder {
     logger: slog::Logger,
     log_level: LogLevel,
@@ -121,6 +157,7 @@ pub struct Builder {
     wasm_bytes: Option<Vec<u8>>,
     wasm_module: Option<Module>,
     wasm_engine: Option<WasmEngine>,
+    epoch_deadline: Option<u64>,
 }
 
 impl Builder {
@@ -137,6 +174,7 @@ impl Builder {
             wasm_bytes: None,
             wasm_module: None,
             wasm_engine: None,
+            epoch_deadline: None,
         }
     }
 
@@ -188,6 +226,21 @@ impl Builder {
     /// [`wasmtime::Engine`] with default settings via [`wasmtime::Engine::default`].
     pub fn with_engine(mut self, engine: WasmEngine) -> Self {
         self.wasm_engine = Some(engine);
+        self
+    }
+
+    /// Set an epoch deadline (in ticks beyond the current epoch) applied to
+    /// the [`wasmtime::Store`] created for each evaluation.
+    ///
+    /// This only has an effect when combined with a [`wasmtime::Engine`]
+    /// supplied via [`with_engine`](Self::with_engine) that has
+    /// `Config::epoch_interruption(true)` set, and requires the embedder to
+    /// periodically call `wasmtime::Engine::increment_epoch()` (e.g. from a
+    /// background thread) to actually trigger interruption. If the engine
+    /// does not have epoch interruption enabled, setting a deadline is a
+    /// no-op.
+    pub fn with_epoch_deadline(mut self, ticks: u64) -> Self {
+        self.epoch_deadline = Some(ticks);
         self
     }
 
@@ -259,8 +312,9 @@ impl Builder {
     pub fn build(self) -> Result<Engine, anyhow::Error> {
         let extensions = self.extensions.clone();
         let logger = self.logger.clone();
+        let epoch_deadline = self.epoch_deadline;
         let pre = self.build_pre()?;
-        Ok(pre.rehydrate(extensions, logger))
+        Ok(pre.rehydrate(extensions, logger, epoch_deadline))
     }
 
     /// Register all host functions into the linker.
@@ -461,19 +515,38 @@ pub struct EnginePre {
 impl EnginePre {
     /// Produce an [`Engine`] by injecting per-evaluation-context state.
     ///
-    /// Both the extension function implementations and the `logger` are
-    /// supplied here — not at `build_pre` time — so callers can attach
-    /// request-scoped context (e.g. a policy identifier) to every log event
-    /// the guest emits via `cel_log`.
+    /// The extension function implementations, the `logger`, and the
+    /// `epoch_deadline` are supplied here — not at `build_pre` time — so
+    /// callers can attach request-scoped context (e.g. a policy identifier,
+    /// or a per-request timeout) at evaluation time rather than when the
+    /// Wasm module was compiled and linked.
     ///
     /// This is infallible: all fallible work (compilation, linking,
     /// pre-instantiation) was done in [`Builder::build_pre`].
     ///
     /// Pass an empty `HashMap` if the policy uses no extension functions.
+    ///
+    /// `epoch_deadline` sets the number of ticks (beyond the current epoch)
+    /// after which the [`wasmtime::Store`] created for each evaluation will
+    /// trap, when combined with a [`wasmtime::Engine`] that has
+    /// `Config::epoch_interruption(true)` set (see
+    /// [`Builder::with_engine`](crate::runtime::Builder::with_engine)). The
+    /// embedder must periodically call `wasmtime::Engine::increment_epoch()`
+    /// for the deadline to ever be reached.
+    ///
+    /// **Warning:** if the underlying `wasmtime::Engine` has epoch
+    /// interruption enabled and `epoch_deadline` is `None`, every evaluation
+    /// traps immediately — this is `wasmtime`'s documented behavior for a
+    /// `Store` with no configured deadline on an interruption-enabled engine.
+    /// Pass `Some(_)` whenever the engine has epoch interruption enabled.
+    ///
+    /// Passing `None` for an engine without epoch interruption enabled is a
+    /// no-op (there is nothing to interrupt).
     pub fn rehydrate(
         &self,
         extensions: std::collections::HashMap<ExtensionKey, ExtensionFn>,
         logger: slog::Logger,
+        epoch_deadline: Option<u64>,
     ) -> Engine {
         Engine {
             wasm_engine: self.wasm_engine.clone(),
@@ -481,6 +554,7 @@ impl EnginePre {
             extensions_impl: extensions,
             logger,
             log_level: self.log_level,
+            epoch_deadline,
         }
     }
 }
@@ -521,6 +595,8 @@ pub struct Engine {
     logger: slog::Logger,
     /// Log level used during evaluation.
     log_level: LogLevel,
+    /// Optional epoch deadline (in ticks) applied to each evaluation's Store.
+    epoch_deadline: Option<u64>,
 }
 
 impl Engine {
@@ -534,6 +610,9 @@ impl Engine {
             extensions: self.extensions_impl.clone(),
         };
         let mut store = Store::new(&self.wasm_engine, host_state);
+        if let Some(deadline) = self.epoch_deadline {
+            store.set_epoch_deadline(deadline);
+        }
         let instance = self.instance_pre.instantiate(&mut store)?;
 
         let cel_set_log_level = instance

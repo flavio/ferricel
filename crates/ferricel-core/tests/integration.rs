@@ -19,6 +19,7 @@ mod arithmetic_tests;
 mod compiler_tests;
 mod container_tests;
 mod double_tests;
+mod epoch_interruption_tests;
 mod extension_tests;
 mod has_tests;
 mod in_operator_tests;
