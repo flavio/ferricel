@@ -260,6 +260,7 @@ information from a `.wasm` file without any external metadata.
 | `ferricel.cel-source` | The original CEL expression | [`compile()`] |
 | `ferricel.vap-source` | The full `ValidatingAdmissionPolicy` serialized as YAML | [`compile_vap()`], [`compile_vap_from_policy()`] |
 | `ferricel.extensions` | JSON array of host extensions used by this module | all compile paths |
+| `ferricel.vap-variables` | JSON array of well-known VAP variables referenced by this policy | [`compile_vap()`], [`compile_vap_from_policy()`] |
 
 ### `ferricel.extensions` section
 
@@ -296,6 +297,41 @@ for ext in extensions_used(&wasm)? {
 }
 ```
 
+### `ferricel.vap-variables` section
+
+Only present in modules produced by [`compile_vap()`] / [`compile_vap_from_policy()`].
+It contains a sorted JSON array of strings naming which of the well-known
+[VAP variables](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/#validation-expression) —
+`object`, `oldObject`, `request`, `params`, `namespaceObject`, `authorizer` —
+the policy actually references (matchConditions, `spec.variables[]`
+expressions, validations, and messageExpressions are all considered):
+
+```json
+["namespaceObject", "object"]
+```
+
+Some of these variables require the host to do extra work before evaluation —
+most notably `namespaceObject`, which requires fetching and binding the
+resource's `Namespace` object. Kubewarden and similar hosts can inspect this
+section at policy-setup time to decide whether that extra wiring is needed,
+instead of always granting access unconditionally or trying to detect usage
+by re-parsing the CEL/YAML source.
+
+The section is absent for plain CEL modules (`compile()`), and only ever lists
+names from the well-known set above — internal implementation details such as
+the VAP `variables` map, or unrelated identifiers, are never recorded.
+
+Read the section at runtime with `ferricel_core::vap_variables_used`:
+
+```rust
+use ferricel_core::vap_variables_used;
+
+let wasm = std::fs::read("policy.wasm")?;
+if vap_variables_used(&wasm)?.iter().any(|v| v == "namespaceObject") {
+    println!("policy needs namespaceObject bound");
+}
+```
+
 ### Inspecting source sections
 
 ```sh
@@ -307,6 +343,9 @@ wasm-objdump -s -j ferricel.vap-source policy.wasm
 
 # Print the extensions manifest
 wasm-objdump -s -j ferricel.extensions policy.wasm
+
+# Print the referenced VAP variables
+wasm-objdump -s -j ferricel.vap-variables policy.wasm
 ```
 
 With `wasm-tools`, the raw UTF-8 content can be extracted directly:
@@ -336,6 +375,10 @@ Source (ValidatingAdmissionPolicy):
 Host extensions (may be called):
   - kw.k8s/get
   - kw.net/lookupHost
+
+VAP variables (referenced):
+  - namespaceObject
+  - object
 
 Exports: cel_malloc, evaluate, evaluate_proto
 Producers:

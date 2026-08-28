@@ -38,6 +38,26 @@ const RUNTIME_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/runtime.w
 
 use crate::schema::ProtoSchema;
 
+/// Well-known top-level variables that a compiled
+/// `ValidatingAdmissionPolicy` module may reference, as defined by the
+/// [Kubernetes VAP CEL environment](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/#validation-expression).
+///
+/// Used to populate the `ferricel.vap-variables` custom section (see
+/// [`Compiler::compile_vap`]) so hosts (e.g. Kubewarden) can determine, at
+/// build/setup time, which of these a policy actually needs bound —
+/// notably `namespaceObject`, which requires the host to fetch and provide
+/// the Namespace object.
+#[cfg(feature = "k8s-vap")]
+#[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
+pub const WELL_KNOWN_VAP_VARIABLES: &[&str] = &[
+    "authorizer",
+    "namespaceObject",
+    "object",
+    "oldObject",
+    "params",
+    "request",
+];
+
 /// Builder for configuring and constructing a [`Compiler`].
 ///
 /// All builder methods are consuming (take and return `Self`).
@@ -359,6 +379,12 @@ impl Compiler {
             self.logger.clone(),
             &extensions,
             &builder_chains,
+        )
+        .with_tracked_variables(
+            WELL_KNOWN_VAP_VARIABLES
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
         );
 
         // Build `evaluate` (JSON bindings)
@@ -388,6 +414,15 @@ impl Compiler {
         module.customs.add(walrus::RawCustomSection {
             name: "ferricel.extensions".to_string(),
             data: serde_json::to_vec(&used).context("Failed to serialize used extensions")?,
+        });
+
+        // Embed the well-known VAP variables (e.g. `namespaceObject`) actually
+        // referenced by this policy, so hosts can decide what to bind ahead of time.
+        let used_vars: Vec<String> = ctx.used_variables.borrow().iter().cloned().collect();
+        module.customs.add(walrus::RawCustomSection {
+            name: "ferricel.vap-variables".to_string(),
+            data: serde_json::to_vec(&used_vars)
+                .context("Failed to serialize used VAP variables")?,
         });
 
         Ok(module)
@@ -440,6 +475,42 @@ fn add_producers_entries(module: &mut walrus::Module) {
 /// ```
 pub fn extensions_used(wasm: &[u8]) -> Result<Vec<UsedExtension>, anyhow::Error> {
     Ok(crate::inspect(wasm)?.extensions)
+}
+
+/// Read the set of well-known VAP variables referenced by a compiled VAP module.
+///
+/// Parses the `ferricel.vap-variables` custom section embedded by
+/// [`Compiler::compile_vap`] / [`Compiler::compile_vap_from_policy`] and returns
+/// the sorted set of variable names (a subset of [`WELL_KNOWN_VAP_VARIABLES`])
+/// actually referenced by the policy — for example `["namespaceObject", "object"]`.
+///
+/// Returns an empty `Vec` if the section is absent (e.g. plain CEL modules built
+/// with [`Compiler::compile`], or modules compiled by an older version of
+/// ferricel).
+///
+/// This lets a host (e.g. Kubewarden) determine ahead of time whether it needs
+/// to fetch and bind `namespaceObject` (or other variables requiring extra
+/// host-side wiring) before evaluating the policy.
+///
+/// # Errors
+///
+/// Returns an error if `wasm` is not a valid WebAssembly module, or if the
+/// `ferricel.vap-variables` section cannot be deserialized.
+///
+/// # Example
+///
+/// ```no_run
+/// use ferricel_core::vap_variables_used;
+///
+/// let wasm = std::fs::read("policy.wasm").unwrap();
+/// if vap_variables_used(&wasm).unwrap().iter().any(|v| v == "namespaceObject") {
+///     println!("policy needs namespaceObject bound");
+/// }
+/// ```
+#[cfg(feature = "k8s-vap")]
+#[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
+pub fn vap_variables_used(wasm: &[u8]) -> Result<Vec<String>, anyhow::Error> {
+    Ok(crate::inspect(wasm)?.vap_variables)
 }
 
 /// Build the `evaluate` Wasm function `(i64) -> i64` using JSON-encoded bindings.

@@ -32,6 +32,16 @@ Kubernetes
 [`AdmissionReview`](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#request)
 request object.
 
+Determining whether a given policy actually references `oldObject`,
+`request`, or `namespaceObject` — without evaluating the policy or re-parsing
+its CEL/YAML source — is exactly what the `ferricel.vap-variables` custom
+section is for. Read it with `ferricel_core::vap_variables_used()` (or
+`ferricel inspect --json`) at policy-setup time and only fetch/bind what is
+actually needed. This is particularly relevant for `namespaceObject`, since
+fetching it requires an extra host-side lookup — see
+[Custom sections and inspection](wasm-spec.md#ferricelvap-variables-section)
+for details.
+
 ## Kubernetes Resource Fetching
 
 ### Params

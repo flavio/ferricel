@@ -43,6 +43,16 @@ pub struct CompilerContext {
     /// Set of host extensions actually emitted into this module (shared across child contexts
     /// so entries collected inside comprehensions are visible to the top-level context).
     pub used_extensions: Rc<RefCell<BTreeSet<UsedExtension>>>,
+    /// Optional allowlist of variable names to track via [`CompilerContext::record_variable`].
+    ///
+    /// `None` disables tracking entirely (the default, plain-CEL `compile()` path pays no
+    /// cost). `Some(set)` enables tracking, recording only names present in `set` — this
+    /// keeps the compiler generic while callers (e.g. the VAP compiler) decide which
+    /// variables are worth reporting. See [`Compiler::compile_vap`](super::Compiler::compile_vap).
+    pub tracked_variables: Option<Rc<BTreeSet<String>>>,
+    /// Names recorded by [`CompilerContext::record_variable`] (shared across child contexts,
+    /// same rationale as `used_extensions`).
+    pub used_variables: Rc<RefCell<BTreeSet<String>>>,
 }
 
 impl CompilerContext {
@@ -61,7 +71,22 @@ impl CompilerContext {
             logger,
             extensions: Rc::new(ExtensionRegistry::new(extensions, builder_chains)),
             used_extensions: Rc::new(RefCell::new(BTreeSet::new())),
+            tracked_variables: None,
+            used_variables: Rc::new(RefCell::new(BTreeSet::new())),
         }
+    }
+
+    /// Enable variable-usage tracking, restricted to `names`.
+    ///
+    /// Only identifiers present in `names` will be recorded by
+    /// [`record_variable`](Self::record_variable); everything else compiles
+    /// exactly as before. Intended for callers that only care about a small,
+    /// well-known set of variables (e.g. the VAP compiler tracking
+    /// `namespaceObject`, `authorizer`, etc.) without polluting the recorded
+    /// set with incidental qualified-name fragments.
+    pub fn with_tracked_variables(mut self, names: BTreeSet<String>) -> Self {
+        self.tracked_variables = Some(Rc::new(names));
+        self
     }
 
     /// Create a child context with an additional local variable binding
@@ -76,6 +101,8 @@ impl CompilerContext {
             logger: self.logger.clone(),
             extensions: self.extensions.clone(),
             used_extensions: self.used_extensions.clone(),
+            tracked_variables: self.tracked_variables.clone(),
+            used_variables: self.used_variables.clone(),
         }
     }
 
@@ -85,6 +112,18 @@ impl CompilerContext {
             namespace: namespace.map(|s| s.to_string()),
             function: function.to_string(),
         });
+    }
+
+    /// Record that a runtime variable lookup for `name` was emitted into the module.
+    ///
+    /// A no-op unless [`with_tracked_variables`](Self::with_tracked_variables) was
+    /// used to enable tracking, and only records names present in that allowlist.
+    pub fn record_variable(&self, name: &str) {
+        if let Some(tracked) = &self.tracked_variables
+            && tracked.contains(name)
+        {
+            self.used_variables.borrow_mut().insert(name.to_string());
+        }
     }
 }
 

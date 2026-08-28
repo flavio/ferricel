@@ -54,6 +54,13 @@ pub struct ModuleInfo {
     /// section. Empty if the module uses no extensions.
     pub extensions: Vec<UsedExtension>,
 
+    /// Well-known VAP variables (e.g. `namespaceObject`, `authorizer`)
+    /// referenced by this policy, from the `ferricel.vap-variables` section.
+    /// Empty for plain CEL modules, VAP modules that don't reference any of
+    /// them, or modules compiled by an older version of ferricel.
+    #[serde(default)]
+    pub vap_variables: Vec<String>,
+
     /// Entries from the standard WebAssembly `producers` section.
     pub producers: Vec<ProducerField>,
 
@@ -89,6 +96,7 @@ pub fn inspect(wasm: &[u8]) -> Result<ModuleInfo, anyhow::Error> {
     let mut cel_source: Option<String> = None;
     let mut vap_source: Option<String> = None;
     let mut extensions: Vec<UsedExtension> = Vec::new();
+    let mut vap_variables: Vec<String> = Vec::new();
     let mut producers: Vec<ProducerField> = Vec::new();
     let mut exports: Vec<String> = Vec::new();
 
@@ -115,6 +123,10 @@ pub fn inspect(wasm: &[u8]) -> Result<ModuleInfo, anyhow::Error> {
                         extensions = serde_json::from_slice(data)
                             .context("Failed to deserialize ferricel.extensions")?;
                     }
+                    "ferricel.vap-variables" => {
+                        vap_variables = serde_json::from_slice(data)
+                            .context("Failed to deserialize ferricel.vap-variables")?;
+                    }
                     "producers" => {
                         producers = parse_producers(data)?;
                     }
@@ -139,6 +151,7 @@ pub fn inspect(wasm: &[u8]) -> Result<ModuleInfo, anyhow::Error> {
         cel_source,
         vap_source,
         extensions,
+        vap_variables,
         producers,
         exports,
     })
