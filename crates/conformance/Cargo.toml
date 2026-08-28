@@ -11,6 +11,7 @@ ferricel-core  = { path = "../ferricel-core" }
 ferricel-types = { path = "../ferricel-types" }
 k8s-openapi    = { workspace = true, features = ["v1_35"] }
 prost          = { workspace = true }
+prost-reflect  = { version = "0.16", features = ["text-format"] }
 prost-types    = { workspace = true }
 rayon          = "1.12"
 serde          = { workspace = true }
@@ -20,4 +21,6 @@ slog-term      = { workspace = true }
 toml           = { version = "1.1", features = ["parse"] }
 
 [build-dependencies]
+prost       = { workspace = true }
 prost-build = "0.14"
+protox      = "0.9"

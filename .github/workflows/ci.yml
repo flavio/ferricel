@@ -26,8 +26,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
       - name: Install nightly rustfmt
         run: rustup toolchain install nightly --component rustfmt --no-self-update
       - name: Install taplo
@@ -51,8 +49,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Run unit tests
         run: make unit-tests
@@ -65,8 +61,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Run integration tests
         run: make integration-tests
@@ -78,8 +72,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Run end-to-end tests
         run: make e2e-tests
@@ -117,8 +109,6 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: conformance
