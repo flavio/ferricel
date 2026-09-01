@@ -27,6 +27,7 @@ mod json_output_tests;
 mod list_tests;
 mod namespace_tests;
 mod numeric_tests;
+mod resource_limits_tests;
 mod string_tests;
 mod struct_tests;
 mod variable_tests;

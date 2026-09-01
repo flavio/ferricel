@@ -216,6 +216,38 @@ let result = runtime::Builder::new()
 > this is `wasmtime`'s documented behavior for a `Store` with no configured
 > deadline on an interruption-enabled engine.
 
+### Resource limits
+
+To bound the amount of linear memory (and table elements) a single
+evaluation is allowed to allocate, use `with_resource_limits`. This leverages
+wasmtime's `ResourceLimiter` facility (via `wasmtime::StoreLimits`) and
+protects the host from a malicious, or misbehaving, CEL expression that keeps
+growing memory — for example building up huge strings or lists in a
+comprehension:
+
+```rust
+use ferricel_core::{compiler, runtime};
+use ferricel_core::runtime::ResourceLimits;
+
+let wasm = compiler::Builder::new().build().compile("1 + 1")?;
+
+let result = runtime::Builder::new()
+    .with_resource_limits(ResourceLimits {
+        max_memory_size: Some(64 * 1024 * 1024), // 64 MiB
+        ..Default::default()
+    })
+    .with_wasm(wasm)
+    .build()?
+    .eval(None)?;
+```
+
+When a limit is exceeded, the corresponding `memory.grow`/`table.grow` Wasm
+instruction fails and returns `-1` to the guest. The ferricel guest runtime
+treats a failed allocation as a fatal error and aborts, which is reported
+back as an `Err` from `eval`/`eval_proto` — the memory/table cap itself is
+always enforced by the host regardless of how the guest reacts to the failed
+growth.
+
 ### Protobuf bindings
 
 For type-safe variable bindings that preserve full fidelity (bytes, uint,
@@ -246,4 +278,9 @@ to pre-link the module at build time. This amortizes compilation cost:
 
 For workloads with many evaluations, creating a single `Engine` and reusing it
 across multiple `eval()` calls is the recommended pattern.
+
+Even though memory does not carry over between calls, a single evaluation
+can still allocate an unbounded amount of memory (e.g. a pathological
+expression building a huge string or list). Use
+[`with_resource_limits`](#resource-limits) to cap this.
 
