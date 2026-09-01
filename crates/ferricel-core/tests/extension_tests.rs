@@ -406,7 +406,7 @@ fn test_extension_size_on_returned_array_comparison() {
         .eval(None)
         .expect("eval failed");
     let value: serde_json::Value = serde_json::from_str(&result).unwrap();
-    assert_eq!(value.as_bool().unwrap(), true);
+    assert!(value.as_bool().unwrap());
 }
 
 #[test]
