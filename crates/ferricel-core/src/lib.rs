@@ -51,5 +51,5 @@ pub use compiler::{Compiler, ExtensionKey, extensions_used};
 pub use compiler::{WELL_KNOWN_VAP_VARIABLES, vap_variables_used};
 pub use ferricel_types::extensions::UsedExtension;
 pub use inspect::{ModuleInfo, ProducerField, ProducerValue, inspect};
-pub use runtime::{Engine, EnginePre};
+pub use runtime::{Engine, EnginePre, ResourceLimits};
 pub use schema::ProtoSchema;

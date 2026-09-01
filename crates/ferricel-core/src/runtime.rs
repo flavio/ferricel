@@ -25,6 +25,61 @@ struct HostState {
     logger: slog::Logger,
     /// Registered extension function implementations keyed by (namespace, function).
     extensions: std::collections::HashMap<ExtensionKey, ExtensionFn>,
+    /// Resource limits enforced on the instance's linear memories and tables.
+    limits: wasmtime::StoreLimits,
+}
+
+/// Configure limits on the resources a single evaluation's Wasm instance is
+/// allowed to consume, leveraging wasmtime's
+/// [`ResourceLimiter`](wasmtime::ResourceLimiter) facility (via
+/// [`wasmtime::StoreLimits`]).
+///
+/// This can be used to prevent a malicious, or misbehaving, compiled CEL
+/// module from exhausting the host's memory, for example by growing its
+/// linear memory in an unbounded loop.
+///
+/// When a limit is exceeded, the corresponding `memory.grow`/`table.grow`
+/// Wasm instruction fails and returns `-1` to the guest, following the
+/// WebAssembly specification. The ferricel guest runtime treats a failed
+/// allocation as a fatal error and aborts, which is reported back to the
+/// host as a trap (i.e. [`Engine::eval`] returns `Err`). The memory/table cap
+/// itself is always enforced by the host regardless of how the guest reacts
+/// to the failed growth.
+///
+/// Configure via [`Builder::with_resource_limits`].
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ResourceLimits {
+    /// Maximum size, in bytes, that the module's linear memory is allowed to
+    /// grow to.
+    ///
+    /// `None` (the default) means no limit is enforced.
+    pub max_memory_size: Option<usize>,
+
+    /// Maximum number of elements the module's tables are allowed to grow
+    /// to. This limit is applied to each table individually.
+    ///
+    /// Compiled CEL modules do not grow tables at runtime, so this is a
+    /// secondary, defense-in-depth limit compared to
+    /// [`ResourceLimits::max_memory_size`].
+    ///
+    /// `None` (the default) means no limit is enforced.
+    pub max_table_elements: Option<usize>,
+}
+
+/// Build a `wasmtime::StoreLimits` out of the (optional) `ResourceLimits`
+/// configuration. When `None` is provided, the resulting limits are
+/// effectively unlimited (i.e. wasmtime's defaults).
+fn store_limits(resource_limits: Option<ResourceLimits>) -> wasmtime::StoreLimits {
+    let mut builder = wasmtime::StoreLimitsBuilder::new();
+    if let Some(limits) = resource_limits {
+        if let Some(max_memory_size) = limits.max_memory_size {
+            builder = builder.memory_size(max_memory_size);
+        }
+        if let Some(max_table_elements) = limits.max_table_elements {
+            builder = builder.table_elements(max_table_elements);
+        }
+    }
+    builder.build()
 }
 
 /// Builder for configuring and constructing an [`Engine`].
@@ -150,6 +205,33 @@ struct HostState {
 /// # Ok(())
 /// # }
 /// ```
+///
+/// ## Resource limits
+///
+/// To bound the amount of linear memory (and table elements) a single
+/// evaluation is allowed to allocate, use
+/// [`with_resource_limits`](Self::with_resource_limits). This protects the
+/// host from a malicious or misbehaving CEL expression that keeps growing
+/// memory (e.g. building up huge strings or lists in a comprehension).
+///
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// use ferricel_core::{compiler, runtime};
+/// use ferricel_core::runtime::ResourceLimits;
+///
+/// let wasm = compiler::Builder::new().build().compile("1 + 1")?;
+///
+/// let result = runtime::Builder::new()
+///     .with_resource_limits(ResourceLimits {
+///         max_memory_size: Some(64 * 1024 * 1024), // 64 MiB
+///         ..Default::default()
+///     })
+///     .with_wasm(wasm)
+///     .build()?
+///     .eval(None)?;
+/// # Ok(())
+/// # }
+/// ```
 pub struct Builder {
     logger: slog::Logger,
     log_level: LogLevel,
@@ -158,6 +240,7 @@ pub struct Builder {
     wasm_module: Option<Module>,
     wasm_engine: Option<WasmEngine>,
     epoch_deadline: Option<u64>,
+    resource_limits: Option<ResourceLimits>,
 }
 
 impl Builder {
@@ -175,6 +258,7 @@ impl Builder {
             wasm_module: None,
             wasm_engine: None,
             epoch_deadline: None,
+            resource_limits: None,
         }
     }
 
@@ -244,6 +328,18 @@ impl Builder {
         self
     }
 
+    /// Enable enforcement of resource limits on the Wasm instance created for
+    /// each evaluation, leveraging wasmtime's
+    /// [`ResourceLimiter`](wasmtime::ResourceLimiter) facility.
+    ///
+    /// This can be used to prevent a malicious, or misbehaving, CEL
+    /// expression from exhausting the host's memory. See [`ResourceLimits`]
+    /// for details.
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.resource_limits = Some(resource_limits);
+        self
+    }
+
     /// Set the compiled Wasm bytes to execute.
     ///
     /// These bytes are parsed and pre-linked during [`build`](Self::build), so
@@ -303,6 +399,7 @@ impl Builder {
             wasm_engine,
             instance_pre,
             log_level: self.log_level,
+            resource_limits: self.resource_limits,
         })
     }
 
@@ -510,6 +607,7 @@ pub struct EnginePre {
     wasm_engine: WasmEngine,
     instance_pre: InstancePre<HostState>,
     log_level: LogLevel,
+    resource_limits: Option<ResourceLimits>,
 }
 
 impl EnginePre {
@@ -555,6 +653,7 @@ impl EnginePre {
             logger,
             log_level: self.log_level,
             epoch_deadline,
+            resource_limits: self.resource_limits,
         }
     }
 }
@@ -597,6 +696,8 @@ pub struct Engine {
     log_level: LogLevel,
     /// Optional epoch deadline (in ticks) applied to each evaluation's Store.
     epoch_deadline: Option<u64>,
+    /// Optional resource limits applied to each evaluation's Store.
+    resource_limits: Option<ResourceLimits>,
 }
 
 impl Engine {
@@ -608,8 +709,10 @@ impl Engine {
         let host_state = HostState {
             logger: self.logger.clone(),
             extensions: self.extensions_impl.clone(),
+            limits: store_limits(self.resource_limits),
         };
         let mut store = Store::new(&self.wasm_engine, host_state);
+        store.limiter(|s| &mut s.limits);
         if let Some(deadline) = self.epoch_deadline {
             store.set_epoch_deadline(deadline);
         }
