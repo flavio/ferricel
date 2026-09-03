@@ -3,7 +3,7 @@
 //! Provides the host import declaration and fixed-arity wrappers that compiled
 //! CEL programs use to call host-provided extension functions.
 
-use ferricel_types::extensions::ExtensionCallPayload;
+use ferricel_types::extensions::{ExtensionCallPayload, ExtensionCallResponse};
 
 use crate::{error::read_ptr, memory::cel_malloc, serialization::encode_ptr_len, types::CelValue};
 
@@ -22,6 +22,10 @@ unsafe extern "C" {
 /// Internal helper that serializes the extension call, invokes the host, and
 /// deserializes the response into a heap-allocated `CelValue`.
 ///
+/// Extension calls are strict, like all other CEL functions. If an argument
+/// is a `CelValue::Error` (for example, the result of `1 / 0`), this
+/// function returns that error and does not call the host.
+///
 /// # Safety
 ///
 /// All pointers in `args` must be valid, non-null `*mut CelValue` pointers.
@@ -30,6 +34,12 @@ unsafe fn call_extension_impl(
     function: &str,
     args: Vec<CelValue>,
 ) -> *mut CelValue {
+    // Strict evaluation: if an argument is an error, return it and do not
+    // call the host. All built-in functions do the same.
+    if let Some(CelValue::Error(msg)) = args.iter().find(|v| matches!(v, CelValue::Error(_))) {
+        return Box::into_raw(Box::new(CelValue::Error(msg.clone())));
+    }
+
     // Serialize each argument CelValue to a serde_json::Value.
     let json_args: Vec<serde_json::Value> = args
         .into_iter()
@@ -65,9 +75,17 @@ unsafe fn call_extension_impl(
     // Read the response JSON from Wasm memory.
     let resp_bytes: &[u8] = unsafe { std::slice::from_raw_parts(resp_ptr as *const u8, resp_len) };
 
-    // Deserialize the response into a CelValue.
-    let result: CelValue =
-        serde_json::from_slice(resp_bytes).unwrap_or_else(|e| CelValue::Error(e.to_string()));
+    // Deserialize the tagged response and convert it into a `CelValue`. A
+    // failure from the host (unknown extension, wrong argument count, or an
+    // `Err(_)` from the implementation) becomes a `CelValue::Error`. This
+    // error behaves like any other CEL runtime error: `&&` and `||` can
+    // absorb it, and otherwise the evaluation stops.
+    let result: CelValue = match serde_json::from_slice::<ExtensionCallResponse>(resp_bytes) {
+        Ok(ExtensionCallResponse::Ok(value)) => serde_json::from_value(value)
+            .unwrap_or_else(|e| CelValue::Error(format!("invalid extension result: {}", e))),
+        Ok(ExtensionCallResponse::Error(msg)) => CelValue::Error(msg),
+        Err(e) => CelValue::Error(format!("invalid extension response: {}", e)),
+    };
 
     Box::into_raw(Box::new(result))
 }

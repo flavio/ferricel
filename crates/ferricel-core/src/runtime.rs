@@ -9,22 +9,165 @@
 
 use ferricel_types::{
     LogLevel,
-    extensions::{ExtensionCallPayload, ExtensionDecl},
+    extensions::{ExtensionCallPayload, ExtensionCallResponse, ExtensionDecl},
 };
 use wasmtime::{Caller, Engine as WasmEngine, InstancePre, Linker, Module, Store};
 
 use crate::compiler::ExtensionKey;
 
 /// Type alias for an extension function implementation.
+///
+/// The runtime makes sure that `args.len()` equals [`ExtensionDecl::num_args`]
+/// before it calls this function. A call with the wrong count is rejected
+/// first (see [`Extensions`]). An implementation does not have to check the
+/// argument count again.
 pub type ExtensionFn = std::sync::Arc<
     dyn Fn(Vec<serde_json::Value>) -> Result<serde_json::Value, String> + Send + Sync,
 >;
 
+/// A registered host extension: the declaration and the implementation.
+#[derive(Clone)]
+pub struct Extension {
+    /// The declaration. The compiler uses it to type-check call sites. The
+    /// runtime uses it to check the argument count.
+    pub decl: ExtensionDecl,
+    /// The host implementation.
+    pub implementation: ExtensionFn,
+}
+
+/// The set of host extension functions that a Wasm module can call during
+/// evaluation.
+///
+/// `ferricel-core` treats every Wasm module as untrusted input. The module
+/// can come from a source other than the ferricel compiler. As a result, the
+/// arguments in a `cel_call_extension` request can have any count.
+///
+/// `Extensions` stores each implementation with its [`ExtensionDecl`]. Before
+/// the runtime calls an implementation, it makes sure that
+/// `args.len() == decl.num_args`. A wrong count (for example, an empty list)
+/// becomes a CEL evaluation error. The runtime never calls the closure with
+/// the wrong count.
+///
+/// Build the set with [`Extensions::new`] and [`Extensions::register`] or
+/// [`Extensions::with`]. Then pass it to [`EnginePre::rehydrate`].
+/// [`Builder::with_extension`] builds the set for you.
+#[derive(Clone, Default)]
+pub struct Extensions {
+    inner: std::collections::HashMap<ExtensionKey, Extension>,
+}
+
+impl Extensions {
+    /// Create an empty extension set.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register an extension implementation and return `self`.
+    ///
+    /// If an extension with the same `(namespace, function)` exists, this
+    /// method replaces it.
+    pub fn with(
+        mut self,
+        decl: ExtensionDecl,
+        implementation: impl Fn(Vec<serde_json::Value>) -> Result<serde_json::Value, String>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Self {
+        self.register(decl, implementation);
+        self
+    }
+
+    /// Register an extension implementation in place.
+    ///
+    /// If an extension with the same `(namespace, function)` exists, this
+    /// method replaces it.
+    pub fn register(
+        &mut self,
+        decl: ExtensionDecl,
+        implementation: impl Fn(Vec<serde_json::Value>) -> Result<serde_json::Value, String>
+        + Send
+        + Sync
+        + 'static,
+    ) {
+        self.insert(decl, std::sync::Arc::new(implementation));
+    }
+
+    /// Register an existing [`ExtensionFn`] in place.
+    pub fn insert(&mut self, decl: ExtensionDecl, implementation: ExtensionFn) {
+        let key = ExtensionKey::new(decl.namespace.clone(), decl.function.clone());
+        self.inner.insert(
+            key,
+            Extension {
+                decl,
+                implementation,
+            },
+        );
+    }
+
+    /// Look up a registered extension by key.
+    pub fn get(&self, key: &ExtensionKey) -> Option<&Extension> {
+        self.inner.get(key)
+    }
+
+    /// Iterate over the declarations of all registered extensions.
+    ///
+    /// Pass these declarations to [`crate::compiler::Builder::with_extension`].
+    /// Then the compiler and the runtime use the same argument count for
+    /// each extension.
+    pub fn decls(&self) -> impl Iterator<Item = &ExtensionDecl> {
+        self.inner.values().map(|ext| &ext.decl)
+    }
+
+    /// The number of registered extensions.
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Whether no extensions are registered.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+}
+
+/// Dispatch an extension call from the guest to a registered extension.
+///
+/// This function makes sure that `payload.args.len() == decl.num_args`
+/// before it calls the implementation. If the count is wrong, or the
+/// extension is unknown, it returns `Err` and does not call host code. The
+/// host sends the `Err` to the guest as [`ExtensionCallResponse::Error`].
+/// The guest then reports it as a CEL runtime error.
+fn dispatch_extension(
+    extensions: &Extensions,
+    payload: &ExtensionCallPayload,
+) -> Result<serde_json::Value, String> {
+    let key = ExtensionKey::new(payload.namespace.clone(), payload.function.clone());
+    let full_name = match &payload.namespace {
+        Some(ns) => format!("{}.{}", ns, payload.function),
+        None => payload.function.clone(),
+    };
+
+    let Some(ext) = extensions.get(&key) else {
+        return Err(format!("Extension not found: {}", full_name));
+    };
+
+    if payload.args.len() != ext.decl.num_args {
+        return Err(format!(
+            "{} expects {} argument(s), got {}",
+            full_name,
+            ext.decl.num_args,
+            payload.args.len()
+        ));
+    }
+
+    (ext.implementation)(payload.args.clone())
+}
+
 /// Host state that holds data accessible to Wasm host functions.
 struct HostState {
     logger: slog::Logger,
-    /// Registered extension function implementations keyed by (namespace, function).
-    extensions: std::collections::HashMap<ExtensionKey, ExtensionFn>,
+    /// Registered extension function implementations, keyed by (namespace, function).
+    extensions: Extensions,
     /// Resource limits enforced on the instance's linear memories and tables.
     limits: wasmtime::StoreLimits,
 }
@@ -143,6 +286,55 @@ fn store_limits(resource_limits: Option<ResourceLimits>) -> wasmtime::StoreLimit
 /// # }
 /// ```
 ///
+/// The runtime makes sure that each call has `decl.num_args` arguments
+/// before it calls the closure. If a Wasm module sends the wrong count, the
+/// call becomes a CEL evaluation error. The closure never reads `args` out
+/// of bounds. See [`Extensions`] for details.
+///
+/// # Reuse extensions across evaluations with `EnginePre`
+///
+/// [`Builder::build_pre`] links the Wasm module without extension
+/// implementations or a logger. For each request, call
+/// [`EnginePre::rehydrate`] with an [`Extensions`] value to get an
+/// [`Engine`]. The module is not compiled again.
+///
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// use ferricel_core::runtime::{self, Extensions};
+/// use ferricel_core::compiler;
+/// use ferricel_types::extensions::ExtensionDecl;
+///
+/// let abs_decl = ExtensionDecl {
+///     namespace: None,
+///     function: "abs".to_string(),
+///     receiver_style: false,
+///     global_style: true,
+///     num_args: 1,
+/// };
+///
+/// let wasm = compiler::Builder::new()
+///     .with_extension(abs_decl.clone())
+///     .build()
+///     .compile("abs(x)")?;
+///
+/// let engine_pre = runtime::Builder::new().with_wasm(wasm).build_pre()?;
+///
+/// let mut extensions = Extensions::new();
+/// extensions.register(abs_decl, |args| {
+///     let n = args[0].as_i64().unwrap_or(0);
+///     Ok(serde_json::Value::Number(n.abs().into()))
+/// });
+///
+/// let logger = slog::Logger::root(slog::Discard, slog::o!());
+/// let result = engine_pre
+///     .rehydrate(extensions, logger, None)
+///     .eval(Some(r#"{"x": -42}"#))?;
+///
+/// assert_eq!(result, "42");
+/// # Ok(())
+/// # }
+/// ```
+///
 /// # Providing a custom wasmtime engine
 ///
 /// By default [`build`](Self::build) creates a [`wasmtime::Engine`] with
@@ -235,7 +427,7 @@ fn store_limits(resource_limits: Option<ResourceLimits>) -> wasmtime::StoreLimit
 pub struct Builder {
     logger: slog::Logger,
     log_level: LogLevel,
-    extensions: std::collections::HashMap<ExtensionKey, ExtensionFn>,
+    extensions: Extensions,
     wasm_bytes: Option<Vec<u8>>,
     wasm_module: Option<Module>,
     wasm_engine: Option<WasmEngine>,
@@ -253,7 +445,7 @@ impl Builder {
         Self {
             logger: slog::Logger::root(slog::Discard, slog::o!()),
             log_level: LogLevel::Error,
-            extensions: std::collections::HashMap::new(),
+            extensions: Extensions::new(),
             wasm_bytes: None,
             wasm_module: None,
             wasm_engine: None,
@@ -276,8 +468,12 @@ impl Builder {
 
     /// Register a host-provided extension function.
     ///
-    /// The `decl` is used to derive the `(namespace, function)` key for dispatch
-    /// at runtime. For compile-time arity/style validation, pass the same `decl` to
+    /// The runtime uses `decl` for two things. It builds the
+    /// `(namespace, function)` dispatch key from it. It also makes sure that
+    /// each `cel_call_extension` request has `decl.num_args` arguments before
+    /// it calls `implementation`. So `implementation` can trust
+    /// `args.len() == decl.num_args`. For compile-time checks of count and
+    /// call style, pass the same `decl` to
     /// [`crate::compiler::Builder::with_extension`].
     ///
     /// May be called multiple times to register several extensions.
@@ -292,9 +488,7 @@ impl Builder {
         + Sync
         + 'static,
     ) -> Self {
-        let key = ExtensionKey::new(decl.namespace.clone(), decl.function.clone());
-        self.extensions
-            .insert(key, std::sync::Arc::new(implementation));
+        self.extensions.register(decl, implementation);
         self
     }
 
@@ -533,34 +727,18 @@ impl Builder {
                         ))
                     })?;
 
-                let key = ExtensionKey::new(payload.namespace.clone(), payload.function.clone());
-                let result_value = {
-                    let ext_fn = caller.data().extensions.get(&key);
-                    match ext_fn {
-                        Some(f) => f(payload.args.clone()),
-                        None => {
-                            let full_name = match &payload.namespace {
-                                Some(ns) => format!("{}.{}", ns, payload.function),
-                                None => payload.function.clone(),
-                            };
-                            Err(format!("Extension not found: {}", full_name))
-                        }
-                    }
+                let response = match dispatch_extension(&caller.data().extensions, &payload) {
+                    Ok(v) => ExtensionCallResponse::Ok(v),
+                    Err(msg) => ExtensionCallResponse::Error(msg),
                 };
 
-                let resp_json = match result_value {
-                    Ok(v) => serde_json::to_vec(&v).unwrap_or_else(|e| {
-                        format!(
-                            r#"{{"error":"Failed to serialize extension result: {}"}}"#,
-                            e
-                        )
-                        .into_bytes()
-                    }),
-                    Err(msg) => {
-                        let escaped = msg.replace('"', "\\\"");
-                        format!(r#"{{"error":"{}"}}"#, escaped).into_bytes()
-                    }
-                };
+                let resp_json = serde_json::to_vec(&response).unwrap_or_else(|e| {
+                    serde_json::to_vec(&ExtensionCallResponse::Error(format!(
+                        "Failed to serialize extension result: {}",
+                        e
+                    )))
+                    .expect("serializing ExtensionCallResponse::Error never fails")
+                });
 
                 let resp_len = resp_json.len() as i32;
                 let cel_malloc = caller
@@ -622,7 +800,7 @@ impl EnginePre {
     /// This is infallible: all fallible work (compilation, linking,
     /// pre-instantiation) was done in [`Builder::build_pre`].
     ///
-    /// Pass an empty `HashMap` if the policy uses no extension functions.
+    /// Pass [`Extensions::new`] if the policy uses no extension functions.
     ///
     /// `epoch_deadline` sets the number of ticks (beyond the current epoch)
     /// after which the [`wasmtime::Store`] created for each evaluation will
@@ -642,7 +820,7 @@ impl EnginePre {
     /// no-op (there is nothing to interrupt).
     pub fn rehydrate(
         &self,
-        extensions: std::collections::HashMap<ExtensionKey, ExtensionFn>,
+        extensions: Extensions,
         logger: slog::Logger,
         epoch_deadline: Option<u64>,
     ) -> Engine {
@@ -689,7 +867,7 @@ pub struct Engine {
     wasm_engine: WasmEngine,
     instance_pre: InstancePre<HostState>,
     /// Implementation map used during evaluation.
-    extensions_impl: std::collections::HashMap<ExtensionKey, ExtensionFn>,
+    extensions_impl: Extensions,
     /// Logger used for evaluation.
     logger: slog::Logger,
     /// Log level used during evaluation.
@@ -773,5 +951,102 @@ impl Engine {
     /// produced a runtime error.
     pub fn eval_proto(&self, bindings_proto: &[u8]) -> Result<String, anyhow::Error> {
         self.eval_raw(bindings_proto, "evaluate_proto")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use super::*;
+
+    fn test_decl(num_args: usize) -> ExtensionDecl {
+        ExtensionDecl {
+            namespace: None,
+            function: "myFunc".to_string(),
+            receiver_style: false,
+            global_style: true,
+            num_args,
+        }
+    }
+
+    fn payload(args: Vec<serde_json::Value>) -> ExtensionCallPayload {
+        ExtensionCallPayload {
+            namespace: None,
+            function: "myFunc".to_string(),
+            args,
+        }
+    }
+
+    #[test]
+    fn dispatch_extension_rejects_too_few_args_without_calling_closure() {
+        let called = std::sync::Arc::new(AtomicBool::new(false));
+        let called_clone = called.clone();
+        let mut extensions = Extensions::new();
+        extensions.register(test_decl(1), move |_args| {
+            called_clone.store(true, Ordering::SeqCst);
+            Ok(serde_json::Value::Null)
+        });
+
+        let result = dispatch_extension(&extensions, &payload(vec![]));
+
+        assert!(!called.load(Ordering::SeqCst));
+        let err = result.unwrap_err();
+        assert!(err.contains("expects 1 argument(s), got 0"), "got: {err}");
+    }
+
+    #[test]
+    fn dispatch_extension_rejects_too_many_args_without_calling_closure() {
+        let called = std::sync::Arc::new(AtomicBool::new(false));
+        let called_clone = called.clone();
+        let mut extensions = Extensions::new();
+        extensions.register(test_decl(1), move |_args| {
+            called_clone.store(true, Ordering::SeqCst);
+            Ok(serde_json::Value::Null)
+        });
+
+        let result = dispatch_extension(
+            &extensions,
+            &payload(vec![serde_json::json!(1), serde_json::json!(2)]),
+        );
+
+        assert!(!called.load(Ordering::SeqCst));
+        let err = result.unwrap_err();
+        assert!(err.contains("expects 1 argument(s), got 2"), "got: {err}");
+    }
+
+    #[test]
+    fn dispatch_extension_calls_closure_when_arity_matches() {
+        let mut extensions = Extensions::new();
+        extensions.register(test_decl(2), |args| {
+            Ok(serde_json::Value::Number(args.len().into()))
+        });
+
+        let result = dispatch_extension(
+            &extensions,
+            &payload(vec![serde_json::json!(1), serde_json::json!(2)]),
+        );
+
+        assert_eq!(result.unwrap(), serde_json::json!(2));
+    }
+
+    #[test]
+    fn dispatch_extension_forwards_closure_error() {
+        let mut extensions = Extensions::new();
+        extensions.register(test_decl(0), |_args| Err("boom".to_string()));
+
+        let result = dispatch_extension(&extensions, &payload(vec![]));
+
+        assert_eq!(result.unwrap_err(), "boom");
+    }
+
+    #[test]
+    fn dispatch_extension_unknown_key_is_an_error() {
+        let extensions = Extensions::new();
+
+        let result = dispatch_extension(&extensions, &payload(vec![]));
+
+        let err = result.unwrap_err();
+        assert!(err.contains("Extension not found: myFunc"), "got: {err}");
     }
 }

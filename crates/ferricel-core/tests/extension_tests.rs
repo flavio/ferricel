@@ -1,6 +1,8 @@
 // Integration tests for extension function registration and invocation.
 
-use ferricel_core::{compiler, runtime};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use ferricel_core::{compiler, runtime, runtime::Extensions};
 use ferricel_types::extensions::ExtensionDecl;
 
 use crate::common::*;
@@ -465,4 +467,293 @@ fn test_extension_index_into_returned_array() {
         .expect("eval failed");
     let value: serde_json::Value = serde_json::from_str(&result).unwrap();
     assert_eq!(value.as_str().unwrap(), "first");
+}
+
+// ============================================================
+// Argument count checks at runtime dispatch
+// ============================================================
+
+#[test]
+fn test_extension_runtime_arity_mismatch_is_evaluation_error() {
+    // Compile with a declaration that expects 2 arguments, so the Wasm
+    // module sends 2 arguments. Register the runtime implementation with a
+    // declaration that expects 1 argument. This models a Wasm module that
+    // sends the wrong count. The runtime must reject the call and must not
+    // call the closure.
+    let compile_decl = ExtensionDecl {
+        namespace: None,
+        function: "myFunc".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 2,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(compile_decl)
+        .build()
+        .compile("myFunc(1, 2)")
+        .expect("compile failed");
+
+    let runtime_decl = ExtensionDecl {
+        namespace: None,
+        function: "myFunc".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 1,
+    };
+    let called = std::sync::Arc::new(AtomicBool::new(false));
+    let called_clone = called.clone();
+    let result = runtime::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(runtime_decl, move |args| {
+            called_clone.store(true, Ordering::SeqCst);
+            Ok(serde_json::Value::Number(args.len().into()))
+        })
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None);
+
+    assert!(
+        !called.load(Ordering::SeqCst),
+        "closure must not be invoked"
+    );
+    assert!(
+        result.is_err(),
+        "arity mismatch should be an evaluation error"
+    );
+    let msg = format!("{:#}", result.unwrap_err());
+    assert!(
+        msg.contains("expects 1 argument(s), got 2"),
+        "expected an arity mismatch message, got: {msg}"
+    );
+}
+
+#[test]
+fn test_extension_err_becomes_cel_evaluation_error() {
+    // If the closure returns `Err(_)`, `Engine::eval` must return `Err`. It
+    // must not return an `{"error": ...}` value.
+    let decl = ExtensionDecl {
+        namespace: None,
+        function: "failing".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 0,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl.clone())
+        .build()
+        .compile("failing()")
+        .expect("compile failed");
+    let result = runtime::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl, |_args| Err("boom".to_string()))
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None);
+    assert!(result.is_err());
+    let msg = format!("{:#}", result.unwrap_err());
+    assert!(msg.contains("boom"), "expected 'boom', got: {msg}");
+}
+
+#[test]
+fn test_extension_error_is_absorbed_by_logical_or() {
+    // `failing() || true` must evaluate to `true`. The `||` operator absorbs
+    // the error like any other CEL runtime error.
+    let decl = ExtensionDecl {
+        namespace: None,
+        function: "failing".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 0,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl.clone())
+        .build()
+        .compile("failing() || true")
+        .expect("compile failed");
+    let result = runtime::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl, |_args| Err("boom".to_string()))
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None)
+        .expect("error should be absorbed by ||");
+    let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(value.as_bool(), Some(true));
+}
+
+#[test]
+fn test_extension_ok_value_with_error_key_is_a_map() {
+    // An extension can return a JSON object with an "error" key. This result
+    // is a normal map value, not a CEL error.
+    let decl = ExtensionDecl {
+        namespace: None,
+        function: "getResult".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 0,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl.clone())
+        .build()
+        .compile("getResult()")
+        .expect("compile failed");
+    let result = runtime::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl, |_args| Ok(serde_json::json!({"error": "not found"})))
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None)
+        .expect("eval failed");
+    let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(value["error"].as_str(), Some("not found"));
+}
+
+#[test]
+fn test_extension_error_argument_short_circuits_before_host_call() {
+    // In `ext(1 / 0)`, the argument is a `CelValue::Error` before the call.
+    // The guest must return that error and must not call the host.
+    let decl = ExtensionDecl {
+        namespace: None,
+        function: "ext".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 1,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl.clone())
+        .build()
+        .compile("ext(1 / 0)")
+        .expect("compile failed");
+    let called = std::sync::Arc::new(AtomicBool::new(false));
+    let called_clone = called.clone();
+    let result = runtime::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl, move |_args| {
+            called_clone.store(true, Ordering::SeqCst);
+            Ok(serde_json::Value::Null)
+        })
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None);
+    assert!(
+        !called.load(Ordering::SeqCst),
+        "closure must not be invoked"
+    );
+    assert!(result.is_err());
+    let msg = format!("{:#}", result.unwrap_err());
+    assert!(
+        msg.contains("divide by zero"),
+        "expected 'divide by zero', got: {msg}"
+    );
+}
+
+#[test]
+fn test_extension_error_message_with_quotes_and_newlines_survives_roundtrip() {
+    // The error envelope is valid JSON. A message with quotes, backslashes,
+    // and newlines must stay the same from the host to the guest and back.
+    let decl = ExtensionDecl {
+        namespace: None,
+        function: "failing".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 0,
+    };
+    let tricky_message = "a \"quoted\" \\ value\nwith a newline";
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl.clone())
+        .build()
+        .compile("failing()")
+        .expect("compile failed");
+    let result = runtime::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl, move |_args| Err(tricky_message.to_string()))
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(None);
+    assert!(result.is_err());
+    let msg = format!("{:#}", result.unwrap_err());
+    assert!(
+        msg.contains(tricky_message),
+        "expected message to survive intact, got: {msg}"
+    );
+}
+
+#[test]
+fn test_extension_unknown_extension_is_evaluation_error_not_a_map() {
+    // An unknown extension must make `Engine::eval` return `Err`. It must
+    // not return an `{"error": ...}` map value.
+    let decl = ExtensionDecl {
+        namespace: None,
+        function: "abs".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 1,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl)
+        .build()
+        .compile("abs(x)")
+        .expect("compile failed");
+    // No runtime implementation registered at all.
+    let result = runtime::Builder::new()
+        .with_logger(create_test_logger())
+        .with_wasm(wasm)
+        .build()
+        .expect("build failed")
+        .eval(Some(r#"{"x": -5}"#));
+    assert!(result.is_err());
+    let msg = format!("{:#}", result.unwrap_err());
+    assert!(
+        msg.contains("Extension not found"),
+        "expected 'Extension not found', got: {msg}"
+    );
+}
+
+#[test]
+fn test_extensions_and_build_pre_rehydrate() {
+    // Test the `Extensions` and `EnginePre::rehydrate` path end to end.
+    let decl = ExtensionDecl {
+        namespace: None,
+        function: "abs".to_string(),
+        receiver_style: false,
+        global_style: true,
+        num_args: 1,
+    };
+    let wasm = compiler::Builder::new()
+        .with_logger(create_test_logger())
+        .with_extension(decl.clone())
+        .build()
+        .compile("abs(x)")
+        .expect("compile failed");
+
+    let engine_pre = runtime::Builder::new()
+        .with_wasm(wasm)
+        .build_pre()
+        .expect("build_pre failed");
+
+    let mut extensions = Extensions::new();
+    extensions.register(decl, |args| {
+        let n = args[0].as_i64().unwrap_or(0);
+        Ok(serde_json::Value::Number(n.abs().into()))
+    });
+
+    let result = engine_pre
+        .rehydrate(extensions, create_test_logger(), None)
+        .eval(Some(r#"{"x": -42}"#))
+        .expect("eval failed");
+    let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(value.as_i64().unwrap(), 42);
 }

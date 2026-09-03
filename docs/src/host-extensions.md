@@ -125,6 +125,32 @@ The extension declaration specifies the function signature at compile time (for
 validation), and the implementation is provided at runtime. The host is
 responsible for marshalling JSON values to and from the extension function.
 
+### Runtime guarantees
+
+The compiler checks `num_args` at each call site. The runtime checks it
+again each time the Wasm module calls `cel_call_extension`. The second check
+is necessary because a `.wasm` file can come from a source other than the
+ferricel compiler. As a result, the host cannot trust the argument count in
+an extension call request.
+
+`runtime::Builder::with_extension` and the
+[`Extensions`](#reuse-extensions-with-enginepre) type store the
+`ExtensionDecl` with the implementation. If the argument count of a call does
+not match `decl.num_args`, the runtime rejects the call with an error. It
+does not call the closure. So an implementation can trust
+`args.len() == decl.num_args` and read `args[0]`, `args[1]`, and so on.
+
+A failure at the extension boundary becomes a CEL runtime error. This
+includes three cases: an unknown extension, a wrong argument count, and an
+`Err(_)` value from the implementation. The `&&` and `||` operators can
+absorb this error. For example, `x.myFunc() || true` evaluates to `true`
+when `myFunc` fails. If no operator absorbs the error, the evaluation fails,
+like a division by zero.
+
+The runtime cannot check the call style (`receiver_style` and
+`global_style`). The wire format does not contain this information. Only the
+compiler checks the call style, at the CEL call sites.
+
 ### Dotted namespaces
 
 Namespaces can contain dots, e.g. `kw.net.lookupHost`. The compiler resolves
@@ -143,6 +169,53 @@ let decl = ExtensionDecl {
 
 > **Note:** extensions declared at compile time but not implemented by the host
 > produce a runtime error when the expression is evaluated.
+
+### Reuse extensions with `EnginePre`
+
+`runtime::Builder::build_pre` links a Wasm module without extension
+implementations. For each request, call `EnginePre::rehydrate` with an
+`Extensions` value to get an `Engine`. The module is not compiled again.
+This is useful when you evaluate the same policy many times with a
+different context for each request (for example, a request-scoped logger):
+
+```rust
+use ferricel_core::runtime::{self, Extensions};
+use ferricel_core::compiler;
+use ferricel_types::extensions::ExtensionDecl;
+
+let abs_decl = ExtensionDecl {
+    namespace: None,
+    function: "abs".to_string(),
+    receiver_style: false,
+    global_style: true,
+    num_args: 1,
+};
+
+let wasm = compiler::Builder::new()
+    .with_extension(abs_decl.clone())
+    .build()
+    .compile("abs(x)")?;
+
+let engine_pre = runtime::Builder::new().with_wasm(wasm).build_pre()?;
+
+let mut extensions = Extensions::new();
+extensions.register(abs_decl, |args| {
+    let n = args[0].as_i64().unwrap_or(0);
+    Ok(serde_json::Value::Number(n.abs().into()))
+});
+
+let logger = slog::Logger::root(slog::Discard, slog::o!());
+let result = engine_pre
+    .rehydrate(extensions, logger, None)
+    .eval(Some(r#"{"x": -42}"#))?;
+
+assert_eq!(result, "42");
+```
+
+`Extensions::decls()` returns an iterator over all registered
+`ExtensionDecl` values. Pass these declarations to
+`compiler::Builder::with_extension`. Then the compiler and the runtime use
+the same argument count for each extension.
 
 ## Builder Chains
 

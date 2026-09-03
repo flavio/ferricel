@@ -27,6 +27,13 @@ pub struct ExtensionDecl {
     pub global_style: bool,
     /// Total number of arguments the host receives in the `args` array.
     /// For receiver-style calls, the receiver counts as one argument.
+    ///
+    /// The compiler checks this count at each CEL call site. The runtime
+    /// checks it again for each `ExtensionCallPayload` (see
+    /// `ferricel_core::runtime::Extensions`). The runtime check is necessary
+    /// because a Wasm module can come from a source other than the ferricel
+    /// compiler. As a result, a host implementation can trust
+    /// `args.len() == num_args`.
     pub num_args: usize,
 }
 
@@ -207,6 +214,27 @@ pub struct ExtensionCallPayload {
     /// Serialized arguments (same JSON representation as `cel_serialize_value` produces).
     /// For receiver-style calls, the receiver is always `args[0]`.
     pub args: Vec<serde_json::Value>,
+}
+
+/// Wire format response that the host sends to the Wasm guest after a
+/// `cel_call_extension` call.
+///
+/// The response is a tagged envelope, not a bare `serde_json::Value`. With
+/// the tag, the guest can tell a failure apart from a valid result that
+/// contains an `"error"` key, for example `Ok(json!({"error": "not found"}))`.
+///
+/// The guest reports `Error` as a CEL runtime error (a `CelValue::Error`).
+/// The operators `&&` and `||` can absorb this error like any other CEL
+/// runtime error. If no operator absorbs it, the evaluation stops. `Error`
+/// covers three cases: an unknown extension, a wrong argument count, and an
+/// `Err(_)` value from the extension implementation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtensionCallResponse {
+    /// The call succeeded. The payload is the CEL value as JSON.
+    Ok(serde_json::Value),
+    /// The call failed. The payload is an error message for humans.
+    Error(String),
 }
 
 /// One entry in the `ferricel.extensions` custom section.
