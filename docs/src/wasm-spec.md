@@ -187,14 +187,38 @@ The request JSON has the structure:
 
 Where `namespace` is optional (may be `null`), `function` is the function name, and `args` is an array of JSON-encoded CEL values.
 
-**Returns** a packed `i64` pointing to a UTF-8 JSON string containing the result. The response is a serialized `CelValue`:
+**Returns** a packed `i64` that points to a UTF-8 JSON string. The string is
+a JSON object with one key. The key is `"ok"` or `"error"` and names the
+outcome. On success:
 
 ```json
-{
-  "type": "int",
-  "value": 20
-}
+{ "ok": 20 }
 ```
+
+On failure:
+
+```json
+{ "error": "math.greatest expects 3 argument(s), got 2" }
+```
+
+A failure has one of three causes: the extension is unknown, the argument
+count does not match the registered count, or the implementation returned an
+error.
+
+The `"ok"` payload is a serialized `CelValue`. For example, `20` is an int,
+and a JSON object or array is a map or list. The `"error"` payload is always a
+string. The tag lets the guest tell a failure apart from a valid result that
+contains an `"error"` key. For example, `{"ok": {"error": "not found"}}` is a
+map value, not a failure.
+
+Before the host calls an extension, it must make sure that `args.len()`
+matches the registered argument count. If the count is wrong, the host must
+return `{"error": ...}`. It must not read `args` out of bounds.
+`ferricel_core::runtime::Extensions` does this check for all extensions, so
+an implementation does not have to. When the guest receives
+`{"error": ...}`, it creates a CEL runtime error. The `&&` and `||` operators
+can absorb this error like any other runtime error. If no operator absorbs
+it, the evaluation fails.
 
 The Wasm module calls this import whenever a compiled CEL expression invokes a
 function that was registered as a host extension at compile time. The host is

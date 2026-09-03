@@ -552,7 +552,9 @@ fn test_build_extensions_and_extensions_file_are_mutually_exclusive() {
 #[test]
 fn test_run_with_extension_produces_runtime_error_when_not_implemented() {
     // Build a Wasm that calls an extension, then run it without an implementation.
-    // The runtime returns a CEL-level error encoded in the result JSON.
+    // A call to an extension that the host did not register is a CEL runtime
+    // error. The process exits with a non-zero code and writes the error to
+    // stderr.
     let wasm_file = NamedTempFile::new().unwrap();
     ferricel()
         .args(["build", "-e", "abs(x)", "-o"])
@@ -566,8 +568,8 @@ fn test_run_with_extension_produces_runtime_error_when_not_implemented() {
         .arg(wasm_file.path())
         .args(["--bindings-json", r#"{"x": -5}"#])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Extension not found"));
+        .failure()
+        .stderr(predicate::str::contains("Extension not found"));
 }
 
 #[test]
