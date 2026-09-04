@@ -32,6 +32,10 @@ pub enum RuntimeFunction {
     IsStrictlyFalse,
     IsStrictlyTrue,
     IsError,
+    /// Abort via `cel_abort` if the value is `CelValue::Error`; no-op otherwise.
+    /// Turns an error *value* into a hard failure reported to the host.
+    /// Arguments: (value: *mut CelValue)
+    AbortIfError,
 
     // Serialization
     /// Serializes a `CelValue` to JSON, returning packed ptr+len as i64.
@@ -319,7 +323,9 @@ pub enum RuntimeFunction {
     /// Serialize `{"accepted":true}` and return as packed ptr+len i64.
     VapSerializeAccept,
     /// Serialize `{"accepted":false,"message":"...","code":N}` and return as packed ptr+len i64.
-    /// Arguments: (message: *mut CelValue, code: i32)
+    /// Arguments: (message: *mut CelValue, fallback: *mut CelValue, code: i32)
+    /// `message` is the `messageExpression` result (or null); it is used only if
+    /// it is a string, otherwise `fallback` (the static message) is used.
     VapSerializeReject,
 
     // Fluent builder chain support
@@ -375,6 +381,7 @@ impl RuntimeFunction {
             Self::IsStrictlyFalse => "cel_is_strictly_false",
             Self::IsStrictlyTrue => "cel_is_strictly_true",
             Self::IsError => "cel_is_error",
+            Self::AbortIfError => "cel_abort_if_error",
 
             Self::SerializeResult => "cel_serialize_result",
 

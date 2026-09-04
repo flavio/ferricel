@@ -294,6 +294,11 @@ impl Compiler {
     /// {"accepted": false, "message": "...", "code": 422}
     /// ```
     ///
+    /// If a `matchConditions` or `validations` expression produces a CEL
+    /// runtime error, the module traps (via `cel_abort`) instead of returning
+    /// a response: [`Engine::eval`](crate::runtime::Engine::eval) returns
+    /// `Err`. The host is expected to apply the policy's `failurePolicy`.
+    ///
     /// The YAML must contain exactly one `ValidatingAdmissionPolicy` document.
     /// The caller must pass, at minimum, `object` in the bindings. When the
     /// policy references `namespaceObject` or `params`, the host must also

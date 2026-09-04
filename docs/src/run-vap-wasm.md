@@ -17,6 +17,32 @@ let result: serde_json::Value = serde_json::from_str(&result_str)?;
 // result["accepted"] == true / false
 ```
 
+## Runtime Errors and `failurePolicy`
+
+`eval()` returns `Err` when a `matchConditions` or `validations` expression
+fails at runtime (for example, division by zero, an unbound variable, or a
+`kw.k8s` extension that returns an error). The error message starts with
+`CEL runtime error:`. The module never turns such a failure into an accept or
+a reject response.
+
+The host is responsible for applying the policy's `failurePolicy`:
+
+```rust
+match engine.eval(Some(&bindings_json)) {
+    Ok(result_str) => {
+        let result: serde_json::Value = serde_json::from_str(&result_str)?;
+        // result["accepted"] == true / false
+    }
+    Err(err) => {
+        // Evaluation failed. Apply the policy's failurePolicy:
+        //   Fail   -> deny the request, report `err`
+        //   Ignore -> allow the request
+    }
+}
+```
+
+See [Runtime Errors](vap.md#runtime-errors) for the exact rules.
+
 ## Required Bindings
 
 | Binding           | Required when…                                 |
