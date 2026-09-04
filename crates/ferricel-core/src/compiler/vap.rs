@@ -13,6 +13,18 @@
 //! 3. **validations** — evaluated in order; first `false` result returns a
 //!    rejection response with the appropriate message and HTTP status code.
 //!
+//! ## Runtime errors
+//!
+//! If a `matchCondition` or `validation` expression evaluates to a CEL runtime
+//! error, the module traps via `cel_abort` (like a plain CEL module does), so
+//! the host receives an error from `evaluate` and can apply the policy's
+//! `failurePolicy`. An error is never treated as a pass or as a rejection.
+//!
+//! A `variables` entry that evaluates to an error is stored as-is; the error
+//! propagates only into the expressions that reference it (matching the lazy
+//! semantics of Kubernetes). A `messageExpression` that errors or does not
+//! produce a string falls back to the static `message`.
+//!
 //! ## K8s resource fetching (params)
 //!
 //! The host must register a `kw.k8s` builder-chain implementation on the
@@ -28,7 +40,7 @@ use ferricel_types::{
 use k8s_openapi::api::admissionregistration::v1::{
     MatchCondition, ParamKind, ValidatingAdmissionPolicySpec, Validation, Variable,
 };
-use walrus::{FunctionBuilder, FunctionId, LocalId, ValType};
+use walrus::{FunctionBuilder, FunctionId, ValType};
 
 use crate::compiler::{
     context::{CompilerContext, CompilerEnv},
@@ -328,10 +340,13 @@ fn build_orchestrator(
         .call(env.get(RuntimeFunction::DeserializeJson))
         .call(env.get(RuntimeFunction::InitBindings));
 
-    // 2. matchConditions — false → policy skipped → accept
+    // 2. matchConditions — false → policy skipped → accept.
+    //    A CEL runtime error traps so the host can apply `failurePolicy`.
     for &fn_id in &args.match_conditions_fns {
         body.call(fn_id)
             .local_set(val_local)
+            .local_get(val_local)
+            .call(env.get(RuntimeFunction::AbortIfError))
             .local_get(val_local)
             .call(env.get(RuntimeFunction::IsStrictlyFalse));
         body.if_else(
@@ -386,31 +401,37 @@ fn build_orchestrator(
         let http_code = reason_to_http_code(val_spec.reason.as_deref());
         let msg_expr_fn = compiled.msg_expr_fn;
 
-        // Evaluate the validation expression
-        body.call(compiled.id).local_set(val_local);
+        // Evaluate the validation expression. A CEL runtime error must surface
+        // to the host (trap), not be mistaken for a non-`false` (passing) result.
+        body.call(compiled.id)
+            .local_set(val_local)
+            .local_get(val_local)
+            .call(env.get(RuntimeFunction::AbortIfError));
 
-        // Pre-compute static message (needs &mut module, so must be outside closure)
-        let static_msg_local: Option<LocalId> = if msg_expr_fn.is_none() {
-            let text = val_spec
-                .message
-                .clone()
-                .unwrap_or_else(|| format!("failed expression: {}", val_spec.expression));
-            Some(compile_string_to_local(&text, &mut body, env, module)?)
-        } else {
-            None
-        };
+        // Pre-compute the static message (needs &mut module, so must be outside
+        // the closure). This is always emitted: it is the message when no
+        // `messageExpression` is set, and the fallback when the
+        // `messageExpression` errors or does not produce a string.
+        let text = val_spec
+            .message
+            .clone()
+            .unwrap_or_else(|| format!("failed expression: {}", val_spec.expression));
+        let static_msg_local = compile_string_to_local(&text, &mut body, env, module)?;
 
         body.local_get(val_local)
             .call(env.get(RuntimeFunction::IsStrictlyFalse));
         body.if_else(
             None,
             move |then| {
+                // message_ptr: messageExpression result, or null if none
                 if let Some(fn_id) = msg_expr_fn {
                     then.call(fn_id);
-                } else if let Some(loc) = static_msg_local {
-                    then.local_get(loc);
+                } else {
+                    then.i32_const(0);
                 }
-                then.i32_const(http_code)
+                // fallback_ptr: static message
+                then.local_get(static_msg_local)
+                    .i32_const(http_code)
                     .call(env.get(RuntimeFunction::VapSerializeReject))
                     .return_();
             },

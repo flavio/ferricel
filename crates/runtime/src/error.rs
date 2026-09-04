@@ -89,6 +89,35 @@ pub fn abort_with_error(message: &str) -> ! {
     panic!("{}", message);
 }
 
+/// Abort Wasm execution if `ptr` points to a `CelValue::Error`; no-op otherwise.
+///
+/// This is the point where a CEL error value stops being a value that flows
+/// through the expression tree (and may still be absorbed by `||`, `&&`, `?:`)
+/// and becomes a hard failure reported to the host via `cel_abort`.
+///
+/// Callers:
+/// - `cel_serialize_result`, before serializing the final result of a plain
+///   CEL module.
+/// - The VAP orchestrator, after evaluating each `matchCondition` and
+///   `validation`, so a runtime error is never mistaken for a non-`false`
+///   (passing) result.
+///
+/// The pointer is not consumed. A null pointer is a no-op.
+///
+/// # Safety
+///
+/// `ptr` must be null or a valid `CelValue` pointer.
+#[allow(unsafe_op_in_unsafe_fn)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cel_abort_if_error(ptr: *mut crate::types::CelValue) {
+    if ptr.is_null() {
+        return;
+    }
+    if let crate::types::CelValue::Error(msg) = unsafe { &*ptr } {
+        abort_with_error(msg);
+    }
+}
+
 /// Convenience macro for aborting with an error message.
 ///
 /// # Examples
@@ -137,4 +166,27 @@ pub unsafe fn read_ptr(ptr: *mut crate::types::CelValue) -> crate::types::CelVal
         abort_with_error("null CelValue pointer: this is a compiler or runtime bug");
     }
     unsafe { std::ptr::read(ptr) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{test_helpers::make_val, types::CelValue};
+
+    #[test]
+    fn abort_if_error_is_noop_for_non_error_values() {
+        unsafe {
+            cel_abort_if_error(std::ptr::null_mut());
+            cel_abort_if_error(make_val(CelValue::Bool(true)));
+            cel_abort_if_error(make_val(CelValue::Bool(false)));
+            cel_abort_if_error(make_val(CelValue::Null));
+            cel_abort_if_error(make_val(CelValue::String("x".into())));
+        }
+    }
+
+    // The abort path (`CelValue::Error` → `cel_abort`) cannot be unit-tested
+    // here: `abort_with_error` panics on native targets and a panic cannot
+    // unwind through an `extern "C"` boundary. It is covered end-to-end by the
+    // ferricel-core integration tests (plain CEL `1 / 0` and the VAP
+    // runtime-error tests).
 }

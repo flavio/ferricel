@@ -1,7 +1,8 @@
 //! Integration tests for VAP (ValidatingAdmissionPolicy) compilation.
 //!
-//! Each test compiles a VapSpec (or YAML) and executes it with JSON bindings,
-//! then asserts the resulting `ValidationResponse`-style JSON.
+//! Each test compiles a VAP `spec:` YAML fragment and executes it with JSON
+//! bindings, then asserts the resulting `ValidationResponse`-style JSON (or
+//! runtime error) via [`Expected`] / [`assert_outcome`].
 
 use ferricel_core::{
     compiler::{Builder, vap},
@@ -17,57 +18,137 @@ fn test_logger() -> Logger {
     Logger::root(drain, o!())
 }
 
-/// Compile a VAP YAML string to Wasm, then evaluate it with the given JSON
+// ─── YAML / eval helpers ────────────────────────────────────────────────────
+
+/// Wrap a `spec:` YAML fragment (e.g. `"spec:\n  validations:\n    - ...\n"`)
+/// in the common `ValidatingAdmissionPolicy` document header. The policy name
+/// is irrelevant to any test here.
+fn vap_yaml(spec_body: &str) -> String {
+    format!(
+        r#"apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: test-policy
+{spec_body}"#
+    )
+}
+
+/// A host implementation for a single extension (e.g. `kw.k8s.get`).
+type HostFn =
+    Box<dyn Fn(Vec<serde_json::Value>) -> Result<serde_json::Value, String> + Send + Sync>;
+
+/// Compile a VAP `spec:` YAML fragment and evaluate it with the given JSON
 /// bindings, returning the parsed `serde_json::Value`.
-fn compile_vap_and_eval(
-    vap_yaml: &str,
+///
+/// `extension`, if set, registers a single host extension implementation
+/// (e.g. for `kw.k8s...`) on the `Engine`.
+fn eval_vap(
+    spec_body: &str,
     bindings_json: &str,
+    extension: Option<(ExtensionDecl, HostFn)>,
 ) -> Result<serde_json::Value, anyhow::Error> {
     let logger = test_logger();
     let wasm_bytes = Builder::new()
         .with_logger(logger.clone())
         .build()
-        .compile_vap(vap_yaml)?;
+        .compile_vap(&vap_yaml(spec_body))?;
 
-    let result_str = runtime::Builder::new()
+    let mut runtime_builder = runtime::Builder::new()
         .with_logger(logger)
         .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .build()?
-        .eval(Some(bindings_json))?;
+        .with_wasm(wasm_bytes);
+    if let Some((decl, implementation)) = extension {
+        runtime_builder = runtime_builder.with_extension(decl, implementation);
+    }
+    let result_str = runtime_builder.build()?.eval(Some(bindings_json))?;
 
     Ok(serde_json::from_str(&result_str)?)
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Expected outcome + single assertion ───────────────────────────────────
 
-fn assert_accepted(result: &serde_json::Value) {
-    assert_eq!(
-        result.get("accepted"),
-        Some(&serde_json::Value::Bool(true)),
-        "expected accepted=true, got: {result}"
-    );
+/// The three possible outcomes of evaluating a compiled VAP module.
+#[derive(Debug, Clone)]
+enum Expected {
+    /// `{"accepted": true}`, with no `message` field.
+    Accepted,
+    /// `{"accepted": false, ...}`, optionally asserting `message` and/or `code`.
+    Rejected {
+        message: Option<&'static str>,
+        code: Option<i32>,
+    },
+    /// The module traps: `eval()` returns `Err` whose message contains
+    /// `"CEL runtime error"` and the given needle.
+    Error(&'static str),
 }
 
-fn assert_rejected(result: &serde_json::Value, message: Option<&str>, code: Option<i32>) {
-    assert_eq!(
-        result.get("accepted"),
-        Some(&serde_json::Value::Bool(false)),
-        "expected accepted=false, got: {result}"
-    );
-    if let Some(expected_msg) = message {
-        let actual_msg = result.get("message").and_then(|v| v.as_str()).unwrap_or("");
-        assert_eq!(
-            actual_msg, expected_msg,
-            "unexpected rejection message, got: {result}"
-        );
+impl Expected {
+    /// A rejection asserting both `message` and `code`.
+    fn rejected(message: &'static str, code: i32) -> Self {
+        Expected::Rejected {
+            message: Some(message),
+            code: Some(code),
+        }
     }
-    if let Some(expected_code) = code {
-        let actual_code = result.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
-        assert_eq!(
-            actual_code, expected_code as i64,
-            "unexpected rejection code, got: {result}"
-        );
+
+    /// A rejection asserting neither `message` nor `code`.
+    fn rejected_any() -> Self {
+        Expected::Rejected {
+            message: None,
+            code: None,
+        }
+    }
+}
+
+/// Assert that `result` matches `expected`.
+fn assert_outcome(result: Result<serde_json::Value, anyhow::Error>, expected: &Expected) {
+    match expected {
+        Expected::Accepted => {
+            let result = result.expect("expected an accepted response, got an error");
+            assert_eq!(
+                result.get("accepted"),
+                Some(&serde_json::Value::Bool(true)),
+                "expected accepted=true, got: {result}"
+            );
+            assert!(
+                result.get("message").is_none(),
+                "accepted response should have no message, got: {result}"
+            );
+        }
+        Expected::Rejected { message, code } => {
+            let result = result.expect("expected a rejected response, got an error");
+            assert_eq!(
+                result.get("accepted"),
+                Some(&serde_json::Value::Bool(false)),
+                "expected accepted=false, got: {result}"
+            );
+            if let Some(expected_msg) = message {
+                assert_eq!(
+                    result.get("message").and_then(|v| v.as_str()),
+                    Some(*expected_msg),
+                    "unexpected rejection message, got: {result}"
+                );
+            }
+            if let Some(expected_code) = code {
+                assert_eq!(
+                    result.get("code").and_then(|v| v.as_i64()),
+                    Some(i64::from(*expected_code)),
+                    "unexpected rejection code, got: {result}"
+                );
+            }
+        }
+        Expected::Error(needle) => {
+            let err = result.expect_err("expected a runtime error, got a response");
+            let msg = format!("{err:#}");
+            assert!(
+                msg.contains("CEL runtime error"),
+                "expected a CEL runtime error, got: {msg}"
+            );
+            assert!(
+                msg.contains(needle),
+                "expected {needle:?} in error, got: {msg}"
+            );
+        }
     }
 }
 
@@ -76,93 +157,55 @@ fn assert_rejected(result: &serde_json::Value, message: Option<&str>, code: Opti
 /// A policy with a single validation that passes → accepted.
 #[test]
 fn test_vap_accept_simple() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-accept
-spec:
+    let spec = r#"spec:
   validations:
     - expression: "object.spec.replicas <= 5"
       message: "too many replicas"
 "#;
-
-    let bindings = serde_json::json!({
-        "object": {
-            "spec": {
-                "replicas": 3
-            }
-        }
-    })
-    .to_string();
-
-    let result = compile_vap_and_eval(yaml, &bindings).unwrap();
-    assert_accepted(&result);
+    let bindings = serde_json::json!({ "object": { "spec": { "replicas": 3 } } }).to_string();
+    assert_outcome(eval_vap(spec, &bindings, None), &Expected::Accepted);
 }
 
 /// A policy with a single validation that fails → rejected with static message.
 #[test]
 fn test_vap_reject_static_message() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-reject
-spec:
+    let spec = r#"spec:
   validations:
     - expression: "object.spec.replicas <= 5"
       message: "too many replicas"
 "#;
-
-    let bindings = serde_json::json!({
-        "object": {
-            "spec": {
-                "replicas": 10
-            }
-        }
-    })
-    .to_string();
-
-    let result = compile_vap_and_eval(yaml, &bindings).unwrap();
-    assert_rejected(&result, Some("too many replicas"), None);
+    let bindings = serde_json::json!({ "object": { "spec": { "replicas": 10 } } }).to_string();
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::Rejected {
+            message: Some("too many replicas"),
+            code: None,
+        },
+    );
 }
 
 /// Validation fails and a `messageExpression` is evaluated to build the message.
 #[test]
 fn test_vap_reject_message_expression() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-msg-expr
-spec:
+    let spec = r#"spec:
   validations:
     - expression: "object.spec.replicas <= 5"
       messageExpression: "'replicas ' + string(object.spec.replicas) + ' exceeds limit 5'"
 "#;
-
-    let bindings = serde_json::json!({
-        "object": {
-            "spec": {
-                "replicas": 7
-            }
-        }
-    })
-    .to_string();
-
-    let result = compile_vap_and_eval(yaml, &bindings).unwrap();
-    assert_rejected(&result, Some("replicas 7 exceeds limit 5"), None);
+    let bindings = serde_json::json!({ "object": { "spec": { "replicas": 7 } } }).to_string();
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::Rejected {
+            message: Some("replicas 7 exceeds limit 5"),
+            code: None,
+        },
+    );
 }
 
 /// A matchCondition that evaluates to false → policy skipped → accepted.
 #[test]
 fn test_vap_match_condition_false_skips_policy() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-match-cond
-spec:
+    let spec = r#"spec:
   matchConditions:
     - name: only-deployments
       expression: "object.kind == 'Deployment'"
@@ -170,32 +213,19 @@ spec:
     - expression: "object.spec.replicas <= 5"
       message: "too many replicas"
 "#;
-
     // object.kind is "Pod" → matchCondition false → policy skipped → accept
     // even though replicas=99 would otherwise fail.
     let bindings = serde_json::json!({
-        "object": {
-            "kind": "Pod",
-            "spec": {
-                "replicas": 99
-            }
-        }
+        "object": { "kind": "Pod", "spec": { "replicas": 99 } }
     })
     .to_string();
-
-    let result = compile_vap_and_eval(yaml, &bindings).unwrap();
-    assert_accepted(&result);
+    assert_outcome(eval_vap(spec, &bindings, None), &Expected::Accepted);
 }
 
 /// A matchCondition that evaluates to true → validation is enforced → rejected.
 #[test]
 fn test_vap_match_condition_true_enforces_validation() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-match-cond-true
-spec:
+    let spec = r#"spec:
   matchConditions:
     - name: only-deployments
       expression: "object.kind == 'Deployment'"
@@ -203,30 +233,17 @@ spec:
     - expression: "object.spec.replicas <= 5"
       message: "too many replicas"
 "#;
-
     let bindings = serde_json::json!({
-        "object": {
-            "kind": "Deployment",
-            "spec": {
-                "replicas": 99
-            }
-        }
+        "object": { "kind": "Deployment", "spec": { "replicas": 99 } }
     })
     .to_string();
-
-    let result = compile_vap_and_eval(yaml, &bindings).unwrap();
-    assert_rejected(&result, None, None);
+    assert_outcome(eval_vap(spec, &bindings, None), &Expected::rejected_any());
 }
 
 /// Variables are evaluated and accessible in validation expressions.
 #[test]
 fn test_vap_variables() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-variables
-spec:
+    let spec = r#"spec:
   variables:
     - name: maxReplicas
       expression: "5"
@@ -235,78 +252,57 @@ spec:
       message: "too many replicas"
 "#;
 
-    let bindings_ok = serde_json::json!({
-        "object": { "spec": { "replicas": 4 } }
-    })
-    .to_string();
+    let bindings_ok = serde_json::json!({ "object": { "spec": { "replicas": 4 } } }).to_string();
+    assert_outcome(eval_vap(spec, &bindings_ok, None), &Expected::Accepted);
 
-    let result_ok = compile_vap_and_eval(yaml, &bindings_ok).unwrap();
-    assert_accepted(&result_ok);
-
-    let bindings_fail = serde_json::json!({
-        "object": { "spec": { "replicas": 10 } }
-    })
-    .to_string();
-
-    let result_fail = compile_vap_and_eval(yaml, &bindings_fail).unwrap();
-    assert_rejected(&result_fail, None, None);
+    let bindings_fail = serde_json::json!({ "object": { "spec": { "replicas": 10 } } }).to_string();
+    assert_outcome(
+        eval_vap(spec, &bindings_fail, None),
+        &Expected::rejected_any(),
+    );
 }
 
 /// Multiple validations: first passes, second fails → rejection with second
 /// validation's message.
 #[test]
 fn test_vap_multiple_validations_second_fails() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-multi-val
-spec:
+    let spec = r#"spec:
   validations:
     - expression: "object.spec.replicas >= 1"
       message: "must have at least 1 replica"
     - expression: "object.spec.replicas <= 5"
       message: "too many replicas"
 "#;
-
-    let bindings = serde_json::json!({
-        "object": { "spec": { "replicas": 10 } }
-    })
-    .to_string();
-
-    let result = compile_vap_and_eval(yaml, &bindings).unwrap();
-    assert_rejected(&result, Some("too many replicas"), None);
+    let bindings = serde_json::json!({ "object": { "spec": { "replicas": 10 } } }).to_string();
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::Rejected {
+            message: Some("too many replicas"),
+            code: None,
+        },
+    );
 }
 
 /// Validation with a reason maps to the correct HTTP status code.
 #[test]
 fn test_vap_reason_to_code() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-reason
-spec:
+    let spec = r#"spec:
   validations:
     - expression: "false"
       message: "forbidden"
       reason: "Forbidden"
 "#;
-
     let bindings = serde_json::json!({}).to_string();
-    let result = compile_vap_and_eval(yaml, &bindings).unwrap();
-    assert_rejected(&result, Some("forbidden"), Some(403));
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::rejected("forbidden", 403),
+    );
 }
 
 /// All validations pass → accepted, no rejection fields present.
 #[test]
 fn test_vap_all_validations_pass() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-all-pass
-spec:
+    let spec = r#"spec:
   validations:
     - expression: "object.spec.replicas >= 1"
       message: "must have at least 1 replica"
@@ -315,7 +311,6 @@ spec:
     - expression: "object.metadata.name != ''"
       message: "name must not be empty"
 "#;
-
     let bindings = serde_json::json!({
         "object": {
             "metadata": { "name": "my-deployment" },
@@ -323,12 +318,216 @@ spec:
         }
     })
     .to_string();
+    assert_outcome(eval_vap(spec, &bindings, None), &Expected::Accepted);
+}
 
-    let result = compile_vap_and_eval(yaml, &bindings).unwrap();
-    assert_accepted(&result);
-    assert!(
-        result.get("message").is_none(),
-        "accepted response should have no message, got: {result}"
+// ─── Runtime errors ───────────────────────────────────────────────────────────
+//
+// A CEL runtime error in a matchCondition or validation must surface to the
+// host as an `Err` from `eval()` (the module traps), never as a silent accept
+// or a rejection. This lets the host apply the policy's `failurePolicy`.
+
+const EMPTY_OBJECT_BINDINGS: &str = r#"{"object": {}}"#;
+
+/// A validation whose expression errors → `eval()` returns `Err`, not
+/// `{"accepted": true}`.
+#[test]
+fn test_vap_validation_runtime_error_is_surfaced() {
+    let spec = r#"spec:
+  validations:
+    - expression: "(1 / 0) == 1"
+      message: "never used"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::Error("divide by zero"),
+    );
+}
+
+/// An erroring validation is not masked by earlier passing validations.
+#[test]
+fn test_vap_validation_runtime_error_after_passing_validation() {
+    let spec = r#"spec:
+  validations:
+    - expression: "true"
+    - expression: "(1 / 0) == 1"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::Error("divide by zero"),
+    );
+}
+
+/// A validation that references an unbound variable errors instead of passing.
+#[test]
+fn test_vap_validation_unbound_variable_is_surfaced() {
+    let spec = r#"spec:
+  validations:
+    - expression: "doesNotExist == 1"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::Error("doesNotExist"),
+    );
+}
+
+/// A matchCondition whose expression errors → `eval()` returns `Err`, rather
+/// than treating the condition as `true` and running the validations.
+#[test]
+fn test_vap_match_condition_runtime_error_is_surfaced() {
+    let spec = r#"spec:
+  matchConditions:
+    - name: broken
+      expression: "(1 / 0) == 1"
+  validations:
+    - expression: "true"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::Error("divide by zero"),
+    );
+}
+
+/// CEL short-circuit semantics still apply: an error absorbed by `||` is not
+/// an error for the validation.
+#[test]
+fn test_vap_validation_error_absorbed_by_or_is_accepted() {
+    let spec = r#"spec:
+  validations:
+    - expression: "(1 / 0) == 1 || true"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::Accepted,
+    );
+}
+
+/// A variable that errors is harmless as long as no validation references it
+/// (K8s variables are lazy).
+#[test]
+fn test_vap_unused_erroring_variable_is_harmless() {
+    let spec = r#"spec:
+  variables:
+    - name: broken
+      expression: "1 / 0"
+  validations:
+    - expression: "true"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::Accepted,
+    );
+}
+
+/// A variable that errors propagates the error into the validation that uses it.
+#[test]
+fn test_vap_used_erroring_variable_is_surfaced() {
+    let spec = r#"spec:
+  variables:
+    - name: broken
+      expression: "1 / 0"
+  validations:
+    - expression: "variables.broken == 1"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::Error("divide by zero"),
+    );
+}
+
+/// A host extension failure inside a validation (e.g. `kw.k8s...get()`
+/// returning an error) surfaces as a runtime error, rather than being
+/// silently accepted.
+#[test]
+fn test_vap_extension_error_in_validation_is_surfaced() {
+    let spec = r#"spec:
+  validations:
+    - expression: "kw.k8s.apiVersion('v1').kind('ConfigMap').namespace('default').get('cfg').data.ok == 'true'"
+      message: "config must be ok"
+"#;
+    let result = eval_vap(
+        spec,
+        EMPTY_OBJECT_BINDINGS,
+        Some((
+            vap::kw_k8s_get_extension(),
+            Box::new(|_args| Err("boom".to_string())),
+        )),
+    );
+    assert_outcome(result, &Expected::Error("boom"));
+}
+
+/// A failed `params` fetch propagates into the validation that uses `params`.
+#[test]
+fn test_vap_params_fetch_error_is_surfaced() {
+    let spec = r#"spec:
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  validations:
+    - expression: "object.spec.replicas <= int(params.data.maxReplicas)"
+"#;
+    let bindings = serde_json::json!({
+        "paramRef": { "name": "replica-policy", "namespace": "default" },
+        "object": { "spec": { "replicas": 3 } }
+    })
+    .to_string();
+
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_get_extension(),
+            Box::new(|_args| Err("configmap not found".to_string())),
+        )),
+    );
+    assert_outcome(result, &Expected::Error("configmap not found"));
+}
+
+// ─── messageExpression fallback ───────────────────────────────────────────────
+
+/// A `messageExpression` that errors falls back to the static `message`.
+#[test]
+fn test_vap_message_expression_error_falls_back_to_static_message() {
+    let spec = r#"spec:
+  validations:
+    - expression: "false"
+      message: "static message"
+      messageExpression: "string(1 / 0)"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::rejected("static message", 422),
+    );
+}
+
+/// A `messageExpression` that errors, with no static `message`, falls back to
+/// the default message derived from the expression text.
+#[test]
+fn test_vap_message_expression_error_falls_back_to_default_message() {
+    let spec = r#"spec:
+  validations:
+    - expression: "false"
+      messageExpression: "string(1 / 0)"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::rejected("failed expression: false", 422),
+    );
+}
+
+/// A `messageExpression` that produces a non-string value falls back to the
+/// static `message`.
+#[test]
+fn test_vap_message_expression_non_string_falls_back_to_static_message() {
+    let spec = r#"spec:
+  validations:
+    - expression: "false"
+      message: "static message"
+      messageExpression: "42"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::rejected("static message", 422),
     );
 }
 
@@ -343,12 +542,9 @@ spec:
             ]
         }
     }),
-    true
+    Expected::Accepted
 )]
-#[case::no_subjects_field(
-    serde_json::json!({ "object": {} }),
-    true
-)]
+#[case::no_subjects_field(serde_json::json!({ "object": {} }), Expected::Accepted)]
 #[case::default_sa_subject(
     serde_json::json!({
         "object": {
@@ -357,7 +553,7 @@ spec:
             ]
         }
     }),
-    false
+    Expected::rejected("subjects cannot include the 'default' service account", 422)
 )]
 #[case::mixed_subjects_with_default_sa(
     serde_json::json!({
@@ -369,31 +565,20 @@ spec:
             ]
         }
     }),
-    false
+    Expected::rejected("subjects cannot include the 'default' service account", 422)
 )]
-fn test_vap_no_default_sa_rolebinding(#[case] object: serde_json::Value, #[case] accepted: bool) {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: "no-default-sa-rolebinding.vap-library.com"
-spec:
+fn test_vap_no_default_sa_rolebinding(
+    #[case] object: serde_json::Value,
+    #[case] expected: Expected,
+) {
+    let spec = r#"spec:
   failurePolicy: Fail
   validations:
     - expression: "!has(object.subjects) || object.subjects.all(s, !(s.kind == 'ServiceAccount' && s.name == 'default'))"
       message: "subjects cannot include the 'default' service account"
       reason: Invalid
 "#;
-    let result = compile_vap_and_eval(yaml, &object.to_string()).unwrap();
-    if accepted {
-        assert_accepted(&result);
-    } else {
-        assert_rejected(
-            &result,
-            Some("subjects cannot include the 'default' service account"),
-            Some(422),
-        );
-    }
+    assert_outcome(eval_vap(spec, &object.to_string(), None), &expected);
 }
 
 // ─── pss-privilege-escalation ─────────────────────────────────────────────────
@@ -411,7 +596,7 @@ spec:
             }
         }
     }),
-    true
+    Expected::Accepted
 )]
 #[case::pod_init_and_main_containers_compliant(
     serde_json::json!({
@@ -429,11 +614,11 @@ spec:
             }
         }
     }),
-    true
+    Expected::Accepted
 )]
 #[case::non_pod_kind_skips_all_validations(
     serde_json::json!({ "object": { "kind": "ConfigMap" } }),
-    true
+    Expected::Accepted
 )]
 #[case::pod_container_missing_field(
     serde_json::json!({
@@ -444,7 +629,10 @@ spec:
             }
         }
     }),
-    false
+    Expected::rejected(
+        "securityContext.allowPrivilegeEscalation must be set to false on any containers, initContainers, and ephemeralContainers in Pods",
+        422
+    )
 )]
 #[case::pod_container_set_to_true(
     serde_json::json!({
@@ -458,7 +646,10 @@ spec:
             }
         }
     }),
-    false
+    Expected::rejected(
+        "securityContext.allowPrivilegeEscalation must be set to false on any containers, initContainers, and ephemeralContainers in Pods",
+        422
+    )
 )]
 #[case::pod_init_container_violates(
     serde_json::json!({
@@ -476,15 +667,16 @@ spec:
             }
         }
     }),
-    false
+    Expected::rejected(
+        "securityContext.allowPrivilegeEscalation must be set to false on any containers, initContainers, and ephemeralContainers in Pods",
+        422
+    )
 )]
-fn test_vap_pss_privilege_escalation(#[case] object: serde_json::Value, #[case] accepted: bool) {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: "pss-privilege-escalation.vap-library.com"
-spec:
+fn test_vap_pss_privilege_escalation(
+    #[case] object: serde_json::Value,
+    #[case] expected: Expected,
+) {
+    let spec = r#"spec:
   failurePolicy: Fail
   validations:
     - expression: "object.kind != 'Pod' ||
@@ -512,18 +704,7 @@ spec:
       message: "securityContext.allowPrivilegeEscalation must be set to false on containers in PodTemplates"
       reason: Invalid
 "#;
-    let result = compile_vap_and_eval(yaml, &object.to_string()).unwrap();
-    if accepted {
-        assert_accepted(&result);
-    } else {
-        assert_rejected(
-            &result,
-            Some(
-                "securityContext.allowPrivilegeEscalation must be set to false on any containers, initContainers, and ephemeralContainers in Pods",
-            ),
-            Some(422),
-        );
-    }
+    assert_outcome(eval_vap(spec, &object.to_string(), None), &expected);
 }
 
 // ─── pss-capabilities ─────────────────────────────────────────────────────────
@@ -541,7 +722,7 @@ spec:
             }
         }
     }),
-    true
+    Expected::Accepted
 )]
 #[case::drop_all_add_net_bind_service(
     serde_json::json!({
@@ -557,7 +738,7 @@ spec:
             }
         }
     }),
-    true
+    Expected::Accepted
 )]
 #[case::drop_missing_all(
     serde_json::json!({
@@ -571,7 +752,10 @@ spec:
             }
         }
     }),
-    false
+    Expected::rejected(
+        "securityContext.capabilities.drop must include ALL and securityContext.capabilities.add can only include NET_BIND_SERVICE on containers in Pods",
+        422
+    )
 )]
 #[case::add_disallowed_capability(
     serde_json::json!({
@@ -587,7 +771,10 @@ spec:
             }
         }
     }),
-    false
+    Expected::rejected(
+        "securityContext.capabilities.drop must include ALL and securityContext.capabilities.add can only include NET_BIND_SERVICE on containers in Pods",
+        422
+    )
 )]
 #[case::no_security_context(
     serde_json::json!({
@@ -596,15 +783,13 @@ spec:
             "spec": { "containers": [{ "name": "app" }] }
         }
     }),
-    false
+    Expected::rejected(
+        "securityContext.capabilities.drop must include ALL and securityContext.capabilities.add can only include NET_BIND_SERVICE on containers in Pods",
+        422
+    )
 )]
-fn test_vap_pss_capabilities(#[case] object: serde_json::Value, #[case] accepted: bool) {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: "pss-capabilities.vap-library.com"
-spec:
+fn test_vap_pss_capabilities(#[case] object: serde_json::Value, #[case] expected: Expected) {
+    let spec = r#"spec:
   failurePolicy: Fail
   validations:
     - expression: "object.kind != 'Pod' ||
@@ -632,18 +817,7 @@ spec:
       message: "securityContext.capabilities.drop must include ALL and securityContext.capabilities.add can only include NET_BIND_SERVICE on containers in PodTemplates"
       reason: Invalid
 "#;
-    let result = compile_vap_and_eval(yaml, &object.to_string()).unwrap();
-    if accepted {
-        assert_accepted(&result);
-    } else {
-        assert_rejected(
-            &result,
-            Some(
-                "securityContext.capabilities.drop must include ALL and securityContext.capabilities.add can only include NET_BIND_SERVICE on containers in Pods",
-            ),
-            Some(422),
-        );
-    }
+    assert_outcome(eval_vap(spec, &object.to_string(), None), &expected);
 }
 
 // ─── kw.k8s params tests ──────────────────────────────────────────────────────
@@ -654,12 +828,7 @@ spec:
 /// Host returns maxReplicas="5"; object has replicas=3 → accepted.
 #[test]
 fn test_vap_params_kw_k8s_accept() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-params-accept
-spec:
+    let spec = r#"spec:
   paramKind:
     apiVersion: v1
     kind: ConfigMap
@@ -667,7 +836,6 @@ spec:
     - expression: "object.spec.replicas <= int(params.data.maxReplicas)"
       message: "replicas exceeds the configured maximum"
 "#;
-
     let bindings = serde_json::json!({
         "paramRef": { "name": "replica-policy", "namespace": "default" },
         "object": {
@@ -676,50 +844,36 @@ spec:
             "metadata": { "name": "my-app" },
             "spec": { "replicas": 3 }
         }
-    });
+    })
+    .to_string();
 
-    let logger = test_logger();
-    let wasm_bytes = Builder::new()
-        .with_logger(logger.clone())
-        .build()
-        .compile_vap(yaml)
-        .unwrap();
-
-    let result_str = runtime::Builder::new()
-        .with_logger(logger)
-        .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .with_extension(vap::kw_k8s_get_extension(), |args| {
-            let map = &args[0];
-            assert_eq!(map["apiVersion"], "v1");
-            assert_eq!(map["kind"], "ConfigMap");
-            assert_eq!(map["name"], "replica-policy");
-            assert_eq!(map["namespace"], "default");
-            Ok(serde_json::json!({
-                "apiVersion": "v1",
-                "kind": "ConfigMap",
-                "metadata": { "name": "replica-policy", "namespace": "default" },
-                "data": { "maxReplicas": "5" }
-            }))
-        })
-        .build()
-        .unwrap()
-        .eval(Some(&bindings.to_string()))
-        .unwrap();
-
-    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
-    assert_accepted(&result);
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_get_extension(),
+            Box::new(|args| {
+                let map = &args[0];
+                assert_eq!(map["apiVersion"], "v1");
+                assert_eq!(map["kind"], "ConfigMap");
+                assert_eq!(map["name"], "replica-policy");
+                assert_eq!(map["namespace"], "default");
+                Ok(serde_json::json!({
+                    "apiVersion": "v1",
+                    "kind": "ConfigMap",
+                    "metadata": { "name": "replica-policy", "namespace": "default" },
+                    "data": { "maxReplicas": "5" }
+                }))
+            }),
+        )),
+    );
+    assert_outcome(result, &Expected::Accepted);
 }
 
 /// Same policy; object has replicas=10 which exceeds maxReplicas="5" → rejected.
 #[test]
 fn test_vap_params_kw_k8s_reject() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-params-reject
-spec:
+    let spec = r#"spec:
   paramKind:
     apiVersion: v1
     kind: ConfigMap
@@ -727,7 +881,6 @@ spec:
     - expression: "object.spec.replicas <= int(params.data.maxReplicas)"
       message: "replicas exceeds the configured maximum"
 "#;
-
     let bindings = serde_json::json!({
         "paramRef": { "name": "replica-policy", "namespace": "default" },
         "object": {
@@ -736,37 +889,27 @@ spec:
             "metadata": { "name": "my-app" },
             "spec": { "replicas": 10 }
         }
-    });
+    })
+    .to_string();
 
-    let logger = test_logger();
-    let wasm_bytes = Builder::new()
-        .with_logger(logger.clone())
-        .build()
-        .compile_vap(yaml)
-        .unwrap();
-
-    let result_str = runtime::Builder::new()
-        .with_logger(logger)
-        .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .with_extension(vap::kw_k8s_get_extension(), |_args| {
-            Ok(serde_json::json!({
-                "apiVersion": "v1",
-                "kind": "ConfigMap",
-                "metadata": { "name": "replica-policy", "namespace": "default" },
-                "data": { "maxReplicas": "5" }
-            }))
-        })
-        .build()
-        .unwrap()
-        .eval(Some(&bindings.to_string()))
-        .unwrap();
-
-    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
-    assert_rejected(
-        &result,
-        Some("replicas exceeds the configured maximum"),
-        Some(422),
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_get_extension(),
+            Box::new(|_args| {
+                Ok(serde_json::json!({
+                    "apiVersion": "v1",
+                    "kind": "ConfigMap",
+                    "metadata": { "name": "replica-policy", "namespace": "default" },
+                    "data": { "maxReplicas": "5" }
+                }))
+            }),
+        )),
+    );
+    assert_outcome(
+        result,
+        &Expected::rejected("replicas exceeds the configured maximum", 422),
     );
 }
 
@@ -778,23 +921,10 @@ spec:
 // The host callback receives the accumulated builder map as args[0] and can
 // assert on the fields that were set.
 
-fn make_kw_k8s_list_decl() -> ExtensionDecl {
-    vap::kw_k8s_list_extension()
-}
-
-fn make_kw_k8s_get_decl() -> ExtensionDecl {
-    vap::kw_k8s_get_extension()
-}
-
 /// list() terminal — host returns 2 items → validation passes (size >= 1).
 #[test]
 fn test_vap_kw_k8s_list_accept() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-list-accept
-spec:
+    let spec = r#"spec:
   variables:
     - name: deploys
       expression: "kw.k8s.apiVersion('apps/v1').kind('Deployment').list()"
@@ -802,51 +932,36 @@ spec:
     - expression: "variables.deploys.items.size() >= 1"
       message: "no deployments found"
 "#;
+    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } }).to_string();
 
-    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } });
-    let logger = test_logger();
-    let wasm_bytes = Builder::new()
-        .with_logger(logger.clone())
-        .build()
-        .compile_vap(yaml)
-        .unwrap();
-
-    let result_str = runtime::Builder::new()
-        .with_logger(logger)
-        .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .with_extension(make_kw_k8s_list_decl(), |args| {
-            let map = &args[0];
-            assert_eq!(
-                map["apiVersion"], "apps/v1",
-                "wrong apiVersion in builder map"
-            );
-            assert_eq!(map["kind"], "Deployment", "wrong kind in builder map");
-            Ok(serde_json::json!({
-                "items": [
-                    { "metadata": { "name": "deploy-a" } },
-                    { "metadata": { "name": "deploy-b" } }
-                ]
-            }))
-        })
-        .build()
-        .unwrap()
-        .eval(Some(&bindings.to_string()))
-        .unwrap();
-
-    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
-    assert_accepted(&result);
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_list_extension(),
+            Box::new(|args| {
+                let map = &args[0];
+                assert_eq!(
+                    map["apiVersion"], "apps/v1",
+                    "wrong apiVersion in builder map"
+                );
+                assert_eq!(map["kind"], "Deployment", "wrong kind in builder map");
+                Ok(serde_json::json!({
+                    "items": [
+                        { "metadata": { "name": "deploy-a" } },
+                        { "metadata": { "name": "deploy-b" } }
+                    ]
+                }))
+            }),
+        )),
+    );
+    assert_outcome(result, &Expected::Accepted);
 }
 
 /// list() terminal — host returns empty list → validation fails.
 #[test]
 fn test_vap_kw_k8s_list_reject() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-list-reject
-spec:
+    let spec = r#"spec:
   variables:
     - name: deploys
       expression: "kw.k8s.apiVersion('apps/v1').kind('Deployment').list()"
@@ -854,40 +969,23 @@ spec:
     - expression: "variables.deploys.items.size() >= 1"
       message: "no deployments found"
 "#;
+    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } }).to_string();
 
-    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } });
-    let logger = test_logger();
-    let wasm_bytes = Builder::new()
-        .with_logger(logger.clone())
-        .build()
-        .compile_vap(yaml)
-        .unwrap();
-
-    let result_str = runtime::Builder::new()
-        .with_logger(logger)
-        .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .with_extension(make_kw_k8s_list_decl(), |_args| {
-            Ok(serde_json::json!({ "items": [] }))
-        })
-        .build()
-        .unwrap()
-        .eval(Some(&bindings.to_string()))
-        .unwrap();
-
-    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
-    assert_rejected(&result, Some("no deployments found"), Some(422));
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_list_extension(),
+            Box::new(|_args| Ok(serde_json::json!({ "items": [] }))),
+        )),
+    );
+    assert_outcome(result, &Expected::rejected("no deployments found", 422));
 }
 
 /// .namespace() chain step is forwarded to the host inside the builder map.
 #[test]
 fn test_vap_kw_k8s_list_with_namespace() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-list-namespace
-spec:
+    let spec = r#"spec:
   variables:
     - name: deploys
       expression: "kw.k8s.apiVersion('apps/v1').kind('Deployment').namespace('prod').list()"
@@ -895,46 +993,31 @@ spec:
     - expression: "variables.deploys.items.size() >= 1"
       message: "no prod deployments"
 "#;
+    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } }).to_string();
 
-    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } });
-    let logger = test_logger();
-    let wasm_bytes = Builder::new()
-        .with_logger(logger.clone())
-        .build()
-        .compile_vap(yaml)
-        .unwrap();
-
-    let result_str = runtime::Builder::new()
-        .with_logger(logger)
-        .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .with_extension(make_kw_k8s_list_decl(), |args| {
-            let map = &args[0];
-            assert_eq!(map["apiVersion"], "apps/v1");
-            assert_eq!(map["kind"], "Deployment");
-            assert_eq!(map["namespace"], "prod", "namespace not forwarded to host");
-            Ok(serde_json::json!({
-                "items": [{ "metadata": { "name": "prod-deploy", "namespace": "prod" } }]
-            }))
-        })
-        .build()
-        .unwrap()
-        .eval(Some(&bindings.to_string()))
-        .unwrap();
-
-    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
-    assert_accepted(&result);
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_list_extension(),
+            Box::new(|args| {
+                let map = &args[0];
+                assert_eq!(map["apiVersion"], "apps/v1");
+                assert_eq!(map["kind"], "Deployment");
+                assert_eq!(map["namespace"], "prod", "namespace not forwarded to host");
+                Ok(serde_json::json!({
+                    "items": [{ "metadata": { "name": "prod-deploy", "namespace": "prod" } }]
+                }))
+            }),
+        )),
+    );
+    assert_outcome(result, &Expected::Accepted);
 }
 
 /// .labelSelector() chain step is forwarded to the host inside the builder map.
 #[test]
 fn test_vap_kw_k8s_list_with_label_selector() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-list-label-selector
-spec:
+    let spec = r#"spec:
   variables:
     - name: webDeploys
       expression: "kw.k8s.apiVersion('apps/v1').kind('Deployment').labelSelector('app=web').list()"
@@ -942,36 +1025,26 @@ spec:
     - expression: "variables.webDeploys.items.size() == 1"
       message: "expected exactly one web deployment"
 "#;
+    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } }).to_string();
 
-    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } });
-    let logger = test_logger();
-    let wasm_bytes = Builder::new()
-        .with_logger(logger.clone())
-        .build()
-        .compile_vap(yaml)
-        .unwrap();
-
-    let result_str = runtime::Builder::new()
-        .with_logger(logger)
-        .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .with_extension(make_kw_k8s_list_decl(), |args| {
-            let map = &args[0];
-            assert_eq!(
-                map["labelSelector"], "app=web",
-                "labelSelector not forwarded"
-            );
-            Ok(serde_json::json!({
-                "items": [{ "metadata": { "name": "web-deploy" } }]
-            }))
-        })
-        .build()
-        .unwrap()
-        .eval(Some(&bindings.to_string()))
-        .unwrap();
-
-    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
-    assert_accepted(&result);
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_list_extension(),
+            Box::new(|args| {
+                let map = &args[0];
+                assert_eq!(
+                    map["labelSelector"], "app=web",
+                    "labelSelector not forwarded"
+                );
+                Ok(serde_json::json!({
+                    "items": [{ "metadata": { "name": "web-deploy" } }]
+                }))
+            }),
+        )),
+    );
+    assert_outcome(result, &Expected::Accepted);
 }
 
 // ─── kw.k8s chain step coverage ──────────────────────────────────────────────
@@ -984,22 +1057,17 @@ spec:
 #[rstest]
 #[case::matching_result_accepted(
     serde_json::json!({ "items": [{ "metadata": { "name": "pod-a" } }] }),
-    true
+    Expected::Accepted
 )]
 #[case::empty_result_rejected(
     serde_json::json!({ "items": [] }),
-    false
+    Expected::rejected("no running pods found", 422)
 )]
 fn test_vap_kw_k8s_field_selector(
     #[case] host_response: serde_json::Value,
-    #[case] accepted: bool,
+    #[case] expected: Expected,
 ) {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-field-selector
-spec:
+    let spec = r#"spec:
   variables:
     - name: pods
       expression: "kw.k8s.apiVersion('v1').kind('Pod').fieldSelector('status.phase=Running').list()"
@@ -1007,22 +1075,14 @@ spec:
     - expression: "variables.pods.items.size() >= 1"
       message: "no running pods found"
 "#;
+    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } }).to_string();
 
-    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } });
-    let logger = test_logger();
-    let wasm_bytes = Builder::new()
-        .with_logger(logger.clone())
-        .build()
-        .compile_vap(yaml)
-        .unwrap();
-
-    let result_str = runtime::Builder::new()
-        .with_logger(logger)
-        .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .with_extension(make_kw_k8s_list_decl(), {
-            let resp = host_response.clone();
-            move |args| {
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_list_extension(),
+            Box::new(move |args| {
                 let map = &args[0];
                 assert_eq!(map["apiVersion"], "v1", "wrong apiVersion");
                 assert_eq!(map["kind"], "Pod", "wrong kind");
@@ -1030,20 +1090,11 @@ spec:
                     map["fieldSelector"], "status.phase=Running",
                     "fieldSelector not forwarded to host"
                 );
-                Ok(resp.clone())
-            }
-        })
-        .build()
-        .unwrap()
-        .eval(Some(&bindings.to_string()))
-        .unwrap();
-
-    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
-    if accepted {
-        assert_accepted(&result);
-    } else {
-        assert_rejected(&result, Some("no running pods found"), Some(422));
-    }
+                Ok(host_response.clone())
+            }),
+        )),
+    );
+    assert_outcome(result, &expected);
 }
 
 /// `.fieldMask()` chain step with a single mask — host receives `fieldMasks`
@@ -1053,12 +1104,7 @@ spec:
 /// first call (None → Array([val])).
 #[test]
 fn test_vap_kw_k8s_field_mask_single() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-field-mask-single
-spec:
+    let spec = r#"spec:
   variables:
     - name: cms
       expression: "kw.k8s.apiVersion('v1').kind('ConfigMap').fieldMask('metadata.name').list()"
@@ -1066,39 +1112,29 @@ spec:
     - expression: "variables.cms.items.size() >= 1"
       message: "no ConfigMaps found"
 "#;
+    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } }).to_string();
 
-    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } });
-    let logger = test_logger();
-    let wasm_bytes = Builder::new()
-        .with_logger(logger.clone())
-        .build()
-        .compile_vap(yaml)
-        .unwrap();
-
-    let result_str = runtime::Builder::new()
-        .with_logger(logger)
-        .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .with_extension(make_kw_k8s_list_decl(), |args| {
-            let map = &args[0];
-            assert_eq!(map["apiVersion"], "v1");
-            assert_eq!(map["kind"], "ConfigMap");
-            assert_eq!(
-                map["fieldMasks"],
-                serde_json::json!(["metadata.name"]),
-                "expected single-element fieldMasks array"
-            );
-            Ok(serde_json::json!({
-                "items": [{ "metadata": { "name": "cm-a" } }]
-            }))
-        })
-        .build()
-        .unwrap()
-        .eval(Some(&bindings.to_string()))
-        .unwrap();
-
-    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
-    assert_accepted(&result);
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_list_extension(),
+            Box::new(|args| {
+                let map = &args[0];
+                assert_eq!(map["apiVersion"], "v1");
+                assert_eq!(map["kind"], "ConfigMap");
+                assert_eq!(
+                    map["fieldMasks"],
+                    serde_json::json!(["metadata.name"]),
+                    "expected single-element fieldMasks array"
+                );
+                Ok(serde_json::json!({
+                    "items": [{ "metadata": { "name": "cm-a" } }]
+                }))
+            }),
+        )),
+    );
+    assert_outcome(result, &Expected::Accepted);
 }
 
 /// `.fieldMask()` chain step called twice — host receives `fieldMasks` as a
@@ -1108,12 +1144,7 @@ spec:
 /// the second call turns `Array([a])` into `Array([a, b])`.
 #[test]
 fn test_vap_kw_k8s_field_mask_accumulated() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-field-mask-accumulated
-spec:
+    let spec = r#"spec:
   variables:
     - name: cms
       expression: "kw.k8s.apiVersion('v1').kind('ConfigMap').fieldMask('metadata.name').fieldMask('data').list()"
@@ -1121,51 +1152,36 @@ spec:
     - expression: "variables.cms.items.size() >= 1"
       message: "no ConfigMaps found"
 "#;
+    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } }).to_string();
 
-    let bindings = serde_json::json!({ "object": { "kind": "Namespace" } });
-    let logger = test_logger();
-    let wasm_bytes = Builder::new()
-        .with_logger(logger.clone())
-        .build()
-        .compile_vap(yaml)
-        .unwrap();
-
-    let result_str = runtime::Builder::new()
-        .with_logger(logger)
-        .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .with_extension(make_kw_k8s_list_decl(), |args| {
-            let map = &args[0];
-            assert_eq!(map["apiVersion"], "v1");
-            assert_eq!(map["kind"], "ConfigMap");
-            assert_eq!(
-                map["fieldMasks"],
-                serde_json::json!(["metadata.name", "data"]),
-                "fieldMask calls must accumulate into an array in call order"
-            );
-            Ok(serde_json::json!({
-                "items": [{ "metadata": { "name": "cm-a" } }]
-            }))
-        })
-        .build()
-        .unwrap()
-        .eval(Some(&bindings.to_string()))
-        .unwrap();
-
-    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
-    assert_accepted(&result);
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_list_extension(),
+            Box::new(|args| {
+                let map = &args[0];
+                assert_eq!(map["apiVersion"], "v1");
+                assert_eq!(map["kind"], "ConfigMap");
+                assert_eq!(
+                    map["fieldMasks"],
+                    serde_json::json!(["metadata.name", "data"]),
+                    "fieldMask calls must accumulate into an array in call order"
+                );
+                Ok(serde_json::json!({
+                    "items": [{ "metadata": { "name": "cm-a" } }]
+                }))
+            }),
+        )),
+    );
+    assert_outcome(result, &Expected::Accepted);
 }
 
 /// `.namespace()` + `.get()` — both namespace and name reach the host; validation
 /// reads a field from the returned resource.
 #[test]
 fn test_vap_kw_k8s_get_with_namespace() {
-    let yaml = r#"
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: test-get-namespace
-spec:
+    let spec = r#"spec:
   variables:
     - name: cfg
       expression: "kw.k8s.apiVersion('v1').kind('ConfigMap').namespace('default').get('my-config')"
@@ -1173,37 +1189,27 @@ spec:
     - expression: "variables.cfg.data.key == 'expected-value'"
       message: "config key mismatch"
 "#;
+    let bindings = serde_json::json!({ "object": { "kind": "Deployment" } }).to_string();
 
-    let bindings = serde_json::json!({ "object": { "kind": "Deployment" } });
-    let logger = test_logger();
-    let wasm_bytes = Builder::new()
-        .with_logger(logger.clone())
-        .build()
-        .compile_vap(yaml)
-        .unwrap();
-
-    let result_str = runtime::Builder::new()
-        .with_logger(logger)
-        .with_log_level(LogLevel::Info)
-        .with_wasm(wasm_bytes)
-        .with_extension(make_kw_k8s_get_decl(), |args| {
-            let map = &args[0];
-            assert_eq!(map["apiVersion"], "v1");
-            assert_eq!(map["kind"], "ConfigMap");
-            assert_eq!(map["namespace"], "default", "namespace not forwarded");
-            assert_eq!(map["name"], "my-config", "name not forwarded");
-            Ok(serde_json::json!({
-                "apiVersion": "v1",
-                "kind": "ConfigMap",
-                "metadata": { "name": "my-config", "namespace": "default" },
-                "data": { "key": "expected-value" }
-            }))
-        })
-        .build()
-        .unwrap()
-        .eval(Some(&bindings.to_string()))
-        .unwrap();
-
-    let result: serde_json::Value = serde_json::from_str(&result_str).unwrap();
-    assert_accepted(&result);
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some((
+            vap::kw_k8s_get_extension(),
+            Box::new(|args| {
+                let map = &args[0];
+                assert_eq!(map["apiVersion"], "v1");
+                assert_eq!(map["kind"], "ConfigMap");
+                assert_eq!(map["namespace"], "default", "namespace not forwarded");
+                assert_eq!(map["name"], "my-config", "name not forwarded");
+                Ok(serde_json::json!({
+                    "apiVersion": "v1",
+                    "kind": "ConfigMap",
+                    "metadata": { "name": "my-config", "namespace": "default" },
+                    "data": { "key": "expected-value" }
+                }))
+            }),
+        )),
+    );
+    assert_outcome(result, &Expected::Accepted);
 }

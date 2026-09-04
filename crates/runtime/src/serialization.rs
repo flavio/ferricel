@@ -31,7 +31,7 @@ pub(crate) fn serialize_to_json(value: &CelValue) -> i64 {
 
 /// Serialize a `CelValue` pointer to JSON, aborting if the value is an error.
 ///
-/// If the value is `CelValue::Error`, calls `abort_with_error` which triggers the host's
+/// If the value is `CelValue::Error`, `cel_abort_if_error` triggers the host's
 /// `cel_abort` import — terminating Wasm execution and propagating the error as `Err(...)`.
 ///
 /// If the value is any other type, serializes it to JSON and returns the packed ptr+len.
@@ -46,11 +46,9 @@ pub unsafe extern "C" fn cel_serialize_result(value_ptr: *mut CelValue) -> i64 {
     if value_ptr.is_null() {
         panic!("Null pointer passed to cel_serialize_result");
     }
+    unsafe { crate::error::cel_abort_if_error(value_ptr) };
     let value = unsafe { read_ptr(value_ptr) };
-    match value {
-        CelValue::Error(msg) => crate::error::abort_with_error(&msg),
-        other => serialize_to_json(&other),
-    }
+    serialize_to_json(&value)
 }
 
 #[cfg(test)]

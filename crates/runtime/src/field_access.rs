@@ -59,6 +59,12 @@ pub unsafe extern "C" fn cel_get_field(
 
     // Extract the field from the object
     match obj {
+        CelValue::Error(_) => {
+            // Field access on an error propagates the error (CEL semantics), so
+            // the original message reaches the host instead of "no such overload".
+            debug!(log, "Field access on error value, propagating"; "field" => field_name.as_str());
+            Box::into_raw(Box::new(obj.clone()))
+        }
         CelValue::Optional(None) => {
             // Field access on optional.none() propagates to optional.none()
             debug!(log, "Field access on optional.none(), returning none"; "field" => field_name.as_str());
@@ -246,6 +252,8 @@ pub unsafe extern "C" fn cel_has_field(
     // Returns false if obj is not an Object or if field is missing
     use crate::types::CelMapKey;
     let has_field = match obj {
+        // has() on an error propagates the error (CEL semantics)
+        CelValue::Error(_) => return Box::into_raw(Box::new(obj.clone())),
         CelValue::Optional(None) => false,
         CelValue::Optional(Some(inner)) => match inner.as_ref() {
             CelValue::Object(map) => {
