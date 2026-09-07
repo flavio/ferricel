@@ -87,6 +87,7 @@ fn test_cel_source_custom_section_present() {
     );
 }
 
+#[cfg(feature = "k8s-vap")]
 #[test]
 fn test_vap_source_custom_section_present() {
     let vap_yaml = r#"

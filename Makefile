@@ -321,6 +321,11 @@ lint: $(RUNTIME_TARGET)
 	cargo +nightly fmt --all -- --check
 	taplo fmt --check
 	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo clippy --workspace -- -D warnings
+	# ferricel-core must also build and test without its default `k8s-vap`
+	# feature. Scoped to this one package: a `--workspace` run would still
+	# turn `k8s-vap` on, because the `ferricel` crate always requests it on
+	# its `ferricel-core` dependency.
+	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo clippy -p ferricel-core --no-default-features --all-targets -- -D warnings
 
 # Auto-fix clippy warnings where possible
 .PHONY: lint-fix

@@ -4,6 +4,8 @@
 //! bindings, then asserts the resulting `ValidationResponse`-style JSON (or
 //! runtime error) via [`Expected`] / [`assert_outcome`].
 
+#![cfg(feature = "k8s-vap")]
+
 use ferricel_core::{
     CelRuntimeError, ExtensionOrigin,
     compiler::{Builder, vap},

@@ -4,7 +4,9 @@
 // `inspect()` read it back, and that `runtime::Builder::build_pre` rejects a
 // module whose section is missing, wrong, or unreadable.
 
-use ferricel_core::{ABI_VERSION, abi_version, compiler, inspect, runtime};
+#[cfg(feature = "k8s-vap")]
+use ferricel_core::compiler;
+use ferricel_core::{ABI_VERSION, abi_version, inspect, runtime};
 use ferricel_types::ABI_VERSION_SECTION;
 use rstest::rstest;
 
