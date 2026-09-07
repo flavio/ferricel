@@ -26,6 +26,14 @@
 //!
 //! Other failures (an epoch-deadline interrupt, a memory-limit abort, a Wasm
 //! trap, a missing export) do not downcast to [`CelRuntimeError`].
+//!
+//! # ABI version
+//!
+//! [`Builder::build_pre`] checks the module's `ferricel.abi-version` custom
+//! section against [`ferricel_types::ABI_VERSION`] and returns `Err` on a
+//! mismatch or a missing section, before it links or instantiates the
+//! module. This check runs only for [`Builder::with_wasm`]; see
+//! [`Builder::with_module`] for the pre-compiled path.
 
 pub use ferricel_types::{CelRuntimeError, ExtensionOrigin};
 use ferricel_types::{
@@ -193,6 +201,41 @@ fn parse_abort_payload(bytes: &[u8]) -> Result<CelRuntimeError, wasmtime::Error>
     serde_json::from_slice::<CelRuntimeError>(bytes).map_err(|e| {
         wasmtime::Error::msg(format!("Invalid cel_abort payload from the guest: {}", e))
     })
+}
+
+/// Make sure that `wasm_bytes` has the ABI version this runtime supports.
+///
+/// Reads the `ferricel.abi-version` custom section with [`crate::inspect`].
+/// This runs only when the caller supplies raw Wasm bytes
+/// ([`Builder::with_wasm`]). It does not run when the caller supplies a
+/// pre-compiled [`wasmtime::Module`] ([`Builder::with_module`]), because the
+/// raw bytes are not available at that point. A caller who uses
+/// `with_module` and wants the same check can call
+/// [`crate::abi_version`] on the bytes before compiling the module.
+fn check_abi_version(wasm_bytes: &[u8]) -> Result<(), anyhow::Error> {
+    let info = crate::inspect::inspect(wasm_bytes)?;
+    match info.abi_version {
+        Some(v) if v == ferricel_types::ABI_VERSION => Ok(()),
+        Some(v) => Err(anyhow::anyhow!(
+            "module ABI version {v} is not supported by this runtime (ABI version {}); \
+             recompile the module with a matching ferricel version",
+            ferricel_types::ABI_VERSION
+        )),
+        None => {
+            let compiled_by = info
+                .producers
+                .iter()
+                .find(|f| f.name == "processed-by")
+                .and_then(|f| f.values.iter().find(|v| v.name == "ferricel"))
+                .map(|v| format!(" (compiled by ferricel {})", v.version))
+                .unwrap_or_default();
+            Err(anyhow::anyhow!(
+                "module has no ferricel.abi-version section{compiled_by}; this runtime \
+                 supports ABI version {}; recompile the module with a matching ferricel version",
+                ferricel_types::ABI_VERSION
+            ))
+        }
+    }
 }
 
 /// Host state that holds data accessible to Wasm host functions.
@@ -570,6 +613,10 @@ impl Builder {
     ///
     /// These bytes are parsed and pre-linked during [`build`](Self::build), so
     /// invalid Wasm is rejected eagerly rather than on the first [`eval`](Engine::eval) call.
+    ///
+    /// [`build_pre`](Self::build_pre) also checks the module's ABI version
+    /// against [`ferricel_types::ABI_VERSION`] and returns `Err` on a
+    /// mismatch or a missing `ferricel.abi-version` section.
     pub fn with_wasm(mut self, bytes: Vec<u8>) -> Self {
         self.wasm_bytes = Some(bytes);
         self
@@ -584,6 +631,11 @@ impl Builder {
     /// compile the module.
     ///
     /// Takes priority over [`with_wasm`](Self::with_wasm) when both are set.
+    ///
+    /// **This path skips the ABI version check** that [`with_wasm`](Self::with_wasm)
+    /// runs, because the raw bytes are no longer available once a
+    /// [`wasmtime::Module`] is compiled. Call [`crate::abi_version`] on the
+    /// bytes yourself before compiling the module, if you need the check.
     pub fn with_module(mut self, module: Module) -> Self {
         self.wasm_module = Some(module);
         self
@@ -601,7 +653,9 @@ impl Builder {
     /// via [`EnginePre::rehydrate`], which is where per-evaluation-context state
     /// (e.g. extension function implementations) is injected.
     ///
-    /// Returns `Err` if no Wasm was provided or if compilation/linking fails.
+    /// Returns `Err` if no Wasm was provided, if the module's ABI version
+    /// does not match (see [`Builder::with_wasm`]), or if compilation/linking
+    /// fails.
     pub fn build_pre(self) -> Result<EnginePre, anyhow::Error> {
         let wasm_engine = self.wasm_engine.unwrap_or_default();
 
@@ -613,6 +667,7 @@ impl Builder {
                     "no Wasm provided: call with_wasm() or with_module() before build_pre()"
                 )
             })?;
+            check_abi_version(&bytes)?;
             Module::from_binary(&wasm_engine, &bytes)?
         };
 

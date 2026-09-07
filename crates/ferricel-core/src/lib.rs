@@ -73,8 +73,8 @@ pub use compiler::{Compiler, ExtensionKey, extensions_used};
 #[cfg(feature = "k8s-vap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
 pub use compiler::{WELL_KNOWN_VAP_VARIABLES, vap_variables_used};
-pub use ferricel_types::extensions::UsedExtension;
-pub use inspect::{ModuleInfo, ProducerField, ProducerValue, inspect};
+pub use ferricel_types::{ABI_VERSION, extensions::UsedExtension};
+pub use inspect::{ModuleInfo, ProducerField, ProducerValue, abi_version, inspect};
 pub use runtime::{
     CelRuntimeError, Engine, EnginePre, Extension, ExtensionFn, ExtensionOrigin, Extensions,
     ResourceLimits,

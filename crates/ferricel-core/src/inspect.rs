@@ -10,6 +10,7 @@
 //! chapter of the user guide for details on each section.
 
 use anyhow::Context;
+use ferricel_types::ABI_VERSION_SECTION;
 use serde::{Deserialize, Serialize};
 use wasmparser::{ExternalKind, Parser, Payload};
 
@@ -64,6 +65,13 @@ pub struct ModuleInfo {
     /// Entries from the standard WebAssembly `producers` section.
     pub producers: Vec<ProducerField>,
 
+    /// The ABI version from the `ferricel.abi-version` section.
+    ///
+    /// `None` means the module has no such section. This is true for every
+    /// module that an older ferricel compiled, before this field existed.
+    #[serde(default)]
+    pub abi_version: Option<u32>,
+
     /// Names of all exported functions (e.g. `["evaluate", "cel_malloc"]`).
     pub exports: Vec<String>,
 }
@@ -98,6 +106,7 @@ pub fn inspect(wasm: &[u8]) -> Result<ModuleInfo, anyhow::Error> {
     let mut extensions: Vec<UsedExtension> = Vec::new();
     let mut vap_variables: Vec<String> = Vec::new();
     let mut producers: Vec<ProducerField> = Vec::new();
+    let mut abi_version: Option<u32> = None;
     let mut exports: Vec<String> = Vec::new();
 
     for payload in Parser::new(0).parse_all(wasm) {
@@ -130,6 +139,9 @@ pub fn inspect(wasm: &[u8]) -> Result<ModuleInfo, anyhow::Error> {
                     "producers" => {
                         producers = parse_producers(data)?;
                     }
+                    ABI_VERSION_SECTION => {
+                        abi_version = Some(parse_abi_version(data)?);
+                    }
                     _ => {}
                 }
             }
@@ -153,8 +165,29 @@ pub fn inspect(wasm: &[u8]) -> Result<ModuleInfo, anyhow::Error> {
         extensions,
         vap_variables,
         producers,
+        abi_version,
         exports,
     })
+}
+
+/// Read the ABI version of a compiled ferricel Wasm module.
+///
+/// Returns `Ok(None)` when the module has no `ferricel.abi-version`
+/// section. This is true for every module that an older ferricel compiled.
+///
+/// Returns an error if `wasm` is not a valid WebAssembly binary, or if the
+/// section is present but its content is not a valid `u32`.
+pub fn abi_version(wasm: &[u8]) -> Result<Option<u32>, anyhow::Error> {
+    Ok(inspect(wasm)?.abi_version)
+}
+
+// ─── ABI version section parser ───────────────────────────────────────────────
+
+fn parse_abi_version(data: &[u8]) -> Result<u32, anyhow::Error> {
+    let text = std::str::from_utf8(data).context("ferricel.abi-version is not valid UTF-8")?;
+    text.trim()
+        .parse::<u32>()
+        .with_context(|| format!("ferricel.abi-version is not a valid number: {text:?}"))
 }
 
 // ─── Producers section parser ─────────────────────────────────────────────────

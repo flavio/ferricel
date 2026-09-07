@@ -12,6 +12,36 @@ use std::str::FromStr;
 pub use error::{CelRuntimeError, ExtensionOrigin};
 use serde::{Deserialize, Serialize};
 
+/// The ABI version of the guest/host contract.
+///
+/// This number names the shape of the imports, the exports, and the
+/// payloads a compiled Wasm module and the `ferricel-core` runtime agree
+/// on. It is not the crate version: the crate version changes on every
+/// release, the ABI version changes only when the contract changes.
+///
+/// The compiler embeds this number in every module as the
+/// [`ABI_VERSION_SECTION`] custom section. The runtime rejects a module
+/// whose section does not match.
+///
+/// Bump this number when you change any of the following:
+/// - The name, parameter types, or return type of a host import
+///   (`env::cel_log`, `env::cel_abort`, `env::cel_call_extension`).
+/// - The name, parameter types, or return type of a guest export that the
+///   host calls (`evaluate`, `evaluate_proto`, `cel_malloc`,
+///   `cel_set_log_level`).
+/// - The wire format of a payload exchanged through one of the above (for
+///   example, the `cel_abort` payload becoming a JSON [`CelRuntimeError`]
+///   instead of a plain string, in version 1).
+///
+/// Do not bump it for a change that stays compatible with every module
+/// this runtime already accepts, such as adding a case to
+/// [`CelRuntimeError`] behind `#[non_exhaustive]`.
+pub const ABI_VERSION: u32 = 1;
+
+/// The name of the custom section that holds the decimal ASCII text of
+/// [`ABI_VERSION`], for example `b"1"`.
+pub const ABI_VERSION_SECTION: &str = "ferricel.abi-version";
+
 /// Log levels for ferricel runtime
 ///
 /// Ordered from most verbose to least verbose for comparison operations.

@@ -53,6 +53,11 @@ pub fn run(wasm_path: &Path, no_color: bool, json: bool) -> Result<(), anyhow::E
 fn print_human(path: &Path, info: &ModuleInfo, hl: Option<&Highlighter>) {
     println!("Module: {}", path.display());
 
+    match info.abi_version {
+        Some(v) => println!("ABI version: {v}"),
+        None => println!("ABI version: (none)"),
+    }
+
     // Source
     if let Some(src) = &info.cel_source {
         println!("\nSource (CEL):");

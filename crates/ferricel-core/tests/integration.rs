@@ -15,6 +15,7 @@
 
 mod common;
 
+mod abi_version_tests;
 mod arithmetic_tests;
 mod compiler_tests;
 mod container_tests;

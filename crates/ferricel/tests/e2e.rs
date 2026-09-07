@@ -406,7 +406,11 @@ fn test_inspect_cel_source_shown() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Source (CEL)"))
-        .stdout(predicate::str::contains("x > 10 && y < 20"));
+        .stdout(predicate::str::contains("x > 10 && y < 20"))
+        .stdout(predicate::str::contains(format!(
+            "ABI version: {}",
+            ferricel_core::ABI_VERSION
+        )));
 }
 
 #[test]

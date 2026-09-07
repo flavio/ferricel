@@ -49,8 +49,8 @@ evaluation.
 Allocates `len` bytes in Wasm linear memory and returns a pointer to the
 allocated buffer.
 
-| Parameter | Type    | Description |
-|-----------|---------|-------------|
+| Parameter | Type    | Description                  |
+| --------- | ------- | ---------------------------- |
 | `len`     | `usize` | Number of bytes to allocate. |
 
 **Returns** a pointer to the newly allocated buffer within Wasm linear memory.
@@ -69,18 +69,18 @@ processed.
 
 Sets the minimum log level for messages emitted via `env::cel_log`.
 
-| Parameter | Type  | Description |
-|-----------|-------|-------------|
+| Parameter | Type  | Description                                                                        |
+| --------- | ----- | ---------------------------------------------------------------------------------- |
 | `level`   | `i32` | Log level threshold (see table below). Values outside the valid range are clamped. |
 
 The log levels are:
 
-| Value | Level   |
-|------:|---------|
-| `0`   | Debug   |
-| `1`   | Info *(default)* |
-| `2`   | Warn    |
-| `3`   | Error   |
+| Value | Level            |
+| ----: | ---------------- |
+|   `0` | Debug            |
+|   `1` | Info _(default)_ |
+|   `2` | Warn             |
+|   `3` | Error            |
 
 Messages below the configured level are suppressed and `env::cel_log` will not
 be called for them.
@@ -91,9 +91,9 @@ be called for them.
 
 Evaluates the compiled CEL expression using JSON-encoded variable bindings.
 
-| Parameter   | Type  | Description |
-|-------------|-------|-------------|
-| `bindings`  | `i64` | Packed pointer to a UTF-8 JSON object mapping variable names to their values. |
+| Parameter  | Type  | Description                                                                   |
+| ---------- | ----- | ----------------------------------------------------------------------------- |
+| `bindings` | `i64` | Packed pointer to a UTF-8 JSON object mapping variable names to their values. |
 
 The `bindings` value points to the data previously loaded via `cel_malloc`.
 
@@ -109,9 +109,9 @@ variable, etc.) the module traps and the host receives an error from the call.
 
 Evaluates the compiled CEL expression using Protobuf-encoded variable bindings.
 
-| Parameter   | Type  | Description |
-|-------------|-------|-------------|
-| `bindings`  | `i64` | Packed pointer to a serialized `ferricel.Bindings` protobuf message. |
+| Parameter  | Type  | Description                                                          |
+| ---------- | ----- | -------------------------------------------------------------------- |
+| `bindings` | `i64` | Packed pointer to a serialized `ferricel.Bindings` protobuf message. |
 
 **Returns** a packed `i64` pointing to a UTF-8 JSON string that contains the
 result of the CEL expression (same format as `evaluate`).
@@ -127,10 +127,10 @@ provided (or stubbed) by the host at instantiation time.
 
 Called by the runtime to emit a structured log event.
 
-| Parameter | Type  | Description |
-|-----------|-------|-------------|
+| Parameter | Type  | Description                                                             |
+| --------- | ----- | ----------------------------------------------------------------------- |
 | `ptr`     | `i32` | Offset in Wasm linear memory of a UTF-8 JSON-encoded `LogEvent` object. |
-| `len`     | `i32` | Byte length of the JSON payload. |
+| `len`     | `i32` | Byte length of the JSON payload.                                        |
 
 The `LogEvent` object is a JSON structure like:
 
@@ -158,21 +158,24 @@ function.
 Called by the runtime when a fatal runtime error occurs (e.g. divide-by-zero,
 integer overflow, unbound variable, a failed host extension call).
 
-| Parameter | Type  | Description |
-|-----------|-------|-------------|
+| Parameter | Type  | Description                              |
+| --------- | ----- | ---------------------------------------- |
 | `packed`  | `i64` | Packed pointer to a UTF-8 JSON document. |
 
 The JSON document is a `CelRuntimeError` (defined in `ferricel-types`):
 
 ```json
-{"message": "divide by zero"}
+{ "message": "divide by zero" }
 ```
 
 When a host extension produced the error, the document also has an `origin`
 field:
 
 ```json
-{"message": "configmap not found", "origin": {"namespace": "kw.k8s", "function": "get"}}
+{
+  "message": "configmap not found",
+  "origin": { "namespace": "kw.k8s", "function": "get" }
+}
 ```
 
 The host implementation is expected to decode the document and return an
@@ -188,9 +191,9 @@ does not downcast to `CelRuntimeError`.
 
 Invokes a host-provided extension function by name.
 
-| Parameter  | Type  | Description |
-|------------|-------|-------------|
-| `request`  | `i64` | Packed pointer to a UTF-8 JSON-encoded extension call request. |
+| Parameter | Type  | Description                                                    |
+| --------- | ----- | -------------------------------------------------------------- |
+| `request` | `i64` | Packed pointer to a UTF-8 JSON-encoded extension call request. |
 
 The request JSON has the structure:
 
@@ -255,11 +258,16 @@ custom section that records which tools produced it. The section has no
 semantic effect on execution and can be safely stripped, but it is useful for
 debugging and toolchain analytics.
 
+The `processed-by: ferricel` entry names the compiler version, but it is not
+a compatibility check: nothing reads it before evaluation, and a tool that
+strips the section removes it. Use [ABI Version](#abi-version) for a check
+the runtime enforces.
+
 Ferricel adds the following entries:
 
-| Field          | Name       | Version |
-|----------------|------------|---------|
-| `language`     | `CEL`      | *(empty)* |
+| Field          | Name       | Version                           |
+| -------------- | ---------- | --------------------------------- |
+| `language`     | `CEL`      | _(empty)_                         |
 | `processed-by` | `ferricel` | crate version (e.g. `0.2.0-rc.1`) |
 
 These are merged with entries already present in the embedded runtime template
@@ -291,17 +299,51 @@ can dump the raw bytes of the section:
 wasm-objdump -s -j producers policy.wasm
 ```
 
+## ABI Version
+
+Each compiled module embeds a `ferricel.abi-version` custom section. The
+content is the decimal ASCII text of a single number, for example `1`.
+
+The number names the shape of the imports, the exports, and the payloads
+that a compiled module and the `ferricel-core` runtime agree on. It changes
+only when that shape changes. It does not change on every
+release: most releases keep the same ABI version across several crate
+versions.
+
+`runtime::Builder::build_pre` reads the section and compares it against the
+version this runtime supports. It returns `Err` before it links or
+instantiates the module when:
+
+- the section is missing (the module predates ABI versioning, or the
+  section was stripped), or
+- the number does not match.
+
+This check runs only when the module comes from raw bytes
+(`Builder::with_wasm`). It does not run for a pre-compiled
+`wasmtime::Module` (`Builder::with_module`), because the raw bytes are not
+available at that point.
+
+A host that reads a module before deciding whether to load it can call
+`ferricel_core::abi_version(&wasm)`, which returns `Ok(None)` for a module
+with no section and `Ok(Some(n))` otherwise.
+
+### Inspecting the section
+
+```sh
+wasm-objdump -s -j ferricel.abi-version policy.wasm
+```
+
 ## Source Custom Sections
 
 Each compiled module embeds the original source and a manifest of host
 extensions as raw UTF-8 custom sections, making it possible to recover this
 information from a `.wasm` file without any external metadata.
 
-| Section name | Content | Produced by |
-|--------------|---------|-------------|
-| `ferricel.cel-source` | The original CEL expression | [`compile()`] |
-| `ferricel.vap-source` | The full `ValidatingAdmissionPolicy` serialized as YAML | [`compile_vap()`], [`compile_vap_from_policy()`] |
-| `ferricel.extensions` | JSON array of host extensions used by this module | all compile paths |
+| Section name             | Content                                                          | Produced by                                      |
+| ------------------------ | ---------------------------------------------------------------- | ------------------------------------------------ |
+| `ferricel.cel-source`    | The original CEL expression                                      | [`compile()`]                                    |
+| `ferricel.vap-source`    | The full `ValidatingAdmissionPolicy` serialized as YAML          | [`compile_vap()`], [`compile_vap_from_policy()`] |
+| `ferricel.extensions`    | JSON array of host extensions used by this module                | all compile paths                                |
 | `ferricel.vap-variables` | JSON array of well-known VAP variables referenced by this policy | [`compile_vap()`], [`compile_vap_from_policy()`] |
 
 ### `ferricel.extensions` section
@@ -312,9 +354,9 @@ at evaluation time:
 
 ```json
 [
-  { "namespace": null,     "function": "abs"        },
-  { "namespace": "kw.k8s", "function": "get"        },
-  { "namespace": "kw.k8s", "function": "list"       },
+  { "namespace": null, "function": "abs" },
+  { "namespace": "kw.k8s", "function": "get" },
+  { "namespace": "kw.k8s", "function": "list" },
   { "namespace": "kw.net", "function": "lookupHost" }
 ]
 ```
@@ -409,6 +451,7 @@ Output (with color):
 
 ```text
 Module: policy.wasm
+ABI version: 1
 
 Source (ValidatingAdmissionPolicy):
   apiVersion: admissionregistration.k8s.io/v1

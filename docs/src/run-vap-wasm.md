@@ -17,6 +17,11 @@ let result: serde_json::Value = serde_json::from_str(&result_str)?;
 // result["accepted"] == true / false
 ```
 
+`build()` (and `build_pre()`) check the module's ABI version before they
+link it. A module compiled by a ferricel with an incompatible ABI makes
+`build()` return `Err`, naming both ABI versions. See
+[ABI Version](wasm-spec.md#abi-version) in the Wasm Spec chapter.
+
 ## Runtime Errors and `failurePolicy`
 
 `eval()` returns `Err` when a `matchConditions` or `validations` expression
