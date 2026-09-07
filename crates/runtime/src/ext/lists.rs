@@ -11,7 +11,7 @@
 //! - `sort` — sort comparable elements
 
 use crate::{
-    error::read_ptr,
+    error::{CelError, read_ptr},
     helpers::{cel_equals, cel_value_less_than},
     types::CelValue,
 };
@@ -27,7 +27,7 @@ pub unsafe extern "C" fn cel_list_join(list_ptr: *mut CelValue) -> *mut CelValue
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "join: receiver is not a list".to_string(),
+                "join: receiver is not a list".into(),
             )));
         }
     };
@@ -37,7 +37,7 @@ pub unsafe extern "C" fn cel_list_join(list_ptr: *mut CelValue) -> *mut CelValue
             CelValue::String(s) => result.push_str(s),
             _ => {
                 return Box::into_raw(Box::new(CelValue::Error(
-                    "join: list contains non-string element".to_string(),
+                    "join: list contains non-string element".into(),
                 )));
             }
         }
@@ -60,7 +60,7 @@ pub unsafe extern "C" fn cel_list_join_sep(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "join: receiver is not a list".to_string(),
+                "join: receiver is not a list".into(),
             )));
         }
     };
@@ -68,7 +68,7 @@ pub unsafe extern "C" fn cel_list_join_sep(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "join: separator is not a string".to_string(),
+                "join: separator is not a string".into(),
             )));
         }
     };
@@ -83,7 +83,7 @@ pub unsafe extern "C" fn cel_list_join_sep(
             }
             _ => {
                 return Box::into_raw(Box::new(CelValue::Error(
-                    "join: list contains non-string element".to_string(),
+                    "join: list contains non-string element".into(),
                 )));
             }
         }
@@ -104,7 +104,7 @@ pub unsafe extern "C" fn cel_list_distinct(list_ptr: *mut CelValue) -> *mut CelV
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "distinct: receiver is not a list".to_string(),
+                "distinct: receiver is not a list".into(),
             )));
         }
     };
@@ -130,7 +130,7 @@ pub unsafe extern "C" fn cel_list_flatten(list_ptr: *mut CelValue) -> *mut CelVa
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "flatten: receiver is not a list".to_string(),
+                "flatten: receiver is not a list".into(),
             )));
         }
     };
@@ -153,7 +153,7 @@ pub unsafe extern "C" fn cel_list_flatten_depth(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "flatten: receiver is not a list".to_string(),
+                "flatten: receiver is not a list".into(),
             )));
         }
     };
@@ -161,13 +161,13 @@ pub unsafe extern "C" fn cel_list_flatten_depth(
         CelValue::Int(n) => n,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "flatten: depth must be an int".to_string(),
+                "flatten: depth must be an int".into(),
             )));
         }
     };
     if depth < 0 {
         return Box::into_raw(Box::new(CelValue::Error(
-            "level must be non-negative".to_string(),
+            "level must be non-negative".into(),
         )));
     }
     let result = list_flatten_depth(&list, depth);
@@ -201,7 +201,7 @@ pub unsafe extern "C" fn cel_list_range(n_ptr: *mut CelValue) -> *mut CelValue {
         CelValue::Int(n) => n,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "lists.range: argument must be an int".to_string(),
+                "lists.range: argument must be an int".into(),
             )));
         }
     };
@@ -227,7 +227,7 @@ pub unsafe extern "C" fn cel_list_reverse(list_ptr: *mut CelValue) -> *mut CelVa
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "reverse: receiver is not a list".to_string(),
+                "reverse: receiver is not a list".into(),
             )));
         }
     };
@@ -256,7 +256,7 @@ pub unsafe extern "C" fn cel_list_slice(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "slice: receiver is not a list".to_string(),
+                "slice: receiver is not a list".into(),
             )));
         }
     };
@@ -264,7 +264,7 @@ pub unsafe extern "C" fn cel_list_slice(
         CelValue::Int(n) => n,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "slice: start index must be an int".to_string(),
+                "slice: start index must be an int".into(),
             )));
         }
     };
@@ -272,25 +272,25 @@ pub unsafe extern "C" fn cel_list_slice(
         CelValue::Int(n) => n,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "slice: end index must be an int".to_string(),
+                "slice: end index must be an int".into(),
             )));
         }
     };
     let len = list.len() as i64;
     if start < 0 || end < 0 {
-        return Box::into_raw(Box::new(CelValue::Error(format!(
+        return Box::into_raw(Box::new(CelValue::Error(CelError::new(format!(
             "cannot slice({start}, {end}), negative indexes not supported"
-        ))));
+        )))));
     }
     if start > end {
-        return Box::into_raw(Box::new(CelValue::Error(format!(
+        return Box::into_raw(Box::new(CelValue::Error(CelError::new(format!(
             "cannot slice({start}, {end}), start index must be less than or equal to end index"
-        ))));
+        )))));
     }
     if end > len {
-        return Box::into_raw(Box::new(CelValue::Error(format!(
+        return Box::into_raw(Box::new(CelValue::Error(CelError::new(format!(
             "cannot slice({start}, {end}), list is length {len}"
-        ))));
+        )))));
     }
     let result = list[start as usize..end as usize].to_vec();
     Box::into_raw(Box::new(CelValue::Array(result)))
@@ -310,7 +310,7 @@ pub unsafe extern "C" fn cel_list_sort(list_ptr: *mut CelValue) -> *mut CelValue
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "sort: receiver is not a list".to_string(),
+                "sort: receiver is not a list".into(),
             )));
         }
     };
@@ -322,7 +322,7 @@ pub unsafe extern "C" fn cel_list_sort(list_ptr: *mut CelValue) -> *mut CelValue
     for elem in &list[1..] {
         if cel_value_less_than(first, elem).is_err() && cel_value_less_than(elem, first).is_err() {
             return Box::into_raw(Box::new(CelValue::Error(
-                "list elements must be comparable".to_string(),
+                "list elements must be comparable".into(),
             )));
         }
     }
@@ -345,7 +345,7 @@ pub unsafe extern "C" fn cel_list_sort(list_ptr: *mut CelValue) -> *mut CelValue
         }
     });
     if let Some(err) = sort_err {
-        return Box::into_raw(Box::new(CelValue::Error(err)));
+        return Box::into_raw(Box::new(CelValue::Error(CelError::new(err))));
     }
     Box::into_raw(Box::new(CelValue::Array(sorted)))
 }
@@ -368,7 +368,7 @@ pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "sortByAssociatedKeys: values receiver is not a list".to_string(),
+                "sortByAssociatedKeys: values receiver is not a list".into(),
             )));
         }
     };
@@ -376,16 +376,16 @@ pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
         CelValue::Array(k) => k,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "sortByAssociatedKeys: keys argument is not a list".to_string(),
+                "sortByAssociatedKeys: keys argument is not a list".into(),
             )));
         }
     };
     if values.len() != keys.len() {
-        return Box::into_raw(Box::new(CelValue::Error(format!(
+        return Box::into_raw(Box::new(CelValue::Error(CelError::new(format!(
             "expected a list of the same size as the associated keys list, but got {} and {} elements respectively",
             values.len(),
             keys.len()
-        ))));
+        )))));
     }
     if values.is_empty() {
         return Box::into_raw(Box::new(CelValue::Array(vec![])));
@@ -397,7 +397,7 @@ pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
             && cel_value_less_than(key, first_key).is_err()
         {
             return Box::into_raw(Box::new(CelValue::Error(
-                "list elements must be comparable".to_string(),
+                "list elements must be comparable".into(),
             )));
         }
     }
@@ -421,7 +421,7 @@ pub unsafe extern "C" fn cel_list_sort_by_associated_keys(
         }
     });
     if let Some(err) = sort_err {
-        return Box::into_raw(Box::new(CelValue::Error(err)));
+        return Box::into_raw(Box::new(CelValue::Error(CelError::new(err))));
     }
     let result: Vec<CelValue> = indices.into_iter().map(|i| values[i].clone()).collect();
     Box::into_raw(Box::new(CelValue::Array(result)))
@@ -438,7 +438,7 @@ pub unsafe extern "C" fn cel_list_first(list_ptr: *mut CelValue) -> *mut CelValu
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "first: receiver is not a list".to_string(),
+                "first: receiver is not a list".into(),
             )));
         }
     };
@@ -461,7 +461,7 @@ pub unsafe extern "C" fn cel_list_last(list_ptr: *mut CelValue) -> *mut CelValue
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "last: receiver is not a list".to_string(),
+                "last: receiver is not a list".into(),
             )));
         }
     };
@@ -646,7 +646,9 @@ mod tests {
                 Box::into_raw(Box::new(list)),
                 Box::into_raw(Box::new(depth_val)),
             );
-            assert!(matches!(&*result_ptr, CelValue::Error(e) if e.contains("non-negative")));
+            assert!(
+                matches!(&*result_ptr, CelValue::Error(e) if e.message.contains("non-negative"))
+            );
         }
     }
 
@@ -735,7 +737,7 @@ mod tests {
                 Box::into_raw(Box::new(end_val)),
             );
             assert!(
-                matches!(&*result_ptr, CelValue::Error(e) if e.contains(msg)),
+                matches!(&*result_ptr, CelValue::Error(e) if e.message.contains(msg)),
                 "expected error containing {:?}, got {:?}",
                 msg,
                 &*result_ptr
@@ -905,7 +907,7 @@ mod tests {
                 Box::into_raw(Box::new(ks)),
             );
             assert!(
-                matches!(&*result_ptr, CelValue::Error(e) if e.contains("same size")),
+                matches!(&*result_ptr, CelValue::Error(e) if e.message.contains("same size")),
                 "expected length-mismatch error, got {:?}",
                 &*result_ptr
             );

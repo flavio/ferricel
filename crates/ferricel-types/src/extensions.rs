@@ -223,11 +223,13 @@ pub struct ExtensionCallPayload {
 /// the tag, the guest can tell a failure apart from a valid result that
 /// contains an `"error"` key, for example `Ok(json!({"error": "not found"}))`.
 ///
-/// The guest reports `Error` as a CEL runtime error (a `CelValue::Error`).
-/// The operators `&&` and `||` can absorb this error like any other CEL
-/// runtime error. If no operator absorbs it, the evaluation stops. `Error`
-/// covers three cases: an unknown extension, a wrong argument count, and an
-/// `Err(_)` value from the extension implementation.
+/// The guest reports `Error` as a CEL runtime error (a `CelValue::Error`
+/// that holds a [`crate::CelRuntimeError`]). The guest records the extension
+/// as the error's `origin`. The operators `&&` and `||` can absorb this
+/// error like any other CEL runtime error. If no operator absorbs it, the
+/// evaluation stops. `Error` covers three cases: an unknown extension, a
+/// wrong argument count, and an `Err(_)` value from the extension
+/// implementation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExtensionCallResponse {

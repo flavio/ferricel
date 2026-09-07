@@ -36,6 +36,30 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! ## Runtime errors
+//!
+//! When the CEL expression produces a runtime error (divide by zero, an
+//! unbound variable, a failed host extension), `eval` returns an error that
+//! downcasts to [`CelRuntimeError`]. Other failures do not downcast to it.
+//!
+//! ```rust
+//! use ferricel_core::{compiler, runtime, CelRuntimeError};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let wasm_bytes = compiler::Builder::new().build().compile("1 / x")?;
+//! let engine = runtime::Builder::new().with_wasm(wasm_bytes).build()?;
+//!
+//! let err = engine.eval(Some(r#"{"x": 0}"#)).unwrap_err();
+//! let cel_err = err.downcast_ref::<CelRuntimeError>().expect("a CEL runtime error");
+//! assert_eq!(cel_err.message, "divide by zero");
+//! assert!(cel_err.origin.is_none(), "no host extension was involved");
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! [`CelRuntimeError::origin`] is `Some` when a host extension produced the
+//! error. It names the extension (`namespace` and `function`).
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -51,5 +75,8 @@ pub use compiler::{Compiler, ExtensionKey, extensions_used};
 pub use compiler::{WELL_KNOWN_VAP_VARIABLES, vap_variables_used};
 pub use ferricel_types::extensions::UsedExtension;
 pub use inspect::{ModuleInfo, ProducerField, ProducerValue, inspect};
-pub use runtime::{Engine, EnginePre, Extension, ExtensionFn, Extensions, ResourceLimits};
+pub use runtime::{
+    CelRuntimeError, Engine, EnginePre, Extension, ExtensionFn, ExtensionOrigin, Extensions,
+    ResourceLimits,
+};
 pub use schema::ProtoSchema;

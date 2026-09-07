@@ -156,14 +156,31 @@ function.
 ### `env::cel_abort(packed: i64)`
 
 Called by the runtime when a fatal runtime error occurs (e.g. divide-by-zero,
-integer overflow, unbound variable).
+integer overflow, unbound variable, a failed host extension call).
 
 | Parameter | Type  | Description |
 |-----------|-------|-------------|
-| `packed`  | `i64` | Packed pointer to a UTF-8 error message. |
+| `packed`  | `i64` | Packed pointer to a UTF-8 JSON document. |
 
-The host implementation is expected to surface the error message and return an
-error to the caller (e.g. by trapping or returning `Err`).
+The JSON document is a `CelRuntimeError` (defined in `ferricel-types`):
+
+```json
+{"message": "divide by zero"}
+```
+
+When a host extension produced the error, the document also has an `origin`
+field:
+
+```json
+{"message": "configmap not found", "origin": {"namespace": "kw.k8s", "function": "get"}}
+```
+
+The host implementation is expected to decode the document and return an
+error to the caller (e.g. by trapping or returning `Err`). The
+`ferricel-core` runtime returns an error that downcasts to
+`ferricel_core::CelRuntimeError`. The payload must be a valid JSON document
+of this shape. If it is not, `ferricel-core` returns a generic error that
+does not downcast to `CelRuntimeError`.
 
 ---
 
@@ -216,9 +233,10 @@ matches the registered argument count. If the count is wrong, the host must
 return `{"error": ...}`. It must not read `args` out of bounds.
 `ferricel_core::runtime::Extensions` does this check for all extensions, so
 an implementation does not have to. When the guest receives
-`{"error": ...}`, it creates a CEL runtime error. The `&&` and `||` operators
-can absorb this error like any other runtime error. If no operator absorbs
-it, the evaluation fails.
+`{"error": ...}`, it creates a CEL runtime error and records the extension
+(`namespace` and `function`) as its origin. The `&&` and `||` operators can
+absorb this error like any other runtime error. If no operator absorbs it,
+the evaluation fails and the origin reaches the host through `cel_abort`.
 
 The Wasm module calls this import whenever a compiled CEL expression invokes a
 function that was registered as a host extension at compile time. The host is

@@ -2,12 +2,14 @@
 //!
 //! User guide: <https://flavio.github.io/ferricel/>
 
+pub mod error;
 pub mod extensions;
 pub mod functions;
 pub mod proto;
 
 use std::str::FromStr;
 
+pub use error::{CelRuntimeError, ExtensionOrigin};
 use serde::{Deserialize, Serialize};
 
 /// Log levels for ferricel runtime

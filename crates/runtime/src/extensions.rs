@@ -5,7 +5,12 @@
 
 use ferricel_types::extensions::{ExtensionCallPayload, ExtensionCallResponse};
 
-use crate::{error::read_ptr, memory::cel_malloc, serialization::encode_ptr_len, types::CelValue};
+use crate::{
+    error::{CelError, read_ptr},
+    memory::cel_malloc,
+    serialization::encode_ptr_len,
+    types::CelValue,
+};
 
 // Host import: call a host-provided extension function.
 //
@@ -80,11 +85,16 @@ unsafe fn call_extension_impl(
     // `Err(_)` from the implementation) becomes a `CelValue::Error`. This
     // error behaves like any other CEL runtime error: `&&` and `||` can
     // absorb it, and otherwise the evaluation stops.
+    //
+    // Every error created here records the extension as its origin. The
+    // host reads the origin when the error reaches `cel_abort`.
+    let ext_error =
+        |msg: String| CelValue::Error(CelError::from_extension(msg, namespace, function));
     let result: CelValue = match serde_json::from_slice::<ExtensionCallResponse>(resp_bytes) {
         Ok(ExtensionCallResponse::Ok(value)) => serde_json::from_value(value)
-            .unwrap_or_else(|e| CelValue::Error(format!("invalid extension result: {}", e))),
-        Ok(ExtensionCallResponse::Error(msg)) => CelValue::Error(msg),
-        Err(e) => CelValue::Error(format!("invalid extension response: {}", e)),
+            .unwrap_or_else(|e| ext_error(format!("invalid extension result: {}", e))),
+        Ok(ExtensionCallResponse::Error(msg)) => ext_error(msg),
+        Err(e) => ext_error(format!("invalid extension response: {}", e)),
     };
 
     Box::into_raw(Box::new(result))

@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn test_cond_inc_error_propagates() {
         let accu_ptr = make_int(0);
-        let pred_ptr = make_val(CelValue::Error("oops".to_string()));
+        let pred_ptr = make_val(CelValue::Error("oops".into()));
         let result_ptr = unsafe { cel_cond_inc(accu_ptr, pred_ptr) };
         let result = read_val(result_ptr);
         assert!(matches!(result, CelValue::Error(_)));

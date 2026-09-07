@@ -147,6 +147,11 @@ absorb this error. For example, `x.myFunc() || true` evaluates to `true`
 when `myFunc` fails. If no operator absorbs the error, the evaluation fails,
 like a division by zero.
 
+In that case `Engine::eval` returns an error that downcasts to
+`ferricel_core::CelRuntimeError`. Its `origin` field names the extension
+(`namespace` and `function`) that produced the error. A runtime error from a
+built-in operator has no `origin`.
+
 The runtime cannot check the call style (`receiver_style` and
 `global_style`). The wire format does not contain this information. Only the
 compiler checks the call style, at the CEL call sites.

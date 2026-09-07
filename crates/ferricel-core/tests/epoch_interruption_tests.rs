@@ -14,8 +14,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use ferricel_core::{compiler, runtime};
-use wasmtime::{Config, Engine as WasmEngine};
+use ferricel_core::{CelRuntimeError, compiler, runtime};
+use wasmtime::{Config, Engine as WasmEngine, Trap};
 
 /// Build an engine with epoch interruption enabled, compile `cel_expr`, and
 /// evaluate it with the given `bindings_json` and `epoch_deadline`.
@@ -65,9 +65,19 @@ fn no_deadline_with_interruption_enabled_engine_traps_immediately() {
     // its first epoch-checking instruction.
     let result = eval_with_epoch_interruption("1 + 1", None, None);
 
+    let err = result
+        .expect_err("expected evaluation to fail (immediate trap) with no epoch deadline set");
+
+    // An epoch interrupt is a wasmtime trap, not a CEL runtime error. A host
+    // can tell the two apart with `downcast_ref`.
     assert!(
-        result.is_err(),
-        "expected evaluation to fail (immediate trap) with no epoch deadline set"
+        err.downcast_ref::<CelRuntimeError>().is_none(),
+        "an epoch interrupt must not downcast to CelRuntimeError: {err:#}"
+    );
+    assert_eq!(
+        err.downcast_ref::<Trap>(),
+        Some(&Trap::Interrupt),
+        "expected Trap::Interrupt, got: {err:#}"
     );
 }
 

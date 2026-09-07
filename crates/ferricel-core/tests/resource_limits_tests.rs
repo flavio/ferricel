@@ -5,7 +5,7 @@
 // These tests intentionally do not use the shared `compile_and_execute*`
 // helpers in `common.rs` because those never configure resource limits.
 
-use ferricel_core::{compiler, runtime, runtime::ResourceLimits};
+use ferricel_core::{CelRuntimeError, compiler, runtime, runtime::ResourceLimits};
 
 // Per the WebAssembly specification, linear memory is grown in units of
 // pages, and a page is fixed at 64KiB.
@@ -82,10 +82,17 @@ fn tight_limit_blocks_large_allocation() {
 
     let result = eval_with_resource_limits(&expr, None, Some(resource_limits));
 
+    let err = result.expect_err("expected evaluation to fail once the memory limit is exceeded");
+
+    // A memory-limit abort is a wasmtime trap, not a CEL runtime error. A
+    // host can tell the two apart with `downcast_ref`.
     assert!(
-        result.is_err(),
-        "expected evaluation to fail once the memory limit is exceeded, got: {:?}",
-        result
+        err.downcast_ref::<CelRuntimeError>().is_none(),
+        "a memory-limit abort must not downcast to CelRuntimeError: {err:#}"
+    );
+    assert!(
+        err.downcast_ref::<wasmtime::Trap>().is_some(),
+        "expected a wasmtime::Trap, got: {err:#}"
     );
 }
 

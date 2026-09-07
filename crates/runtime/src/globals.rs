@@ -7,7 +7,7 @@
 use std::ptr;
 
 use crate::{
-    error::abort_with_error,
+    error::{CelError, abort_with_error},
     types::{CelMapKey, CelValue},
 };
 
@@ -146,7 +146,7 @@ pub unsafe extern "C" fn cel_unbound_variable_error(
         let name_slice = std::slice::from_raw_parts(name_ptr, name_len as usize);
         let name = std::str::from_utf8(name_slice).unwrap_or("<invalid utf-8>");
         let msg = format!("no such attribute: {name}");
-        Box::into_raw(Box::new(CelValue::Error(msg)))
+        Box::into_raw(Box::new(CelValue::Error(CelError::new(msg))))
     }
 }
 

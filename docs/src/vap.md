@@ -65,10 +65,17 @@ unbound variable, or a host extension (such as `kw.k8s`) that returns an error.
 When a `matchConditions` or `validations` expression evaluates to a runtime
 error, the compiled module does **not** return `{"accepted": true}` or a
 rejection. Instead it traps, exactly like a plain CEL module does: the call to
-`evaluate` fails and the host receives an error (`Engine::eval()` returns
-`Err`) whose message starts with `CEL runtime error:`. The host decides what
-to do with it, which is where `failurePolicy` applies: `Fail` denies the
-request, `Ignore` allows it.
+`evaluate` fails and `Engine::eval()` returns `Err`. The error downcasts to
+`ferricel_core::CelRuntimeError`. The host decides what to do with it, which
+is where `failurePolicy` applies: `Fail` denies the request, `Ignore` allows
+it.
+
+`Engine::eval()` can also fail for other reasons: an epoch-deadline
+interrupt, a memory limit, a Wasm trap, or a bug in a host extension. These
+errors do not downcast to `CelRuntimeError`. The host can tell the two kinds
+apart. How each kind maps to `failurePolicy` is the host's decision. See
+[Runtime Errors and `failurePolicy`](run-vap-wasm.md#runtime-errors-and-failurepolicy)
+for the host-side code.
 
 Two cases do not trap:
 
@@ -80,7 +87,8 @@ Two cases do not trap:
   `(1 / 0) == 1 || true` evaluates to `true`.
 
 The `params` lookup follows the first rule: if the host's `kw.k8s` extension
-fails, the error surfaces from the first validation that reads `params`.
+fails, the error surfaces from the first validation that reads `params`. The
+`origin` field of the `CelRuntimeError` is then `kw.k8s.get`.
 
 ## Known Limitations
 
