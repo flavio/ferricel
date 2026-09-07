@@ -16,12 +16,18 @@ use crate::{error::abort_with_error, types::CelValue};
 ///
 /// # Returns
 /// - Pointer to a new boxed CelValue containing the field value
+/// - Pointer to a `CelValue::Error("no such key: '<name>'")` when the
+///   object is a map without that key
+/// - Pointer to a `CelValue::Error("no such overload")` when the value is
+///   not a map
 ///
-/// # Panics
-/// - If `obj_ptr` is null
-/// - If the CelValue is not an Object
-/// - If the field is not found in the object
-/// - If the field name is invalid UTF-8
+/// Both errors are values. The `||`, `&&`, and `?:` operators can absorb
+/// them, as CEL requires. The evaluation aborts only if the error reaches
+/// the result.
+///
+/// # Aborts
+/// - If `obj_ptr` is null (a compiler bug)
+/// - If the field name is invalid UTF-8 (a compiler bug)
 ///
 /// # Safety
 /// - `obj_ptr` must be a valid pointer to a CelValue
@@ -126,23 +132,24 @@ pub unsafe extern "C" fn cel_get_field(
                         return Box::into_raw(Box::new(default_val));
                     }
 
-                    // Otherwise, field not found is an error
+                    // Otherwise, a missing key is a CEL runtime error. Return
+                    // it as a value so `||` and `&&` can absorb it.
                     let available_fields: Vec<String> =
                         map.keys().map(|k| k.to_string_key()).collect();
-                    {
-                        error!(log, "Field not found in object";
-                        "field" => field_name,
+                    error!(log, "Field not found in object";
+                        "field" => field_name.as_str(),
                         "available_fields" => format!("{:?}", available_fields));
-                        abort_with_error("no such overload")
-                    }
+                    crate::error::create_error_value(&format!("no such key: '{field_name}'"))
                 }
             }
         }
         _ => {
+            // Field access on a value that is not a map is a type error.
+            // Return it as a value so `||` and `&&` can absorb it.
             error!(log, "Cannot access field on non-object value";
                 "field" => field_name,
                 "actual_type" => format!("{:?}", obj));
-            abort_with_error("no such overload")
+            crate::error::create_error_value("no such overload")
         }
     }
 }

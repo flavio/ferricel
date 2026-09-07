@@ -405,11 +405,25 @@ fn test_vap_missing_field_error_downcasts_to_cel_runtime_error() {
   validations:
     - expression: "object.missing.field > 1"
 "#;
-    // `object.missing` yields a "no such key" error inside the guest. The
-    // `>` operator then reports "no such overload". Both are runtime errors.
+    // `object.missing` is a "no such key" error. Field access and `>`
+    // propagate it unchanged, so the host sees the original message.
     assert_outcome(
         eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
-        &Expected::Error("no such"),
+        &Expected::Error("no such key: 'missing'"),
+    );
+}
+
+/// A missing-field error is a value, not an abort. The `||` operator
+/// absorbs it like any other CEL runtime error.
+#[test]
+fn test_vap_missing_field_error_absorbed_by_or_is_accepted() {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.missing.field > 1 || true"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::Accepted,
     );
 }
 

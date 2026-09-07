@@ -92,6 +92,15 @@ fn conformance_conversions_tests() {
 }
 
 #[test]
+fn conformance_fields_tests() {
+    let thresholds = Thresholds::load();
+    let runner = ConformanceTestRunner::new();
+    let test_file = Path::new("../../cel-spec/tests/simple/testdata/fields.textproto");
+    let stats = runner.run_test_file(test_file);
+    assert_suite("fields", stats.failed(), &thresholds);
+}
+
+#[test]
 fn conformance_timestamps_tests() {
     let thresholds = Thresholds::load();
     let runner = ConformanceTestRunner::new();
