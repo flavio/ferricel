@@ -7,7 +7,10 @@
 //!
 //! See: <https://pkg.go.dev/github.com/google/cel-go/ext#Math>
 
-use crate::{error::read_ptr, types::CelValue};
+use crate::{
+    error::{CelError, read_ptr},
+    types::CelValue,
+};
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -34,15 +37,15 @@ fn numeric_cmp(a: &CelValue, b: &CelValue) -> Option<std::cmp::Ordering> {
 
 /// Error value for "no such overload".
 fn no_such_overload(msg: &str) -> *mut CelValue {
-    Box::into_raw(Box::new(CelValue::Error(format!(
+    Box::into_raw(Box::new(CelValue::Error(CelError::new(format!(
         "no such overload: {}",
         msg
-    ))))
+    )))))
 }
 
 /// Error value for a general runtime error.
 fn runtime_error(msg: impl Into<String>) -> *mut CelValue {
-    Box::into_raw(Box::new(CelValue::Error(msg.into())))
+    Box::into_raw(Box::new(CelValue::Error(CelError::new(msg.into()))))
 }
 
 /// Find the greatest value in a list. Returns `Ok(*mut CelValue)` or `Err(error_ptr)`.
@@ -516,7 +519,7 @@ mod tests {
 
     fn error_msg(v: &CelValue) -> &str {
         match v {
-            CelValue::Error(msg) => msg.as_str(),
+            CelValue::Error(msg) => msg.message.as_str(),
             _ => panic!("not an error: {:?}", v),
         }
     }

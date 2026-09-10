@@ -25,6 +25,7 @@ use cel::{common::ast::Expr, parser::Parser};
 pub use context::ExtensionKey;
 use context::{CompilerContext, CompilerEnv};
 use ferricel_types::{
+    ABI_VERSION, ABI_VERSION_SECTION,
     extensions::{BuilderChainDecl, ExtensionDecl, UsedExtension},
     functions::RuntimeFunction,
 };
@@ -191,7 +192,8 @@ impl Compiler {
     ///
     /// Both functions return a packed ptr+len i64 on success.  If the CEL expression
     /// produces a runtime error (overflow, divide-by-zero, etc.) the Wasm traps via
-    /// `cel_abort`, and the host receives `Err(...)` from the call.
+    /// `cel_abort`, and the host receives `Err(...)` from the call. That error
+    /// downcasts to [`CelRuntimeError`](crate::CelRuntimeError).
     ///
     /// The i64 packs ptr (low 32 bits) and len (high 32 bits) into a single value.
     ///
@@ -257,6 +259,9 @@ impl Compiler {
         // 7. Populate the producers custom section
         add_producers_entries(&mut module);
 
+        // 7b. Embed the ABI version the host must check compatibility against
+        add_abi_version_section(&mut module);
+
         // 8. Embed the original CEL source for tooling and debugging
         module.customs.add(walrus::RawCustomSection {
             name: "ferricel.cel-source".to_string(),
@@ -296,14 +301,16 @@ impl Compiler {
     ///
     /// If a `matchConditions` or `validations` expression produces a CEL
     /// runtime error, the module traps (via `cel_abort`) instead of returning
-    /// a response: [`Engine::eval`](crate::runtime::Engine::eval) returns
-    /// `Err`. The host is expected to apply the policy's `failurePolicy`.
+    /// a response: [`Engine::eval`](crate::runtime::Engine::eval) returns an
+    /// error that downcasts to [`CelRuntimeError`](crate::CelRuntimeError).
+    /// When the error came from the `params` lookup, its `origin` field is
+    /// `kw.k8s.get`.
     ///
     /// The YAML must contain exactly one `ValidatingAdmissionPolicy` document.
     /// The caller must pass, at minimum, `object` in the bindings. When the
-    /// policy references `namespaceObject` or `params`, the host must also
-    /// register `kubernetes.get` / `kubernetes.list` extension implementations
-    /// on the `Engine`.
+    /// policy sets `paramKind`, the host must also register a `kw.k8s.get`
+    /// extension implementation on the `Engine`. See
+    /// [`vap::kw_k8s_get_extension`].
     ///
     /// # Example
     ///
@@ -328,6 +335,13 @@ impl Compiler {
     ///
     /// The full policy is serialized back to YAML and embedded as a
     /// `ferricel.vap-source` custom section for tooling and debugging.
+    ///
+    /// # Runtime errors
+    ///
+    /// On a CEL runtime error in a `matchConditions` or `validations`
+    /// expression, [`Engine::eval`](crate::runtime::Engine::eval) returns an
+    /// error that downcasts to [`CelRuntimeError`](crate::CelRuntimeError).
+    /// See [`Compiler::compile_vap`] for details.
     #[cfg(feature = "k8s-vap")]
     #[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
     pub fn compile_vap_from_policy(
@@ -405,6 +419,7 @@ impl Compiler {
 
         walrus::passes::gc::run(&mut module);
         add_producers_entries(&mut module);
+        add_abi_version_section(&mut module);
 
         // Embed the full policy serialized as YAML for tooling and debugging.
         let vap_yaml = yaml_serde::to_string(policy)
@@ -451,6 +466,19 @@ fn add_producers_entries(module: &mut walrus::Module) {
     module
         .producers
         .add_processed_by("ferricel", env!("CARGO_PKG_VERSION"));
+}
+
+/// Embed the `ferricel.abi-version` custom section.
+///
+/// The section holds the decimal ASCII text of [`ABI_VERSION`] (for
+/// example `b"1"`). The runtime reads it in [`crate::runtime::Builder::build_pre`]
+/// and rejects a module whose version does not match. See [`ABI_VERSION`]
+/// for what counts as an ABI change.
+fn add_abi_version_section(module: &mut walrus::Module) {
+    module.customs.add(walrus::RawCustomSection {
+        name: ABI_VERSION_SECTION.to_string(),
+        data: ABI_VERSION.to_string().into_bytes(),
+    });
 }
 
 /// Read the list of host extensions used by a compiled Wasm module.

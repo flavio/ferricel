@@ -6,7 +6,7 @@ use slog::{debug, error};
 
 use crate::{
     arithmetic, array, bytes,
-    error::{abort_with_error, read_ptr},
+    error::{CelError, abort_with_error, read_ptr},
     string, temporal,
     types::CelValue,
 };
@@ -140,14 +140,14 @@ pub unsafe extern "C" fn cel_create_error(
             error!(log, "Null pointer for error message";
                 "function" => "cel_create_error");
             // Even when creating an error fails, we still need to return an error
-            return Box::into_raw(Box::new(CelValue::Error("unknown error".to_string())));
+            return Box::into_raw(Box::new(CelValue::Error("unknown error".into())));
         }
 
         let slice = std::slice::from_raw_parts(error_msg_ptr, error_msg_len as usize);
         let error_msg = String::from_utf8_lossy(slice).to_string();
 
         debug!(log, "Creating Error value"; "error_msg" => &error_msg);
-        Box::into_raw(Box::new(CelValue::Error(error_msg)))
+        Box::into_raw(Box::new(CelValue::Error(CelError::new(error_msg))))
     }
 }
 

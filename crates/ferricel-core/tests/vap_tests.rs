@@ -4,7 +4,10 @@
 //! bindings, then asserts the resulting `ValidationResponse`-style JSON (or
 //! runtime error) via [`Expected`] / [`assert_outcome`].
 
+#![cfg(feature = "k8s-vap")]
+
 use ferricel_core::{
+    CelRuntimeError, ExtensionOrigin,
     compiler::{Builder, vap},
     runtime,
 };
@@ -77,9 +80,17 @@ enum Expected {
         message: Option<&'static str>,
         code: Option<i32>,
     },
-    /// The module traps: `eval()` returns `Err` whose message contains
-    /// `"CEL runtime error"` and the given needle.
+    /// The module traps: `eval()` returns `Err` that downcasts to
+    /// [`CelRuntimeError`], whose message contains the given text, and
+    /// whose `origin` is `None`.
     Error(&'static str),
+    /// Like [`Expected::Error`], but the error must come from the host
+    /// extension `namespace.function`.
+    ExtensionError {
+        message: &'static str,
+        namespace: Option<&'static str>,
+        function: &'static str,
+    },
 }
 
 impl Expected {
@@ -137,19 +148,61 @@ fn assert_outcome(result: Result<serde_json::Value, anyhow::Error>, expected: &E
                 );
             }
         }
-        Expected::Error(needle) => {
-            let err = result.expect_err("expected a runtime error, got a response");
-            let msg = format!("{err:#}");
-            assert!(
-                msg.contains("CEL runtime error"),
-                "expected a CEL runtime error, got: {msg}"
+        Expected::Error(message) => {
+            let cel_err = assert_cel_runtime_error(result, message);
+            assert_eq!(
+                cel_err.origin, None,
+                "expected no extension origin, got: {cel_err:?}"
             );
-            assert!(
-                msg.contains(needle),
-                "expected {needle:?} in error, got: {msg}"
+        }
+        Expected::ExtensionError {
+            message,
+            namespace,
+            function,
+        } => {
+            let cel_err = assert_cel_runtime_error(result, message);
+            let expected_origin = ExtensionOrigin {
+                namespace: namespace.map(str::to_string),
+                function: function.to_string(),
+            };
+            assert_eq!(
+                cel_err.origin.as_ref(),
+                Some(&expected_origin),
+                "unexpected extension origin in: {cel_err:?}"
             );
         }
     }
+}
+
+/// Assert that `result` is a [`CelRuntimeError`] whose message contains
+/// `expected_message`. Return a clone of the error for further checks.
+fn assert_cel_runtime_error(
+    result: Result<serde_json::Value, anyhow::Error>,
+    expected_message: &str,
+) -> CelRuntimeError {
+    let err = result.expect_err("expected a runtime error, got a response");
+
+    // The `Display` text keeps the legacy prefix.
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("CEL runtime error"),
+        "expected a CEL runtime error, got: {msg}"
+    );
+    assert!(
+        msg.contains(expected_message),
+        "expected {expected_message:?} in error, got: {msg}"
+    );
+
+    // The typed error is what a host must use to tell a CEL error apart
+    // from other failures.
+    let cel_err = err
+        .downcast_ref::<CelRuntimeError>()
+        .unwrap_or_else(|| panic!("error does not downcast to CelRuntimeError: {err:#}"));
+    assert!(
+        cel_err.message.contains(expected_message),
+        "expected {expected_message:?} in CelRuntimeError.message, got: {cel_err:?}"
+    );
+    cel_err.clone()
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -344,6 +397,36 @@ fn test_vap_validation_runtime_error_is_surfaced() {
     );
 }
 
+/// A validation that reads a missing field errors at runtime. The host gets
+/// an error that downcasts to [`CelRuntimeError`], with no extension origin.
+#[test]
+fn test_vap_missing_field_error_downcasts_to_cel_runtime_error() {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.missing.field > 1"
+"#;
+    // `object.missing` is a "no such key" error. Field access and `>`
+    // propagate it unchanged, so the host sees the original message.
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::Error("no such key: 'missing'"),
+    );
+}
+
+/// A missing-field error is a value, not an abort. The `||` operator
+/// absorbs it like any other CEL runtime error.
+#[test]
+fn test_vap_missing_field_error_absorbed_by_or_is_accepted() {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.missing.field > 1 || true"
+"#;
+    assert_outcome(
+        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
+        &Expected::Accepted,
+    );
+}
+
 /// An erroring validation is not masked by earlier passing validations.
 #[test]
 fn test_vap_validation_runtime_error_after_passing_validation() {
@@ -437,7 +520,7 @@ fn test_vap_used_erroring_variable_is_surfaced() {
 
 /// A host extension failure inside a validation (e.g. `kw.k8s...get()`
 /// returning an error) surfaces as a runtime error, rather than being
-/// silently accepted.
+/// silently accepted. The error records `kw.k8s.get` as its origin.
 #[test]
 fn test_vap_extension_error_in_validation_is_surfaced() {
     let spec = r#"spec:
@@ -453,10 +536,19 @@ fn test_vap_extension_error_in_validation_is_surfaced() {
             Box::new(|_args| Err("boom".to_string())),
         )),
     );
-    assert_outcome(result, &Expected::Error("boom"));
+    assert_outcome(
+        result,
+        &Expected::ExtensionError {
+            message: "boom",
+            namespace: Some("kw.k8s"),
+            function: "get",
+        },
+    );
 }
 
 /// A failed `params` fetch propagates into the validation that uses `params`.
+/// The error records `kw.k8s.get` as its origin, so a host can tell a failed
+/// `params` lookup apart from other runtime errors.
 #[test]
 fn test_vap_params_fetch_error_is_surfaced() {
     let spec = r#"spec:
@@ -480,7 +572,14 @@ fn test_vap_params_fetch_error_is_surfaced() {
             Box::new(|_args| Err("configmap not found".to_string())),
         )),
     );
-    assert_outcome(result, &Expected::Error("configmap not found"));
+    assert_outcome(
+        result,
+        &Expected::ExtensionError {
+            message: "configmap not found",
+            namespace: Some("kw.k8s"),
+            function: "get",
+        },
+    );
 }
 
 // ─── messageExpression fallback ───────────────────────────────────────────────

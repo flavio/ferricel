@@ -82,6 +82,8 @@ conformance-%: $(RUNTIME_TARGET)
 			cargo test --package conformance --test conformance conformance_comparisons_tests -- --nocapture ;; \
 		conversions) \
 			cargo test --package conformance --test conformance conformance_conversions_tests -- --nocapture ;; \
+		fields) \
+			cargo test --package conformance --test conformance conformance_fields_tests -- --nocapture ;; \
 		fp-math) \
 			cargo test --package conformance --test conformance conformance_fp_math_tests -- --nocapture ;; \
 		int-math) \
@@ -129,6 +131,7 @@ conformance-%: $(RUNTIME_TARGET)
 			echo "  conformance-basic          - Basic CEL features (literals, operators, variables)"; \
 			echo "  conformance-comparisons    - Comparison operators (==, !=, <, >, <=, >=)"; \
 			echo "  conformance-conversions    - Type conversions (int(), uint(), double(), etc.)"; \
+			echo "  conformance-fields         - Map field access, has(), quoted keys, qualified names"; \
 			echo "  conformance-fp-math        - Floating point math operations"; \
 			echo "  conformance-int-math       - Integer math operations"; \
 			echo "  conformance-lists          - List operations (indexing, size, in, etc.)"; \
@@ -169,6 +172,8 @@ conformance-sections-%: $(RUNTIME_TARGET)
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_comparisons_tests -- --nocapture ;; \
 		conversions) \
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_conversions_tests -- --nocapture ;; \
+		fields) \
+			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_fields_tests -- --nocapture ;; \
 		fp-math) \
 			CONFORMANCE_LIST=1 cargo test --package conformance --test conformance conformance_fp_math_tests -- --nocapture ;; \
 		int-math) \
@@ -247,6 +252,7 @@ conformance-list:
 	@echo "  conformance-basic          - Basic CEL features (literals, operators, variables)"
 	@echo "  conformance-comparisons    - Comparison operators (==, !=, <, >, <=, >=)"
 	@echo "  conformance-conversions    - Type conversions (int(), uint(), double(), etc.)"
+	@echo "  conformance-fields         - Map field access, has(), quoted keys, qualified names"
 	@echo "  conformance-fp-math        - Floating point math operations"
 	@echo "  conformance-int-math       - Integer math operations"
 	@echo "  conformance-lists          - List operations (indexing, size, in, etc.)"
@@ -321,6 +327,11 @@ lint: $(RUNTIME_TARGET)
 	cargo +nightly fmt --all -- --check
 	taplo fmt --check
 	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo clippy --workspace -- -D warnings
+	# ferricel-core must also build and test without its default `k8s-vap`
+	# feature. Scoped to this one package: a `--workspace` run would still
+	# turn `k8s-vap` on, because the `ferricel` crate always requests it on
+	# its `ferricel-core` dependency.
+	K8S_OPENAPI_ENABLED_VERSION=$(K8S_VERSION) cargo clippy -p ferricel-core --no-default-features --all-targets -- -D warnings
 
 # Auto-fix clippy warnings where possible
 .PHONY: lint-fix

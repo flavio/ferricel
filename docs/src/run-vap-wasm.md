@@ -17,29 +17,61 @@ let result: serde_json::Value = serde_json::from_str(&result_str)?;
 // result["accepted"] == true / false
 ```
 
+`build()` (and `build_pre()`) check the module's ABI version before they
+link it. A module compiled by a ferricel with an incompatible ABI makes
+`build()` return `Err`, naming both ABI versions. See
+[ABI Version](wasm-spec.md#abi-version) in the Wasm Spec chapter.
+
 ## Runtime Errors and `failurePolicy`
 
 `eval()` returns `Err` when a `matchConditions` or `validations` expression
 fails at runtime (for example, division by zero, an unbound variable, or a
-`kw.k8s` extension that returns an error). The error message starts with
+`kw.k8s` extension that returns an error). The error downcasts to
+`ferricel_core::CelRuntimeError`. Its `Display` text starts with
 `CEL runtime error:`. The module never turns such a failure into an accept or
 a reject response.
 
-The host is responsible for applying the policy's `failurePolicy`:
+`eval()` can also fail for reasons that are not CEL runtime errors: an
+epoch-deadline interrupt, a memory limit, a Wasm trap, or a bug in a host
+extension. These errors do not downcast to `CelRuntimeError`.
+
+The host is responsible for applying the policy's `failurePolicy`. With
+`downcast_ref`, the host can tell a CEL runtime error apart from other
+failures and decide how each kind maps to `failurePolicy`:
 
 ```rust
+use ferricel_core::CelRuntimeError;
+
 match engine.eval(Some(&bindings_json)) {
     Ok(result_str) => {
         let result: serde_json::Value = serde_json::from_str(&result_str)?;
         // result["accepted"] == true / false
     }
-    Err(err) => {
-        // Evaluation failed. Apply the policy's failurePolicy:
-        //   Fail   -> deny the request, report `err`
-        //   Ignore -> allow the request
-    }
+    Err(err) => match err.downcast_ref::<CelRuntimeError>() {
+        Some(cel_err) => {
+            // The CEL expression evaluated to an error. Apply failurePolicy:
+            //   Fail   -> deny the request, report `cel_err.message`
+            //   Ignore -> allow the request
+        }
+        None => {
+            // Not a CEL runtime error: a deadline, a resource limit, a trap,
+            // or a host bug. The host decides how to handle it.
+        }
+    },
 }
 ```
+
+`CelRuntimeError` has two fields:
+
+| Field     | Type                      | Description                                                          |
+| --------- | ------------------------- | -------------------------------------------------------------------- |
+| `message` | `String`                  | The error message, for example `divide by zero`.                     |
+| `origin`  | `Option<ExtensionOrigin>` | The host extension that produced the error, or `None`.               |
+
+`ExtensionOrigin` holds the `namespace` (for example `Some("kw.k8s")`) and
+the `function` (for example `get`) of the extension call. When the `params`
+lookup fails, `origin` is `kw.k8s.get`. A host can use this to tell a failed
+`params` lookup apart from other runtime errors.
 
 See [Runtime Errors](vap.md#runtime-errors) for the exact rules.
 

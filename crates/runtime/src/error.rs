@@ -1,34 +1,22 @@
 //! Error handling for CEL runtime.
 //!
 //! `CelError` is the standard error type for all internal (Layer 2) runtime
-//! functions. The ABI boundary (Layer 1, `extern "C"`) converts it to a
-//! `CelValue::Error` heap allocation before returning to Wasm callers.
+//! functions. It is an alias for [`ferricel_types::CelRuntimeError`]. The
+//! ABI boundary (Layer 1, `extern "C"`) converts it to a `CelValue::Error`
+//! heap allocation before returning to Wasm callers.
 //!
 //! When a runtime error occurs (divide by zero, overflow, out of bounds, etc.),
-//! the guest runtime calls cel_abort which terminates execution and returns
-//! the error to the host.
+//! the guest runtime calls `cel_abort` with the JSON-encoded error. The host
+//! stops execution and returns the error to its caller.
 
 /// The error type returned by all internal (Layer 2) runtime functions.
 ///
-/// At the ABI boundary the wrapper converts this to `CelValue::Error(msg)`.
-#[derive(Debug, Clone, PartialEq)]
-pub struct CelError(pub String);
+/// At the ABI boundary the wrapper converts this to `CelValue::Error(err)`.
+pub use ferricel_types::CelRuntimeError as CelError;
 
-impl CelError {
-    pub fn new(msg: impl Into<String>) -> Self {
-        CelError(msg.into())
-    }
-
-    /// Convert to a heap-allocated `CelValue::Error`, consuming `self`.
-    pub fn into_cel_value(self) -> crate::types::CelValue {
-        crate::types::CelValue::Error(self.0)
-    }
-}
-
-impl std::fmt::Display for CelError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
+/// Convert a `CelError` to a heap-allocated `CelValue::Error`, consuming it.
+pub fn into_cel_value(err: CelError) -> crate::types::CelValue {
+    crate::types::CelValue::Error(err)
 }
 
 /// Convenience alias for `Result<T, CelError>`.
@@ -37,11 +25,11 @@ pub type CelResult<T> = Result<T, CelError>;
 /// Consume a `CelResult<CelValue>` and box it into a raw pointer for the ABI.
 ///
 /// On `Ok(v)` → `Box::into_raw(Box::new(v))`
-/// On `Err(e)` → `Box::into_raw(Box::new(CelValue::Error(e.0)))`
+/// On `Err(e)` → `Box::into_raw(Box::new(CelValue::Error(e)))`
 pub fn into_raw_result(r: CelResult<crate::types::CelValue>) -> *mut crate::types::CelValue {
     Box::into_raw(Box::new(match r {
         Ok(v) => v,
-        Err(e) => e.into_cel_value(),
+        Err(e) => into_cel_value(e),
     }))
 }
 
@@ -49,7 +37,7 @@ pub fn into_raw_result(r: CelResult<crate::types::CelValue>) -> *mut crate::type
 //
 // Arguments:
 // * `packed` - Packed i64 containing pointer (lower 32 bits) and length (upper 32 bits)
-//              of the error message string in Wasm memory
+//              of the JSON-encoded `CelRuntimeError` in Wasm memory
 //
 // Only available when compiling to Wasm target
 #[cfg(target_arch = "wasm32")]
@@ -58,22 +46,26 @@ unsafe extern "C" {
     pub fn cel_abort(packed: i64) -> !;
 }
 
-/// Abort execution with an error message.
+/// Abort execution with a structured error.
 ///
 /// This function:
-/// 1. Gets the pointer and length of the error message
-/// 2. Packs them into an i64: pointer in low 32 bits, length in high 32 bits
-/// 3. Calls the host's cel_abort function which terminates execution
-///
-/// # Arguments
-/// * `message` - The error message to report
+/// 1. Serializes the error to JSON
+/// 2. Packs the pointer and length into an i64: pointer in low 32 bits,
+///    length in high 32 bits
+/// 3. Calls the host's `cel_abort` function, which terminates execution
 ///
 /// # Note
 /// This function never returns - execution is terminated by the host.
 #[cfg(target_arch = "wasm32")]
-pub fn abort_with_error(message: &str) -> ! {
-    let ptr = message.as_ptr() as u64;
-    let len = message.len() as u64;
+pub fn abort_with_cel_error(error: &CelError) -> ! {
+    // `CelRuntimeError` holds only strings, so serialization cannot fail.
+    let json = serde_json::to_vec(error).expect("serializing CelRuntimeError never fails");
+    // `json` must stay alive until the host has read it. The host never
+    // returns from `cel_abort`, so leaking the buffer is correct.
+    let json = json.leak();
+
+    let ptr = json.as_ptr() as u64;
+    let len = json.len() as u64;
 
     // Pack: low 32 bits = pointer, high 32 bits = length
     // Consistent with encode_ptr_len convention used elsewhere.
@@ -82,11 +74,28 @@ pub fn abort_with_error(message: &str) -> ! {
     unsafe { cel_abort(packed as i64) }
 }
 
-/// Test/mock version of abort_with_error for non-Wasm targets.
-/// Just panics with the error message.
+/// Test/mock version of `abort_with_cel_error` for non-Wasm targets.
+///
+/// There is no host on a native target, so this function panics. The panic
+/// message is the `Display` text of the error, followed by the extension
+/// origin when there is one.
 #[cfg(not(target_arch = "wasm32"))]
+pub fn abort_with_cel_error(error: &CelError) -> ! {
+    match &error.origin {
+        Some(origin) => panic!("{error} (from extension {origin})"),
+        None => panic!("{error}"),
+    }
+}
+
+/// Abort execution with an error message.
+///
+/// This is a shortcut for [`abort_with_cel_error`] with an error that has
+/// no extension origin.
+///
+/// # Note
+/// This function never returns - execution is terminated by the host.
 pub fn abort_with_error(message: &str) -> ! {
-    panic!("{}", message);
+    abort_with_cel_error(&CelError::new(message))
 }
 
 /// Abort Wasm execution if `ptr` points to a `CelValue::Error`; no-op otherwise.
@@ -113,8 +122,8 @@ pub unsafe extern "C" fn cel_abort_if_error(ptr: *mut crate::types::CelValue) {
     if ptr.is_null() {
         return;
     }
-    if let crate::types::CelValue::Error(msg) = unsafe { &*ptr } {
-        abort_with_error(msg);
+    if let crate::types::CelValue::Error(err) = unsafe { &*ptr } {
+        abort_with_cel_error(err);
     }
 }
 
@@ -142,7 +151,9 @@ macro_rules! cel_abort {
 /// # Returns
 /// * Pointer to a heap-allocated CelValue::Error
 pub fn create_error_value(message: &str) -> *mut crate::types::CelValue {
-    Box::into_raw(Box::new(crate::types::CelValue::Error(message.to_string())))
+    Box::into_raw(Box::new(crate::types::CelValue::Error(CelError::new(
+        message,
+    ))))
 }
 
 /// Read a `CelValue` from a raw pointer, aborting hard if null.

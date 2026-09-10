@@ -2,7 +2,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use ferricel_core::{compiler, runtime, runtime::Extensions};
+use ferricel_core::{CelRuntimeError, ExtensionOrigin, compiler, runtime, runtime::Extensions};
 use ferricel_types::extensions::ExtensionDecl;
 
 use crate::common::*;
@@ -553,9 +553,23 @@ fn test_extension_err_becomes_cel_evaluation_error() {
         .build()
         .expect("build failed")
         .eval(None);
-    assert!(result.is_err());
-    let msg = format!("{:#}", result.unwrap_err());
+    let err = result.expect_err("expected a runtime error");
+    let msg = format!("{err:#}");
     assert!(msg.contains("boom"), "expected 'boom', got: {msg}");
+
+    // The error downcasts to `CelRuntimeError` and records the extension
+    // that produced it.
+    let cel_err = err
+        .downcast_ref::<CelRuntimeError>()
+        .expect("error must downcast to CelRuntimeError");
+    assert_eq!(cel_err.message, "boom");
+    assert_eq!(
+        cel_err.origin,
+        Some(ExtensionOrigin {
+            namespace: None,
+            function: "failing".to_string(),
+        })
+    );
 }
 
 #[test]
@@ -649,12 +663,17 @@ fn test_extension_error_argument_short_circuits_before_host_call() {
         !called.load(Ordering::SeqCst),
         "closure must not be invoked"
     );
-    assert!(result.is_err());
-    let msg = format!("{:#}", result.unwrap_err());
+    let err = result.expect_err("expected a runtime error");
+    let msg = format!("{err:#}");
     assert!(
         msg.contains("divide by zero"),
         "expected 'divide by zero', got: {msg}"
     );
+    // The error came from `1 / 0`, not from the extension. It has no origin.
+    let cel_err = err
+        .downcast_ref::<CelRuntimeError>()
+        .expect("error must downcast to CelRuntimeError");
+    assert_eq!(cel_err.origin, None);
 }
 
 #[test]
@@ -714,11 +733,22 @@ fn test_extension_unknown_extension_is_evaluation_error_not_a_map() {
         .build()
         .expect("build failed")
         .eval(Some(r#"{"x": -5}"#));
-    assert!(result.is_err());
-    let msg = format!("{:#}", result.unwrap_err());
+    let err = result.expect_err("expected a runtime error");
+    let msg = format!("{err:#}");
     assert!(
         msg.contains("Extension not found"),
         "expected 'Extension not found', got: {msg}"
+    );
+    // A missing implementation is reported against the extension call site.
+    let cel_err = err
+        .downcast_ref::<CelRuntimeError>()
+        .expect("error must downcast to CelRuntimeError");
+    assert_eq!(
+        cel_err.origin,
+        Some(ExtensionOrigin {
+            namespace: None,
+            function: "abs".to_string(),
+        })
     );
 }
 

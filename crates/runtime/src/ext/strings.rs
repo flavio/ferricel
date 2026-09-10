@@ -5,7 +5,7 @@
 //! `split`, `substring`, `trim`, `reverse`, `format`, and `strings.quote`.
 
 use crate::{
-    error::read_ptr,
+    error::{CelError, read_ptr},
     types::{CelMapKey, CelValue},
 };
 
@@ -413,7 +413,7 @@ pub unsafe extern "C" fn cel_string_char_at(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "charAt: receiver is not a string".to_string(),
+                "charAt: receiver is not a string".into(),
             )));
         }
     };
@@ -421,13 +421,13 @@ pub unsafe extern "C" fn cel_string_char_at(
         CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "charAt: index is not an int".to_string(),
+                "charAt: index is not an int".into(),
             )));
         }
     };
     if idx < 0 {
         return Box::into_raw(Box::new(CelValue::Error(
-            "charAt: index out of range".to_string(),
+            "charAt: index out of range".into(),
         )));
     }
     let idx = idx as usize;
@@ -438,7 +438,7 @@ pub unsafe extern "C" fn cel_string_char_at(
     match s.chars().nth(idx) {
         Some(c) => Box::into_raw(Box::new(CelValue::String(c.to_string()))),
         None => Box::into_raw(Box::new(CelValue::Error(
-            "charAt: index out of range".to_string(),
+            "charAt: index out of range".into(),
         ))),
     }
 }
@@ -463,7 +463,7 @@ pub unsafe extern "C" fn cel_string_index_of_offset(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "indexOf: receiver is not a string".to_string(),
+                "indexOf: receiver is not a string".into(),
             )));
         }
     };
@@ -471,7 +471,7 @@ pub unsafe extern "C" fn cel_string_index_of_offset(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "indexOf: argument is not a string".to_string(),
+                "indexOf: argument is not a string".into(),
             )));
         }
     };
@@ -479,21 +479,21 @@ pub unsafe extern "C" fn cel_string_index_of_offset(
         CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "indexOf: offset is not an int".to_string(),
+                "indexOf: offset is not an int".into(),
             )));
         }
     };
     if offset < 0 {
         return Box::into_raw(Box::new(CelValue::Error(
-            "indexOf: offset out of range".to_string(),
+            "indexOf: offset out of range".into(),
         )));
     }
     let cp_len = s.chars().count() as i64;
     if offset > cp_len {
-        return Box::into_raw(Box::new(CelValue::Error(format!(
+        return Box::into_raw(Box::new(CelValue::Error(CelError::new(format!(
             "index out of range: {}",
             offset
-        ))));
+        )))));
     }
     let result = find_index_of(&s, &sub, offset as usize);
     Box::into_raw(Box::new(CelValue::Int(result)))
@@ -519,7 +519,7 @@ pub unsafe extern "C" fn cel_string_last_index_of_offset(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "lastIndexOf: receiver is not a string".to_string(),
+                "lastIndexOf: receiver is not a string".into(),
             )));
         }
     };
@@ -527,7 +527,7 @@ pub unsafe extern "C" fn cel_string_last_index_of_offset(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "lastIndexOf: argument is not a string".to_string(),
+                "lastIndexOf: argument is not a string".into(),
             )));
         }
     };
@@ -535,21 +535,21 @@ pub unsafe extern "C" fn cel_string_last_index_of_offset(
         CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "lastIndexOf: offset is not an int".to_string(),
+                "lastIndexOf: offset is not an int".into(),
             )));
         }
     };
     if offset < 0 {
         return Box::into_raw(Box::new(CelValue::Error(
-            "lastIndexOf: offset out of range".to_string(),
+            "lastIndexOf: offset out of range".into(),
         )));
     }
     let cp_len = s.chars().count() as i64;
     if offset > cp_len {
-        return Box::into_raw(Box::new(CelValue::Error(format!(
+        return Box::into_raw(Box::new(CelValue::Error(CelError::new(format!(
             "index out of range: {}",
             offset
-        ))));
+        )))));
     }
     let result = find_last_index_of(&s, &sub, offset);
     Box::into_raw(Box::new(CelValue::Int(result)))
@@ -569,7 +569,7 @@ pub unsafe extern "C" fn cel_string_lower_ascii(string_ptr: *mut CelValue) -> *m
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "lowerAscii: receiver is not a string".to_string(),
+                "lowerAscii: receiver is not a string".into(),
             )));
         }
     };
@@ -591,7 +591,7 @@ pub unsafe extern "C" fn cel_string_upper_ascii(string_ptr: *mut CelValue) -> *m
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "upperAscii: receiver is not a string".to_string(),
+                "upperAscii: receiver is not a string".into(),
             )));
         }
     };
@@ -619,7 +619,7 @@ pub unsafe extern "C" fn cel_string_replace(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "replace: receiver is not a string".to_string(),
+                "replace: receiver is not a string".into(),
             )));
         }
     };
@@ -627,7 +627,7 @@ pub unsafe extern "C" fn cel_string_replace(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "replace: 'old' is not a string".to_string(),
+                "replace: 'old' is not a string".into(),
             )));
         }
     };
@@ -635,7 +635,7 @@ pub unsafe extern "C" fn cel_string_replace(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "replace: 'new' is not a string".to_string(),
+                "replace: 'new' is not a string".into(),
             )));
         }
     };
@@ -666,7 +666,7 @@ pub unsafe extern "C" fn cel_string_replace_n(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "replace: receiver is not a string".to_string(),
+                "replace: receiver is not a string".into(),
             )));
         }
     };
@@ -674,7 +674,7 @@ pub unsafe extern "C" fn cel_string_replace_n(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "replace: 'old' is not a string".to_string(),
+                "replace: 'old' is not a string".into(),
             )));
         }
     };
@@ -682,7 +682,7 @@ pub unsafe extern "C" fn cel_string_replace_n(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "replace: 'new' is not a string".to_string(),
+                "replace: 'new' is not a string".into(),
             )));
         }
     };
@@ -690,13 +690,13 @@ pub unsafe extern "C" fn cel_string_replace_n(
         CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "replace: count is not an int".to_string(),
+                "replace: count is not an int".into(),
             )));
         }
     };
     if n < 0 {
         return Box::into_raw(Box::new(CelValue::Error(
-            "replace: count must be non-negative".to_string(),
+            "replace: count must be non-negative".into(),
         )));
     }
     Box::into_raw(Box::new(CelValue::String(s.replacen(
@@ -724,7 +724,7 @@ pub unsafe extern "C" fn cel_string_split(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "split: receiver is not a string".to_string(),
+                "split: receiver is not a string".into(),
             )));
         }
     };
@@ -732,7 +732,7 @@ pub unsafe extern "C" fn cel_string_split(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "split: separator is not a string".to_string(),
+                "split: separator is not a string".into(),
             )));
         }
     };
@@ -763,7 +763,7 @@ pub unsafe extern "C" fn cel_string_split_n(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "split: receiver is not a string".to_string(),
+                "split: receiver is not a string".into(),
             )));
         }
     };
@@ -771,7 +771,7 @@ pub unsafe extern "C" fn cel_string_split_n(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "split: separator is not a string".to_string(),
+                "split: separator is not a string".into(),
             )));
         }
     };
@@ -779,13 +779,13 @@ pub unsafe extern "C" fn cel_string_split_n(
         CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "split: limit is not an int".to_string(),
+                "split: limit is not an int".into(),
             )));
         }
     };
     if n < -1 {
         return Box::into_raw(Box::new(CelValue::Error(
-            "split: limit must be >= -1".to_string(),
+            "split: limit must be >= -1".into(),
         )));
     }
     // n == -1 means unlimited (split on all occurrences)
@@ -819,7 +819,7 @@ pub unsafe extern "C" fn cel_string_substring(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "substring: receiver is not a string".to_string(),
+                "substring: receiver is not a string".into(),
             )));
         }
     };
@@ -827,20 +827,20 @@ pub unsafe extern "C" fn cel_string_substring(
         CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "substring: start is not an int".to_string(),
+                "substring: start is not an int".into(),
             )));
         }
     };
     if start < 0 {
         return Box::into_raw(Box::new(CelValue::Error(
-            "substring: index out of range".to_string(),
+            "substring: index out of range".into(),
         )));
     }
     let start = start as usize;
     let cp_len = s.chars().count();
     if start > cp_len {
         return Box::into_raw(Box::new(CelValue::Error(
-            "substring: index out of range".to_string(),
+            "substring: index out of range".into(),
         )));
     }
     let result: String = s.chars().skip(start).collect();
@@ -867,7 +867,7 @@ pub unsafe extern "C" fn cel_string_substring_range(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "substring: receiver is not a string".to_string(),
+                "substring: receiver is not a string".into(),
             )));
         }
     };
@@ -875,7 +875,7 @@ pub unsafe extern "C" fn cel_string_substring_range(
         CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "substring: start is not an int".to_string(),
+                "substring: start is not an int".into(),
             )));
         }
     };
@@ -883,13 +883,13 @@ pub unsafe extern "C" fn cel_string_substring_range(
         CelValue::Int(i) => i,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "substring: end is not an int".to_string(),
+                "substring: end is not an int".into(),
             )));
         }
     };
     if start < 0 || end < 0 {
         return Box::into_raw(Box::new(CelValue::Error(
-            "substring: index out of range".to_string(),
+            "substring: index out of range".into(),
         )));
     }
     let start = start as usize;
@@ -897,12 +897,12 @@ pub unsafe extern "C" fn cel_string_substring_range(
     let cp_len = s.chars().count();
     if start > cp_len || end > cp_len {
         return Box::into_raw(Box::new(CelValue::Error(
-            "substring: index out of range".to_string(),
+            "substring: index out of range".into(),
         )));
     }
     if end < start {
         return Box::into_raw(Box::new(CelValue::Error(
-            "substring: end index must be >= start index".to_string(),
+            "substring: end index must be >= start index".into(),
         )));
     }
     let result: String = s.chars().skip(start).take(end - start).collect();
@@ -923,7 +923,7 @@ pub unsafe extern "C" fn cel_string_trim(string_ptr: *mut CelValue) -> *mut CelV
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "trim: receiver is not a string".to_string(),
+                "trim: receiver is not a string".into(),
             )));
         }
     };
@@ -944,7 +944,7 @@ pub unsafe extern "C" fn cel_string_reverse(string_ptr: *mut CelValue) -> *mut C
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "reverse: receiver is not a string".to_string(),
+                "reverse: receiver is not a string".into(),
             )));
         }
     };
@@ -966,7 +966,7 @@ pub unsafe extern "C" fn cel_strings_quote(string_ptr: *mut CelValue) -> *mut Ce
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "strings.quote: argument is not a string".to_string(),
+                "strings.quote: argument is not a string".into(),
             )));
         }
     };
@@ -1012,7 +1012,7 @@ pub unsafe extern "C" fn cel_string_format(
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "format: receiver is not a string".to_string(),
+                "format: receiver is not a string".into(),
             )));
         }
     };
@@ -1020,14 +1020,14 @@ pub unsafe extern "C" fn cel_string_format(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "format: argument is not a list".to_string(),
+                "format: argument is not a list".into(),
             )));
         }
     };
 
     match format_string(&fmt, &args) {
         Ok(s) => Box::into_raw(Box::new(CelValue::String(s))),
-        Err(e) => Box::into_raw(Box::new(CelValue::Error(e))),
+        Err(e) => Box::into_raw(Box::new(CelValue::Error(CelError::new(e)))),
     }
 }
 

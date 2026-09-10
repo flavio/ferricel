@@ -6,7 +6,36 @@
 //!
 //! See the [Host Extensions](https://flavio.github.io/ferricel/host-extensions.html)
 //! chapter of the user guide for details on flat extensions and builder chains.
+//!
+//! # Runtime errors
+//!
+//! When the CEL expression produces a runtime error (divide by zero, an
+//! unbound variable, a failed extension call, and so on), [`Engine::eval`]
+//! and [`Engine::eval_proto`] return an `anyhow::Error` that downcasts to
+//! [`CelRuntimeError`]:
+//!
+//! ```ignore
+//! match engine.eval(Some(bindings)) {
+//!     Ok(result) => { /* JSON-encoded CEL value */ }
+//!     Err(err) => match err.downcast_ref::<CelRuntimeError>() {
+//!         Some(cel_err) => { /* the CEL expression evaluated to an error */ }
+//!         None => { /* deadline, memory limit, trap, host bug, ... */ }
+//!     },
+//! }
+//! ```
+//!
+//! Other failures (an epoch-deadline interrupt, a memory-limit abort, a Wasm
+//! trap, a missing export) do not downcast to [`CelRuntimeError`].
+//!
+//! # ABI version
+//!
+//! [`Builder::build_pre`] checks the module's `ferricel.abi-version` custom
+//! section against [`ferricel_types::ABI_VERSION`] and returns `Err` on a
+//! mismatch or a missing section, before it links or instantiates the
+//! module. This check runs only for [`Builder::with_wasm`]; see
+//! [`Builder::with_module`] for the pre-compiled path.
 
+pub use ferricel_types::{CelRuntimeError, ExtensionOrigin};
 use ferricel_types::{
     LogLevel,
     extensions::{ExtensionCallPayload, ExtensionCallResponse, ExtensionDecl},
@@ -161,6 +190,52 @@ fn dispatch_extension(
     }
 
     (ext.implementation)(payload.args.clone())
+}
+
+/// Decode the bytes that the guest passes to `cel_abort`.
+///
+/// The guest sends a JSON-encoded [`CelRuntimeError`]. Any other content is
+/// a bug in the guest, not a CEL runtime error. It produces a generic error
+/// that does not downcast to [`CelRuntimeError`].
+fn parse_abort_payload(bytes: &[u8]) -> Result<CelRuntimeError, wasmtime::Error> {
+    serde_json::from_slice::<CelRuntimeError>(bytes).map_err(|e| {
+        wasmtime::Error::msg(format!("Invalid cel_abort payload from the guest: {}", e))
+    })
+}
+
+/// Make sure that `wasm_bytes` has the ABI version this runtime supports.
+///
+/// Reads the `ferricel.abi-version` custom section with [`crate::inspect`].
+/// This runs only when the caller supplies raw Wasm bytes
+/// ([`Builder::with_wasm`]). It does not run when the caller supplies a
+/// pre-compiled [`wasmtime::Module`] ([`Builder::with_module`]), because the
+/// raw bytes are not available at that point. A caller who uses
+/// `with_module` and wants the same check can call
+/// [`crate::abi_version`] on the bytes before compiling the module.
+fn check_abi_version(wasm_bytes: &[u8]) -> Result<(), anyhow::Error> {
+    let info = crate::inspect::inspect(wasm_bytes)?;
+    match info.abi_version {
+        Some(v) if v == ferricel_types::ABI_VERSION => Ok(()),
+        Some(v) => Err(anyhow::anyhow!(
+            "module ABI version {v} is not supported by this runtime (ABI version {}); \
+             recompile the module with a matching ferricel version",
+            ferricel_types::ABI_VERSION
+        )),
+        None => {
+            let compiled_by = info
+                .producers
+                .iter()
+                .find(|f| f.name == "processed-by")
+                .and_then(|f| f.values.iter().find(|v| v.name == "ferricel"))
+                .map(|v| format!(" (compiled by ferricel {})", v.version))
+                .unwrap_or_default();
+            Err(anyhow::anyhow!(
+                "module has no ferricel.abi-version section{compiled_by}; this runtime \
+                 supports ABI version {}; recompile the module with a matching ferricel version",
+                ferricel_types::ABI_VERSION
+            ))
+        }
+    }
 }
 
 /// Host state that holds data accessible to Wasm host functions.
@@ -538,6 +613,10 @@ impl Builder {
     ///
     /// These bytes are parsed and pre-linked during [`build`](Self::build), so
     /// invalid Wasm is rejected eagerly rather than on the first [`eval`](Engine::eval) call.
+    ///
+    /// [`build_pre`](Self::build_pre) also checks the module's ABI version
+    /// against [`ferricel_types::ABI_VERSION`] and returns `Err` on a
+    /// mismatch or a missing `ferricel.abi-version` section.
     pub fn with_wasm(mut self, bytes: Vec<u8>) -> Self {
         self.wasm_bytes = Some(bytes);
         self
@@ -552,6 +631,11 @@ impl Builder {
     /// compile the module.
     ///
     /// Takes priority over [`with_wasm`](Self::with_wasm) when both are set.
+    ///
+    /// **This path skips the ABI version check** that [`with_wasm`](Self::with_wasm)
+    /// runs, because the raw bytes are no longer available once a
+    /// [`wasmtime::Module`] is compiled. Call [`crate::abi_version`] on the
+    /// bytes yourself before compiling the module, if you need the check.
     pub fn with_module(mut self, module: Module) -> Self {
         self.wasm_module = Some(module);
         self
@@ -569,7 +653,9 @@ impl Builder {
     /// via [`EnginePre::rehydrate`], which is where per-evaluation-context state
     /// (e.g. extension function implementations) is injected.
     ///
-    /// Returns `Err` if no Wasm was provided or if compilation/linking fails.
+    /// Returns `Err` if no Wasm was provided, if the module's ABI version
+    /// does not match (see [`Builder::with_wasm`]), or if compilation/linking
+    /// fails.
     pub fn build_pre(self) -> Result<EnginePre, anyhow::Error> {
         let wasm_engine = self.wasm_engine.unwrap_or_default();
 
@@ -581,6 +667,7 @@ impl Builder {
                     "no Wasm provided: call with_wasm() or with_module() before build_pre()"
                 )
             })?;
+            check_abi_version(&bytes)?;
             Module::from_binary(&wasm_engine, &bytes)?
         };
 
@@ -670,8 +757,10 @@ impl Builder {
     }
 
     fn register_cel_abort(linker: &mut Linker<HostState>) -> Result<(), anyhow::Error> {
-        // The guest runtime calls this when a runtime error occurs (divide by zero, overflow, etc.)
+        // The guest runtime calls this when a runtime error occurs (divide by
+        // zero, overflow, a failed extension call, etc.).
         // The packed parameter contains: lower 32 bits = pointer, upper 32 bits = length.
+        // The bytes hold a JSON-encoded `CelRuntimeError`.
         linker.func_wrap(
             "env",
             "cel_abort",
@@ -687,14 +776,12 @@ impl Builder {
                 let mut buffer = vec![0u8; length as usize];
                 memory.read(&caller, address as usize, &mut buffer)?;
 
-                let error_message = std::str::from_utf8(&buffer).map_err(|e| {
-                    wasmtime::Error::msg(format!("Invalid UTF-8 in error message: {}", e))
-                })?;
+                let error = parse_abort_payload(&buffer)?;
 
-                Err(wasmtime::Error::msg(format!(
-                    "CEL runtime error: {}",
-                    error_message
-                )))
+                // `Error::new` keeps the concrete type. The caller of
+                // `Engine::eval` can get it back with
+                // `err.downcast_ref::<CelRuntimeError>()`.
+                Err(wasmtime::Error::new(error))
             },
         )?;
         Ok(())
@@ -934,8 +1021,17 @@ impl Engine {
     /// Extension implementations registered via [`Builder::with_extension`] are
     /// dispatched when the Wasm program calls an extension function.
     ///
-    /// Returns a JSON-encoded CEL value string, or `Err` if the expression
-    /// produced a runtime error.
+    /// Returns a JSON-encoded CEL value string, or `Err` if the evaluation
+    /// failed.
+    ///
+    /// # Errors
+    ///
+    /// If the CEL expression produced a runtime error, the returned error
+    /// downcasts to [`CelRuntimeError`]. Its `origin` field is `Some` when a
+    /// host extension produced the error. Other failures (an epoch-deadline
+    /// interrupt, a memory-limit abort, a Wasm trap, a missing export, a bug
+    /// in a host extension) do not downcast to [`CelRuntimeError`]. See the
+    /// [module docs](self#runtime-errors).
     pub fn eval(&self, bindings_json: Option<&str>) -> Result<String, anyhow::Error> {
         self.eval_raw(bindings_json.unwrap_or("{}").as_bytes(), "evaluate")
     }
@@ -947,8 +1043,13 @@ impl Engine {
     /// which preserves full type fidelity for all CEL types (bytes, uint, timestamp,
     /// duration, etc.) that would be lost in a JSON round-trip.
     ///
-    /// Returns a JSON-encoded CEL value string, or `Err` if the expression
-    /// produced a runtime error.
+    /// Returns a JSON-encoded CEL value string, or `Err` if the evaluation
+    /// failed.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Engine::eval`]: a CEL runtime error downcasts to
+    /// [`CelRuntimeError`], other failures do not.
     pub fn eval_proto(&self, bindings_proto: &[u8]) -> Result<String, anyhow::Error> {
         self.eval_raw(bindings_proto, "evaluate_proto")
     }
@@ -957,6 +1058,8 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    use rstest::rstest;
 
     use super::*;
 
@@ -978,8 +1081,16 @@ mod tests {
         }
     }
 
-    #[test]
-    fn dispatch_extension_rejects_too_few_args_without_calling_closure() {
+    #[rstest]
+    #[case::too_few(vec![], "expects 1 argument(s), got 0")]
+    #[case::too_many(
+        vec![serde_json::json!(1), serde_json::json!(2)],
+        "expects 1 argument(s), got 2"
+    )]
+    fn dispatch_extension_rejects_wrong_arity_without_calling_closure(
+        #[case] args: Vec<serde_json::Value>,
+        #[case] expected_msg: &str,
+    ) {
         let called = std::sync::Arc::new(AtomicBool::new(false));
         let called_clone = called.clone();
         let mut extensions = Extensions::new();
@@ -988,31 +1099,11 @@ mod tests {
             Ok(serde_json::Value::Null)
         });
 
-        let result = dispatch_extension(&extensions, &payload(vec![]));
+        let result = dispatch_extension(&extensions, &payload(args));
 
         assert!(!called.load(Ordering::SeqCst));
         let err = result.unwrap_err();
-        assert!(err.contains("expects 1 argument(s), got 0"), "got: {err}");
-    }
-
-    #[test]
-    fn dispatch_extension_rejects_too_many_args_without_calling_closure() {
-        let called = std::sync::Arc::new(AtomicBool::new(false));
-        let called_clone = called.clone();
-        let mut extensions = Extensions::new();
-        extensions.register(test_decl(1), move |_args| {
-            called_clone.store(true, Ordering::SeqCst);
-            Ok(serde_json::Value::Null)
-        });
-
-        let result = dispatch_extension(
-            &extensions,
-            &payload(vec![serde_json::json!(1), serde_json::json!(2)]),
-        );
-
-        assert!(!called.load(Ordering::SeqCst));
-        let err = result.unwrap_err();
-        assert!(err.contains("expects 1 argument(s), got 2"), "got: {err}");
+        assert!(err.contains(expected_msg), "got: {err}");
     }
 
     #[test]
@@ -1048,5 +1139,48 @@ mod tests {
 
         let err = result.unwrap_err();
         assert!(err.contains("Extension not found: myFunc"), "got: {err}");
+    }
+
+    #[rstest]
+    #[case::without_origin(CelRuntimeError::new("divide by zero"))]
+    #[case::with_origin(CelRuntimeError::from_extension("not found", Some("kw.k8s"), "get"))]
+    fn parse_abort_payload_round_trips_json(#[case] expected: CelRuntimeError) {
+        let payload = serde_json::to_vec(&expected).unwrap();
+
+        let err = parse_abort_payload(&payload).unwrap();
+
+        assert_eq!(err, expected);
+    }
+
+    #[rstest]
+    #[case::plain_text(b"divide by zero")]
+    #[case::invalid_utf8(&[0xff, 0xfe])]
+    #[case::wrong_shape(br#"{"error": "divide by zero"}"#)]
+    fn parse_abort_payload_rejects_non_cel_runtime_error(#[case] bytes: &[u8]) {
+        // The guest must send a JSON `CelRuntimeError`. Anything else is a
+        // guest bug and must not look like a CEL runtime error.
+        let err = parse_abort_payload(bytes).unwrap_err();
+
+        assert!(
+            err.to_string().contains("Invalid cel_abort payload"),
+            "got: {err}"
+        );
+        let anyhow_err: anyhow::Error = err.into();
+        assert!(anyhow_err.downcast_ref::<CelRuntimeError>().is_none());
+    }
+
+    #[test]
+    fn cel_runtime_error_survives_wasmtime_and_anyhow_conversion() {
+        // This is the path a guest abort takes: `wasmtime::Error::new` in the
+        // host function, then `?` in `eval_raw` converts it to `anyhow::Error`.
+        let original = CelRuntimeError::from_extension("boom", None::<String>, "f");
+        let wasmtime_err = wasmtime::Error::new(original.clone());
+        let anyhow_err: anyhow::Error = wasmtime_err.into();
+
+        assert_eq!(anyhow_err.to_string(), "CEL runtime error: boom");
+        assert_eq!(
+            anyhow_err.downcast_ref::<CelRuntimeError>(),
+            Some(&original)
+        );
     }
 }

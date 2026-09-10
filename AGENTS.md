@@ -86,7 +86,7 @@ The project has three levels of testing:
    - Linter must pass (`make lint`)
    - Consider running conformance tests to check spec compliance
 
-3. **Runtime Stability**: The `runtime` Wasm module is embedded in each output file. The internal API can change freely since there are no backward compatibility concerns. Each Wasm file is self-contained.
+3. **Runtime Stability**: The `runtime` Wasm module is embedded in each output file. The internal API can change freely since there are no backward compatibility concerns. Each Wasm file is self-contained. When you change a guest-host import, export, or payload format, bump `ABI_VERSION` in `ferricel-types`. One example is the `cel_abort` payload, which changed from plain text to JSON. The runtime rejects a module when its ABI version does not match.
 
 4. **Code Organization**:
    - Core logic belongs in `ferricel-core`

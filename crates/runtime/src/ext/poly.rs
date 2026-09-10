@@ -25,7 +25,7 @@ pub unsafe extern "C" fn cel_reverse_poly(receiver_ptr: *mut CelValue) -> *mut C
         CelValue::String(s) => Box::into_raw(Box::new(string_reverse_impl(s))),
         CelValue::Array(v) => Box::into_raw(Box::new(list_reverse_impl(v))),
         _ => Box::into_raw(Box::new(CelValue::Error(
-            "reverse: receiver must be a string or list".to_string(),
+            "reverse: receiver must be a string or list".into(),
         ))),
     }
 }
@@ -49,7 +49,7 @@ pub unsafe extern "C" fn cel_index_of_poly(
                 CelValue::String(s) => s,
                 _ => {
                     return Box::into_raw(Box::new(CelValue::Error(
-                        "indexOf: argument is not a string".to_string(),
+                        "indexOf: argument is not a string".into(),
                     )));
                 }
             };
@@ -65,7 +65,7 @@ pub unsafe extern "C" fn cel_index_of_poly(
             Box::into_raw(Box::new(CelValue::Int(-1)))
         }
         _ => Box::into_raw(Box::new(CelValue::Error(
-            "indexOf: receiver must be a string or list".to_string(),
+            "indexOf: receiver must be a string or list".into(),
         ))),
     }
 }
@@ -89,7 +89,7 @@ pub unsafe extern "C" fn cel_last_index_of_poly(
                 CelValue::String(s) => s,
                 _ => {
                     return Box::into_raw(Box::new(CelValue::Error(
-                        "lastIndexOf: argument is not a string".to_string(),
+                        "lastIndexOf: argument is not a string".into(),
                     )));
                 }
             };
@@ -106,7 +106,7 @@ pub unsafe extern "C" fn cel_last_index_of_poly(
             Box::into_raw(Box::new(CelValue::Int(-1)))
         }
         _ => Box::into_raw(Box::new(CelValue::Error(
-            "lastIndexOf: receiver must be a string or list".to_string(),
+            "lastIndexOf: receiver must be a string or list".into(),
         ))),
     }
 }

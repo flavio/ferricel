@@ -17,8 +17,12 @@
 //!
 //! If a `matchCondition` or `validation` expression evaluates to a CEL runtime
 //! error, the module traps via `cel_abort` (like a plain CEL module does), so
-//! the host receives an error from `evaluate` and can apply the policy's
-//! `failurePolicy`. An error is never treated as a pass or as a rejection.
+//! the host receives an error from `evaluate`. An error is never treated as a
+//! pass or as a rejection.
+//!
+//! On the host, [`Engine::eval`](crate::runtime::Engine::eval) returns an
+//! error that downcasts to [`CelRuntimeError`](crate::CelRuntimeError).
+//! When the `params` lookup fails, the error's `origin` is `kw.k8s.get`.
 //!
 //! A `variables` entry that evaluates to an error is stored as-is; the error
 //! propagates only into the expressions that reference it (matching the lazy

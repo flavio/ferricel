@@ -4,7 +4,10 @@
 
 use base64::{Engine as _, engine::general_purpose};
 
-use crate::{error::read_ptr, types::CelValue};
+use crate::{
+    error::{CelError, read_ptr},
+    types::CelValue,
+};
 
 /// `base64.encode(b) -> string` — encodes bytes to a standard base64 string (with padding).
 ///
@@ -17,7 +20,7 @@ pub unsafe extern "C" fn cel_base64_encode(bytes_ptr: *mut CelValue) -> *mut Cel
         CelValue::Bytes(b) => b,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "base64.encode: argument is not bytes".to_string(),
+                "base64.encode: argument is not bytes".into(),
             )));
         }
     };
@@ -39,7 +42,7 @@ pub unsafe extern "C" fn cel_base64_decode(string_ptr: *mut CelValue) -> *mut Ce
         CelValue::String(s) => s,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "base64.decode: argument is not a string".to_string(),
+                "base64.decode: argument is not a string".into(),
             )));
         }
     };
@@ -50,6 +53,9 @@ pub unsafe extern "C" fn cel_base64_decode(string_ptr: *mut CelValue) -> *mut Ce
 
     match result {
         Ok(bytes) => Box::into_raw(Box::new(CelValue::Bytes(bytes))),
-        Err(e) => Box::into_raw(Box::new(CelValue::Error(format!("base64.decode: {}", e)))),
+        Err(e) => Box::into_raw(Box::new(CelValue::Error(CelError::new(format!(
+            "base64.decode: {}",
+            e
+        ))))),
     }
 }

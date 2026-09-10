@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use ferricel_types::CelRuntimeError;
 use semver::Version;
 use serde::{Deserialize, Serialize, Serializer};
 use url::Url;
@@ -149,9 +150,9 @@ pub enum CelValue {
     /// Error - represents a runtime error that occurred during evaluation
     /// Errors can be propagated through the expression tree and potentially absorbed
     /// by short-circuit operators like && and ||
-    /// Serializes as an error message string
+    /// Serializes as `{"error": "<message>"}`
     #[serde(skip_deserializing)]
-    Error(String),
+    Error(CelRuntimeError),
 
     /// URL - represents a parsed URL value created by the `url()` CEL function.
     /// Stores the parsed `url::Url` and the original input string.
@@ -311,11 +312,11 @@ impl Serialize for CelValue {
                 state.serialize_field("type_value", type_name)?;
                 state.end()
             }
-            CelValue::Error(msg) => {
+            CelValue::Error(err) => {
                 // Serialize as {"error": "message"} to indicate this is an error value
                 use serde::ser::SerializeStruct;
                 let mut state = serializer.serialize_struct("Error", 1)?;
-                state.serialize_field("error", msg)?;
+                state.serialize_field("error", &err.message)?;
                 state.end()
             }
             CelValue::Url(u, _original) => serializer.serialize_str(u.as_str()),

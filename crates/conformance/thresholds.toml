@@ -9,6 +9,7 @@
 [suites]
 basic          = 2
 block_ext      = 8
+fields         = 11
 namespace      = 3
 parse          = 74
 type_deduction = 1

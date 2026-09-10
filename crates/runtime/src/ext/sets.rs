@@ -30,7 +30,7 @@ pub unsafe extern "C" fn cel_sets_contains(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "sets.contains: first argument is not a list".to_string(),
+                "sets.contains: first argument is not a list".into(),
             )));
         }
     };
@@ -38,7 +38,7 @@ pub unsafe extern "C" fn cel_sets_contains(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "sets.contains: second argument is not a list".to_string(),
+                "sets.contains: second argument is not a list".into(),
             )));
         }
     };
@@ -64,7 +64,7 @@ pub unsafe extern "C" fn cel_sets_intersects(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "sets.intersects: first argument is not a list".to_string(),
+                "sets.intersects: first argument is not a list".into(),
             )));
         }
     };
@@ -72,7 +72,7 @@ pub unsafe extern "C" fn cel_sets_intersects(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "sets.intersects: second argument is not a list".to_string(),
+                "sets.intersects: second argument is not a list".into(),
             )));
         }
     };
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn cel_sets_equivalent(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "sets.equivalent: first argument is not a list".to_string(),
+                "sets.equivalent: first argument is not a list".into(),
             )));
         }
     };
@@ -109,7 +109,7 @@ pub unsafe extern "C" fn cel_sets_equivalent(
         CelValue::Array(v) => v,
         _ => {
             return Box::into_raw(Box::new(CelValue::Error(
-                "sets.equivalent: second argument is not a list".to_string(),
+                "sets.equivalent: second argument is not a list".into(),
             )));
         }
     };

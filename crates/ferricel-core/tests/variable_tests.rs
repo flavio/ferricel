@@ -161,3 +161,55 @@ fn test_deeply_nested_field_access() {
     .expect("Failed to execute");
     assert_eq!(result, 99, "deeply nested field should return 99");
 }
+
+// ========================================
+// Missing field errors
+// ========================================
+
+/// A missing map key is a CEL runtime error that names the key, as the
+/// CEL spec `fields` suite requires (`no such key: 'name'`).
+#[test]
+fn test_missing_field_reports_no_such_key() {
+    let input_json = r#"{"holiday": "field"}"#;
+    let result = compile_and_execute_with_input_data("input.name", Some(input_json), None);
+
+    let err = result.expect_err("expected a runtime error");
+    let cel_err = err
+        .downcast_ref::<ferricel_core::CelRuntimeError>()
+        .expect("error must downcast to CelRuntimeError");
+    assert_eq!(cel_err.message, "no such key: 'name'");
+}
+
+/// The missing-field error is a value. `||` absorbs it, so the expression
+/// evaluates to `true` instead of failing.
+#[test]
+fn test_missing_field_error_absorbed_by_or() {
+    let input_json = r#"{"holiday": "field"}"#;
+    let result =
+        compile_and_execute_with_input_data("dyn(input.name) || true", Some(input_json), None)
+            .expect("`||` must absorb the missing-field error");
+    assert_eq!(result, true);
+}
+
+/// `&&` with `false` absorbs the error too.
+#[test]
+fn test_missing_field_error_absorbed_by_and() {
+    let input_json = r#"{"holiday": "field"}"#;
+    let result =
+        compile_and_execute_with_input_data("dyn(input.name) && false", Some(input_json), None)
+            .expect("`&&` must absorb the missing-field error");
+    assert_eq!(result, false);
+}
+
+/// Field access on a value that is not a map is a type error, also returned
+/// as a value.
+#[test]
+fn test_field_access_on_non_map_is_no_such_overload() {
+    let result = compile_and_execute_with_input_data("dyn(input).name", Some("42"), None);
+
+    let err = result.expect_err("expected a runtime error");
+    let cel_err = err
+        .downcast_ref::<ferricel_core::CelRuntimeError>()
+        .expect("error must downcast to CelRuntimeError");
+    assert_eq!(cel_err.message, "no such overload");
+}
