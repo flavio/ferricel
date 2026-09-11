@@ -294,8 +294,10 @@ fn test_vap_match_condition_true_enforces_validation() {
 }
 
 /// Variables are evaluated and accessible in validation expressions.
-#[test]
-fn test_vap_variables() {
+#[rstest]
+#[case::within_limit(4, Expected::Accepted)]
+#[case::over_limit(10, Expected::rejected_any())]
+fn test_vap_variables(#[case] replicas: i64, #[case] expected: Expected) {
     let spec = r#"spec:
   variables:
     - name: maxReplicas
@@ -304,15 +306,9 @@ fn test_vap_variables() {
     - expression: "object.spec.replicas <= variables.maxReplicas"
       message: "too many replicas"
 "#;
-
-    let bindings_ok = serde_json::json!({ "object": { "spec": { "replicas": 4 } } }).to_string();
-    assert_outcome(eval_vap(spec, &bindings_ok, None), &Expected::Accepted);
-
-    let bindings_fail = serde_json::json!({ "object": { "spec": { "replicas": 10 } } }).to_string();
-    assert_outcome(
-        eval_vap(spec, &bindings_fail, None),
-        &Expected::rejected_any(),
-    );
+    let bindings =
+        serde_json::json!({ "object": { "spec": { "replicas": replicas } } }).to_string();
+    assert_outcome(eval_vap(spec, &bindings, None), &expected);
 }
 
 /// Multiple validations: first passes, second fails → rejection with second
@@ -540,42 +536,6 @@ fn test_vap_extension_error_in_validation_is_surfaced() {
         result,
         &Expected::ExtensionError {
             message: "boom",
-            namespace: Some("kw.k8s"),
-            function: "get",
-        },
-    );
-}
-
-/// A failed `params` fetch propagates into the validation that uses `params`.
-/// The error records `kw.k8s.get` as its origin, so a host can tell a failed
-/// `params` lookup apart from other runtime errors.
-#[test]
-fn test_vap_params_fetch_error_is_surfaced() {
-    let spec = r#"spec:
-  paramKind:
-    apiVersion: v1
-    kind: ConfigMap
-  validations:
-    - expression: "object.spec.replicas <= int(params.data.maxReplicas)"
-"#;
-    let bindings = serde_json::json!({
-        "paramRef": { "name": "replica-policy", "namespace": "default" },
-        "object": { "spec": { "replicas": 3 } }
-    })
-    .to_string();
-
-    let result = eval_vap(
-        spec,
-        &bindings,
-        Some((
-            vap::kw_k8s_get_extension(),
-            Box::new(|_args| Err("configmap not found".to_string())),
-        )),
-    );
-    assert_outcome(
-        result,
-        &Expected::ExtensionError {
-            message: "configmap not found",
             namespace: Some("kw.k8s"),
             function: "get",
         },
@@ -919,35 +879,102 @@ fn test_vap_pss_capabilities(#[case] object: serde_json::Value, #[case] expected
     assert_outcome(eval_vap(spec, &object.to_string(), None), &expected);
 }
 
-// ─── kw.k8s params tests ──────────────────────────────────────────────────────
+// ─── params ───────────────────────────────────────────────────────────────────
+//
+// These tests cover the `params` resolution done by the runtime:
+// `paramRef.name` vs `paramRef.selector`, `parameterNotFoundAction`,
+// namespace defaulting, and per-param evaluation.
 
-/// A policy that uses `paramKind` to fetch a ConfigMap holding policy config,
-/// then validates that the incoming Deployment's replica count does not exceed
-/// the limit stored in `params.data.maxReplicas`.
-/// Host returns maxReplicas="5"; object has replicas=3 → accepted.
-#[test]
-fn test_vap_params_kw_k8s_accept() {
-    let spec = r#"spec:
+/// The policy used by the params tests. The validation reads
+/// `params.data.maxReplicas`. The message names the param, so a test can
+/// tell which param produced the rejection.
+const PARAMS_SPEC: &str = r#"spec:
   paramKind:
     apiVersion: v1
     kind: ConfigMap
   validations:
     - expression: "object.spec.replicas <= int(params.data.maxReplicas)"
-      message: "replicas exceeds the configured maximum"
+      messageExpression: "'limit ' + params.data.maxReplicas + ' from ' + params.metadata.name"
 "#;
-    let bindings = serde_json::json!({
-        "paramRef": { "name": "replica-policy", "namespace": "default" },
+
+/// A ConfigMap param object with the given `maxReplicas`.
+fn params_configmap(name: &str, max_replicas: &str) -> serde_json::Value {
+    serde_json::json!({
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": { "name": name, "namespace": "default" },
+        "data": { "maxReplicas": max_replicas }
+    })
+}
+
+/// Bindings with a Deployment that has `replicas` and the given `paramRef`.
+/// `request.namespace` is `team-a`.
+fn params_bindings(param_ref: serde_json::Value, replicas: i64) -> String {
+    serde_json::json!({
+        "paramRef": param_ref,
+        "request": { "namespace": "team-a" },
         "object": {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
-            "metadata": { "name": "my-app" },
-            "spec": { "replicas": 3 }
+            "metadata": { "name": "my-app", "namespace": "team-a" },
+            "spec": { "replicas": replicas }
         }
     })
-    .to_string();
+    .to_string()
+}
 
+/// A `paramRef` with `name`, and an optional `parameterNotFoundAction`.
+fn name_ref(action: Option<&str>) -> serde_json::Value {
+    let mut param_ref = serde_json::json!({ "name": "replica-policy" });
+    if let Some(action) = action {
+        param_ref["parameterNotFoundAction"] = action.into();
+    }
+    param_ref
+}
+
+/// A `paramRef` with a `matchLabels` selector, and an optional
+/// `parameterNotFoundAction`.
+fn selector_ref(action: Option<&str>) -> serde_json::Value {
+    let mut param_ref = serde_json::json!({ "selector": { "matchLabels": { "env": "test" } } });
+    if let Some(action) = action {
+        param_ref["parameterNotFoundAction"] = action.into();
+    }
+    param_ref
+}
+
+/// A `list` host implementation that returns the given items.
+fn list_returning(items: Vec<serde_json::Value>) -> (ExtensionDecl, HostFn) {
+    (
+        vap::kw_k8s_list_extension(),
+        Box::new(move |_args| Ok(serde_json::json!({ "items": items }))),
+    )
+}
+
+/// A host implementation that fails with `message`.
+fn failing(decl: ExtensionDecl, message: &'static str) -> (ExtensionDecl, HostFn) {
+    (decl, Box::new(move |_args| Err(message.to_string())))
+}
+
+/// A host implementation that must not be called.
+fn never_called(decl: ExtensionDecl) -> (ExtensionDecl, HostFn) {
+    (
+        decl,
+        Box::new(|_args| panic!("the host must not be called")),
+    )
+}
+
+/// `paramRef.name`: the module calls `kw.k8s.get` with `apiVersion`, `kind`,
+/// `namespace`, and `name`. The validation reads the returned ConfigMap.
+#[rstest]
+#[case::accept(3, Expected::Accepted)]
+#[case::reject(10, Expected::rejected("limit 5 from replica-policy", 422))]
+fn test_vap_params_by_name(#[case] replicas: i64, #[case] expected: Expected) {
+    let bindings = params_bindings(
+        serde_json::json!({ "name": "replica-policy", "namespace": "default" }),
+        replicas,
+    );
     let result = eval_vap(
-        spec,
+        PARAMS_SPEC,
         &bindings,
         Some((
             vap::kw_k8s_get_extension(),
@@ -957,59 +984,290 @@ fn test_vap_params_kw_k8s_accept() {
                 assert_eq!(map["kind"], "ConfigMap");
                 assert_eq!(map["name"], "replica-policy");
                 assert_eq!(map["namespace"], "default");
+                assert!(
+                    map.get("labelSelector").is_none(),
+                    "get request must not carry a labelSelector"
+                );
+                Ok(params_configmap("replica-policy", "5"))
+            }),
+        )),
+    );
+    assert_outcome(result, &expected);
+}
+
+/// How the module resolves `params` for each combination of `paramRef`
+/// shape, host response, and `parameterNotFoundAction`.
+///
+/// - A host error under `Deny` (the default) traps before any validation
+///   runs. The error keeps its `kw.k8s.get` or `kw.k8s.list` origin, so a
+///   host can tell a failed `params` lookup apart from other runtime errors.
+/// - An empty `list` result under `Deny` traps with `no parameters found`.
+/// - Under `Allow`, both cases accept the request. A host error counts as
+///   "not found". See LIMITATIONS.md.
+/// - With several params, the module evaluates the policy once per param and
+///   reports the first rejection.
+#[rstest]
+#[case::name_host_error_deny(
+    name_ref(None),
+    failing(vap::kw_k8s_get_extension(), "configmap not found"),
+    3,
+    Expected::ExtensionError {
+        message: "configmap not found",
+        namespace: Some("kw.k8s"),
+        function: "get",
+    }
+)]
+#[case::name_host_error_allow(
+    name_ref(Some("Allow")),
+    failing(vap::kw_k8s_get_extension(), "configmap not found"),
+    100,
+    Expected::Accepted
+)]
+#[case::selector_empty_deny(
+    selector_ref(None),
+    list_returning(vec![]),
+    1,
+    Expected::Error("no parameters found")
+)]
+#[case::selector_empty_allow(
+    selector_ref(Some("Allow")),
+    list_returning(vec![]),
+    100,
+    Expected::Accepted
+)]
+#[case::selector_host_error_deny(
+    selector_ref(None),
+    failing(vap::kw_k8s_list_extension(), "forbidden"),
+    1,
+    Expected::ExtensionError {
+        message: "forbidden",
+        namespace: Some("kw.k8s"),
+        function: "list",
+    }
+)]
+#[case::selector_host_error_allow(
+    selector_ref(Some("Allow")),
+    failing(vap::kw_k8s_list_extension(), "forbidden"),
+    100,
+    Expected::Accepted
+)]
+#[case::selector_all_pass(
+    selector_ref(None),
+    list_returning(vec![params_configmap("first", "5"), params_configmap("second", "10")]),
+    3,
+    Expected::Accepted
+)]
+#[case::selector_first_denial_wins(
+    selector_ref(None),
+    list_returning(vec![params_configmap("first", "5"), params_configmap("second", "10")]),
+    100,
+    Expected::rejected("limit 5 from first", 422)
+)]
+fn test_vap_params_resolution(
+    #[case] param_ref: serde_json::Value,
+    #[case] host: (ExtensionDecl, HostFn),
+    #[case] replicas: i64,
+    #[case] expected: Expected,
+) {
+    let bindings = params_bindings(param_ref, replicas);
+    assert_outcome(eval_vap(PARAMS_SPEC, &bindings, Some(host)), &expected);
+}
+
+/// `selector` ref, 2 items, only the second violates → rejected with the
+/// second's message. The host receives the formatted, sorted label selector
+/// and the `paramRef.namespace`.
+#[test]
+fn test_vap_params_selector_second_param_rejects() {
+    let bindings = params_bindings(
+        serde_json::json!({
+            "namespace": "config",
+            "selector": {
+                "matchLabels": { "env": "test" },
+                "matchExpressions": [
+                    { "key": "tier", "operator": "In", "values": ["web", "api"] },
+                    { "key": "archived", "operator": "DoesNotExist" }
+                ]
+            }
+        }),
+        7,
+    );
+    let result = eval_vap(
+        PARAMS_SPEC,
+        &bindings,
+        Some((
+            vap::kw_k8s_list_extension(),
+            Box::new(|args| {
+                let map = &args[0];
+                assert_eq!(map["apiVersion"], "v1");
+                assert_eq!(map["kind"], "ConfigMap");
+                assert_eq!(map["namespace"], "config");
+                assert_eq!(
+                    map["labelSelector"], "!archived,env=test,tier in (api,web)",
+                    "label selector is not formatted and sorted"
+                );
+                assert!(
+                    map.get("name").is_none(),
+                    "list request must not carry a name"
+                );
                 Ok(serde_json::json!({
-                    "apiVersion": "v1",
-                    "kind": "ConfigMap",
-                    "metadata": { "name": "replica-policy", "namespace": "default" },
-                    "data": { "maxReplicas": "5" }
+                    "items": [params_configmap("loose", "10"), params_configmap("strict", "5")]
                 }))
+            }),
+        )),
+    );
+    assert_outcome(result, &Expected::rejected("limit 5 from strict", 422));
+}
+
+/// A policy whose `matchCondition` reads `params`. Kubernetes evaluates
+/// `matchConditions` once per param.
+const PARAMS_MATCH_CONDITION_SPEC: &str = r#"spec:
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  matchConditions:
+    - name: enabled
+      expression: "params.data.enabled == 'true'"
+  validations:
+    - expression: "object.spec.replicas <= int(params.data.maxReplicas)"
+      messageExpression: "'limit ' + params.data.maxReplicas + ' from ' + params.metadata.name"
+"#;
+
+fn params_configmap_enabled(name: &str, max_replicas: &str, enabled: bool) -> serde_json::Value {
+    let mut cm = params_configmap(name, max_replicas);
+    cm["data"]["enabled"] = serde_json::Value::String(enabled.to_string());
+    cm
+}
+
+/// A false `matchCondition` skips that param only. The object has 7
+/// replicas. The first param is always disabled. The outcome depends on the
+/// second, enabled, param.
+#[rstest]
+#[case::disabled_param_is_skipped(
+    vec![
+        params_configmap_enabled("disabled-strict", "1", false),
+        params_configmap_enabled("enabled-loose", "10", true),
+    ],
+    Expected::Accepted
+)]
+#[case::enabled_param_rejects(
+    vec![
+        params_configmap_enabled("disabled-loose", "10", false),
+        params_configmap_enabled("enabled-strict", "5", true),
+    ],
+    Expected::rejected("limit 5 from enabled-strict", 422)
+)]
+fn test_vap_params_match_condition_per_param(
+    #[case] items: Vec<serde_json::Value>,
+    #[case] expected: Expected,
+) {
+    let bindings = params_bindings(selector_ref(None), 7);
+    let result = eval_vap(
+        PARAMS_MATCH_CONDITION_SPEC,
+        &bindings,
+        Some(list_returning(items)),
+    );
+    assert_outcome(result, &expected);
+}
+
+/// `paramRef.namespace` empty → the host receives `request.namespace`.
+#[test]
+fn test_vap_params_namespace_defaults_to_request_namespace() {
+    let bindings = params_bindings(name_ref(None), 3);
+    let result = eval_vap(
+        PARAMS_SPEC,
+        &bindings,
+        Some((
+            vap::kw_k8s_get_extension(),
+            Box::new(|args| {
+                assert_eq!(
+                    args[0]["namespace"], "team-a",
+                    "namespace must default to request.namespace"
+                );
+                Ok(params_configmap("replica-policy", "5"))
             }),
         )),
     );
     assert_outcome(result, &Expected::Accepted);
 }
 
-/// Same policy; object has replicas=10 which exceeds maxReplicas="5" → rejected.
+/// `paramRef.namespace` empty and no `request` binding → the host receives `""`.
 #[test]
-fn test_vap_params_kw_k8s_reject() {
+fn test_vap_params_namespace_empty_without_request() {
+    let bindings = serde_json::json!({
+        "paramRef": name_ref(None),
+        "object": { "spec": { "replicas": 3 } }
+    })
+    .to_string();
+    let result = eval_vap(
+        PARAMS_SPEC,
+        &bindings,
+        Some((
+            vap::kw_k8s_get_extension(),
+            Box::new(|args| {
+                assert_eq!(args[0]["namespace"], "");
+                Ok(params_configmap("replica-policy", "5"))
+            }),
+        )),
+    );
+    assert_outcome(result, &Expected::Accepted);
+}
+
+/// A `variables` entry can read `params`. Kubernetes binds `params` before
+/// `variables`.
+#[test]
+fn test_vap_params_visible_in_variables() {
     let spec = r#"spec:
   paramKind:
     apiVersion: v1
     kind: ConfigMap
+  variables:
+    - name: limit
+      expression: "int(params.data.maxReplicas)"
   validations:
-    - expression: "object.spec.replicas <= int(params.data.maxReplicas)"
-      message: "replicas exceeds the configured maximum"
+    - expression: "object.spec.replicas <= variables.limit"
+      message: "over the limit"
 "#;
-    let bindings = serde_json::json!({
-        "paramRef": { "name": "replica-policy", "namespace": "default" },
-        "object": {
-            "apiVersion": "apps/v1",
-            "kind": "Deployment",
-            "metadata": { "name": "my-app" },
-            "spec": { "replicas": 10 }
-        }
-    })
-    .to_string();
-
+    let bindings = params_bindings(name_ref(None), 7);
     let result = eval_vap(
         spec,
         &bindings,
         Some((
             vap::kw_k8s_get_extension(),
-            Box::new(|_args| {
-                Ok(serde_json::json!({
-                    "apiVersion": "v1",
-                    "kind": "ConfigMap",
-                    "metadata": { "name": "replica-policy", "namespace": "default" },
-                    "data": { "maxReplicas": "5" }
-                }))
-            }),
+            Box::new(|_args| Ok(params_configmap("replica-policy", "5"))),
         )),
+    );
+    assert_outcome(result, &Expected::rejected("over the limit", 422));
+}
+
+/// `paramRef` with neither `name` nor `selector` is a malformed binding. It
+/// is an error even under `Allow`. The host is never called.
+#[rstest]
+#[case::deny(serde_json::json!({ "namespace": "default" }))]
+#[case::allow(serde_json::json!({ "namespace": "default", "parameterNotFoundAction": "Allow" }))]
+fn test_vap_params_ref_without_name_or_selector_is_error(#[case] param_ref: serde_json::Value) {
+    let bindings = params_bindings(param_ref, 3);
+    let result = eval_vap(
+        PARAMS_SPEC,
+        &bindings,
+        Some(never_called(vap::kw_k8s_get_extension())),
     );
     assert_outcome(
         result,
-        &Expected::rejected("replicas exceeds the configured maximum", 422),
+        &Expected::Error("paramRef must have either name or selector"),
     );
+}
+
+/// `paramKind` set but no `paramRef` in the bindings → error. The host is
+/// never called.
+#[test]
+fn test_vap_params_ref_missing_is_error() {
+    let bindings = serde_json::json!({ "object": { "spec": { "replicas": 3 } } }).to_string();
+    let result = eval_vap(
+        PARAMS_SPEC,
+        &bindings,
+        Some(never_called(vap::kw_k8s_get_extension())),
+    );
+    assert_outcome(result, &Expected::Error("paramRef binding is missing"));
 }
 
 // ─── kw.k8s builder chain coverage ───────────────────────────────────────────

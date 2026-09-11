@@ -144,3 +144,21 @@ not for bare identifiers.
 - `namespace_shadowing/disambiguation` — `.y` should resolve to root-scope `y` (bypassing container `com.example`)
 - `namespace_shadowing/comprehension_shadowing_disambiguation` — `.y` inside comprehension should bypass local `y`
 - `namespace_shadowing/comprehension_shadowing_namespaced_selector_disambiguation` — `.y.z` inside comprehension should bypass local `y` and container
+
+---
+
+## VAP `params` resolution
+
+These limitations apply to `ValidatingAdmissionPolicy` modules that set `paramKind`. They are design choices, not bugs. Each one matches the behavior of the Kubewarden [`cel-policy`](https://github.com/kubewarden/policies/tree/main/policies/cel-policy).
+
+### 1. Only the first rejection is reported
+
+When `paramRef.selector` matches several param resources, the module evaluates the policy once per resource. If more than one evaluation rejects the request, the response holds the first rejection only. Kubernetes aggregates every rejection message into one response.
+
+### 2. A host error under `parameterNotFoundAction: Allow` accepts the request
+
+When `parameterNotFoundAction` is `Allow`, the module treats any error from the `kw.k8s.get` or `kw.k8s.list` host call as "no parameters found". The request is accepted. This includes errors that are not a missing resource, for example an authorization error or a connectivity error. Kubernetes accepts the request only when the resource does not exist.
+
+### 3. A missing resource and an authorization error look the same
+
+The host returns one error string for every failed `kw.k8s` call. The module cannot tell a 404 apart from an RBAC error. A typed "not found" result from the host is needed to fix limitations 2 and 3.

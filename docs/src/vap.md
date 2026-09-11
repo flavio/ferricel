@@ -42,20 +42,38 @@ The `code` field is derived from the validation's `reason` field:
 
 ## Evaluation Order
 
-The compiled module enforces the standard Kubernetes VAP evaluation order:
+The compiled module follows the evaluation order of the Kubernetes VAP
+validator:
 
-1. **`matchConditions`** — evaluated in declaration order. If any condition
-   evaluates to `false`, the policy does **not** apply to this request: the
-   module returns `{"accepted": true}` immediately (a skip, not a rejection).
-   Remaining `matchConditions` and all `validations` are not evaluated.
+1. **`params`** (only when `paramKind` is set). The module resolves the list
+   of param resources from `paramRef`. See
+   [Params](run-vap-wasm.md#params) for the rules. Without `paramKind`, the
+   module evaluates the steps below once, with no `params` binding.
 
-2. **`variables`** — evaluated in declaration order. Each result is stored
-   under `variables.<name>` and is immediately accessible to subsequent
-   `variables` expressions and to all `validations`.
+2. For each param resource:
 
-3. **`validations`** — evaluated in declaration order. The first expression
-   that evaluates to `false` causes the module to return a rejection response.
-   Remaining validations are not evaluated.
+   1. **`matchConditions`**. Evaluated in declaration order. If any condition
+      evaluates to `false`, this param does **not** apply to the request. The
+      module skips the remaining `matchConditions`, the `variables`, and the
+      `validations` for this param, and moves to the next param. A skip is
+      not a rejection. `params` is available in `matchConditions`.
+
+   2. **`variables`**. Evaluated in declaration order. Each result is stored
+      under `variables.<name>`. It is accessible to later `variables`
+      expressions and to all `validations`. The module rebuilds the
+      `variables` map for each param.
+
+   3. **`validations`**. Evaluated in declaration order. The first expression
+      that evaluates to `false` makes the module return a rejection response.
+      The module does not evaluate the remaining validations or the remaining
+      params.
+
+3. When no param produced a rejection, the module returns
+   `{"accepted": true}`. An empty param list also produces this response.
+
+When several params match a `paramRef.selector` and more than one rejects
+the request, the module returns the first rejection only. Kubernetes
+aggregates every rejection message. See [LIMITATIONS.md](https://github.com/flavio/ferricel/blob/main/LIMITATIONS.md).
 
 ## Runtime Errors
 
@@ -86,9 +104,14 @@ Two cases do not trap:
 - Errors absorbed by CEL short-circuit operators are not errors. For example,
   `(1 / 0) == 1 || true` evaluates to `true`.
 
-The `params` lookup follows the first rule: if the host's `kw.k8s` extension
-fails, the error surfaces from the first validation that reads `params`. The
-`origin` field of the `CelRuntimeError` is then `kw.k8s.get`.
+The `params` lookup traps before any `matchConditions` or `validations`
+run. If the host's `kw.k8s` extension fails, or the lookup finds no
+resource, and `paramRef.parameterNotFoundAction` is not `Allow`, the module
+traps. For a host error, the `origin` field of the `CelRuntimeError` is
+`kw.k8s.get` (for `paramRef.name`) or `kw.k8s.list` (for
+`paramRef.selector`). For an empty result, the message is
+`no parameters found` and `origin` is `None`. See
+[Params](run-vap-wasm.md#params).
 
 ## Known Limitations
 

@@ -82,4 +82,20 @@ pub(crate) mod test_helpers {
                 .collect(),
         )
     }
+
+    /// Builds a `CelValue` from a JSON value. This is the same path that
+    /// bindings take when they reach the runtime.
+    pub(crate) fn make_json(json: serde_json::Value) -> CelValue {
+        serde_json::from_value(json).expect("valid CelValue JSON")
+    }
+
+    /// Builds a `HashMap<CelMapKey, CelValue>` from a JSON object.
+    pub(crate) fn make_json_map(
+        json: serde_json::Value,
+    ) -> std::collections::HashMap<crate::types::CelMapKey, CelValue> {
+        match make_json(json) {
+            CelValue::Object(map) => map,
+            other => panic!("expected a JSON object, got {other:?}"),
+        }
+    }
 }

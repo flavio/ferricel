@@ -70,20 +70,20 @@ match engine.eval(Some(&bindings_json)) {
 
 `ExtensionOrigin` holds the `namespace` (for example `Some("kw.k8s")`) and
 the `function` (for example `get`) of the extension call. When the `params`
-lookup fails, `origin` is `kw.k8s.get`. A host can use this to tell a failed
-`params` lookup apart from other runtime errors.
+lookup fails in the host, `origin` is `kw.k8s.get` or `kw.k8s.list`. A host
+can use this to tell a failed `params` lookup apart from other runtime errors.
 
 See [Runtime Errors](vap.md#runtime-errors) for the exact rules.
 
 ## Required Bindings
 
-| Binding           | Required when…                                 |
-| ----------------- | ---------------------------------------------- |
-| `object`          | Always (the resource being admitted)           |
-| `oldObject`       | Policy expressions reference `oldObject`       |
-| `request`         | Policy expressions reference `request`         |
-| `namespaceObject` | Policy expressions reference `namespaceObject` |
-| `paramRef`        | `paramKind` is set (see below)                 |
+| Binding           | Required when…                                                   |
+| ----------------- | ---------------------------------------------------------------- |
+| `object`          | Always (the resource being admitted)                             |
+| `oldObject`       | Policy expressions reference `oldObject`                         |
+| `request`         | Policy expressions reference `request`, or `paramKind` is set    |
+| `namespaceObject` | Policy expressions reference `namespaceObject`                   |
+| `paramRef`        | `paramKind` is set (see below)                                   |
 
 `object`, `oldObject`, and `request` correspond directly to the fields of the
 Kubernetes
@@ -104,25 +104,94 @@ for details.
 
 ### Params
 
-When a policy sets `paramKind`, the compiled module fetches the referenced
-resource itself at evaluation time by calling a host-provided `kw.k8s.get`
-extension. The host does **not** supply `params` directly in the bindings.
+When a policy sets `paramKind`, the compiled module fetches the param
+resources itself at evaluation time. It calls the host-provided `kw.k8s.get`
+or `kw.k8s.list` extension. The host does **not** supply `params` directly in
+the bindings.
 
-The module reads `paramRef.name` and `paramRef.namespace` from the bindings at
-runtime and forwards them to the host as part of the request map (see below).
-The result is stored in `params` and made available to all `variables` and
-`validations` expressions.
+The host must supply `paramRef` in the bindings. `paramRef` is the
+`spec.paramRef` of the `ValidatingAdmissionPolicyBinding`, as JSON. The host
+must also supply `request`, so the module can default the namespace (see
+below).
 
-The host must supply `paramRef` in the bindings:
+The module supports the two ways Kubernetes selects param resources:
+
+- `paramRef.name`: one resource, by name. The module calls `kw.k8s.get`.
+- `paramRef.selector`: every resource that matches a label selector. The
+  module formats the selector as a label selector string, for example
+  `app=web,tier in (api,web)`, and calls `kw.k8s.list`. Each item in the
+  `items` list of the response is one param resource.
+
+If `paramRef` has both `name` and `selector`, `name` wins. If it has neither,
+the module traps with the error `paramRef must have either name or selector`.
+
+#### Namespace defaulting
+
+The `namespace` in the request map is `paramRef.namespace`. If that is empty,
+the module uses `request.namespace`. If that is also empty, `namespace` is
+`""`. The params request map **always** contains the `namespace` key. This is
+different from a `kw.k8s` chain written in CEL, where `namespace` is present
+only when the policy calls `.namespace()`.
+
+#### Per-param evaluation
+
+The module evaluates the policy once per param resource. For each param, it
+sets the `params` binding, then evaluates `matchConditions`, `variables`, and
+`validations`. The first rejection stops the evaluation and becomes the
+response. When every param passes, or the param list is empty, the module
+returns `{"accepted": true}`. See [Evaluation Order](vap.md#evaluation-order).
+
+#### `parameterNotFoundAction`
+
+When the host call fails, or `kw.k8s.list` returns zero items, the module
+reads `paramRef.parameterNotFoundAction`:
+
+- `Allow`: the param list is empty. The module returns `{"accepted": true}`.
+- `Deny`, or unset: the module traps with a `CelRuntimeError`. The host then
+  applies its `failurePolicy`. A host error keeps its origin (`kw.k8s.get` or
+  `kw.k8s.list`). An empty list produces the message `no parameters found`.
+
+Under `Allow`, a host error of any kind counts as "not found". The module
+cannot tell a missing resource apart from an authorization error. See
+[LIMITATIONS.md](https://github.com/flavio/ferricel/blob/main/LIMITATIONS.md).
+
+#### Bindings and host registration
+
+A binding with `paramRef.name`:
 
 ```json
 {
-  "paramRef": { "name": "my-params", "namespace": "default" },
+  "paramRef": {
+    "name": "my-params",
+    "namespace": "default",
+    "parameterNotFoundAction": "Deny"
+  },
+  "request": { "namespace": "team-a", ... },
   "object": { ... }
 }
 ```
 
-And register a `kw.k8s.get` implementation on the runtime builder:
+A binding with `paramRef.selector`:
+
+```json
+{
+  "paramRef": {
+    "selector": {
+      "matchLabels": { "app": "web" },
+      "matchExpressions": [
+        { "key": "tier", "operator": "In", "values": ["api", "web"] }
+      ]
+    },
+    "parameterNotFoundAction": "Allow"
+  },
+  "request": { "namespace": "team-a", ... },
+  "object": { ... }
+}
+```
+
+The host must register both `kw.k8s.get` and `kw.k8s.list` on the runtime
+builder. Which one the module calls depends on the binding, not on the
+policy:
 
 ```rust
 use ferricel_core::{compiler::Builder, runtime, compiler::vap};
@@ -132,16 +201,27 @@ let wasm_bytes = Builder::new().build().compile_vap(&yaml)?;
 let result_str = runtime::Builder::new()
     .with_wasm(wasm_bytes)
     .with_extension(vap::kw_k8s_get_extension(), |args| {
-        // args[0] is the accumulated request map (see shape below)
+        // args[0] is the request map (see shape below)
         let map = &args[0];
         let name        = map["name"].as_str().unwrap();
-        let namespace   = map["namespace"].as_str().unwrap();
+        let namespace   = map["namespace"].as_str().unwrap(); // can be ""
         let api_version = map["apiVersion"].as_str().unwrap();
         let kind        = map["kind"].as_str().unwrap();
 
         // Fetch from Kubernetes and return the resource as a JSON value.
         let resource = fetch_from_k8s(api_version, kind, namespace, name)?;
         Ok(resource)
+    })
+    .with_extension(vap::kw_k8s_list_extension(), |args| {
+        let map = &args[0];
+        let label_selector = map["labelSelector"].as_str().unwrap();
+        let namespace      = map["namespace"].as_str().unwrap(); // can be ""
+        let api_version    = map["apiVersion"].as_str().unwrap();
+        let kind           = map["kind"].as_str().unwrap();
+
+        // List from Kubernetes and return `{"items": [...]}`.
+        let list = list_from_k8s(api_version, kind, namespace, label_selector)?;
+        Ok(list)
     })
     .build()?
     .eval(Some(&bindings_json))?;
@@ -196,16 +276,20 @@ single argument — a JSON object containing the accumulated builder state:
 | `fieldMasks`    | `.fieldMask()`     | Array; present only if called             |
 | `name`          | `.get(<name>)`     | Present only for `get` terminal           |
 
+For the `params` lookup, the module builds this map itself. It always sets
+`apiVersion`, `kind`, and `namespace`. It sets `name` for `paramRef.name` and
+`labelSelector` for `paramRef.selector`. See [Params](#params).
+
 Register the extensions using the helpers from `ferricel_core::compiler::vap`:
 
 ```rust
 use ferricel_core::compiler::vap;
 
-// For policies that call .get(...)
+// For policies that call .get(...), or set paramKind
 runtime::Builder::new()
     .with_extension(vap::kw_k8s_get_extension(), |args| { ... })
 
-// For policies that call .list()
+// For policies that call .list(), or set paramKind
 runtime::Builder::new()
     .with_extension(vap::kw_k8s_list_extension(), |args| { ... })
 ```
@@ -280,7 +364,12 @@ use ferricel_core::{compiler::{Builder, vap}, runtime};
 
 // The host extracts these from the AdmissionReview and the PolicyBinding.
 let bindings = serde_json::json!({
-    "paramRef": { "name": "my-params", "namespace": "default" },
+    "paramRef": {
+        "name": "my-params",
+        "namespace": "default",
+        "parameterNotFoundAction": "Deny"
+    },
+    "request": request_json,
     "object": object_json,
 });
 
@@ -302,6 +391,11 @@ let result_str = runtime::Builder::new()
             "metadata": { "name": "my-params", "namespace": "default" },
             "data": { "maxreplicas": "5" }
         }))
+    })
+    .with_extension(vap::kw_k8s_list_extension(), |args| {
+        // Not called for this binding, because `paramRef.name` is set.
+        // A binding with `paramRef.selector` calls this instead.
+        unreachable!("this binding uses paramRef.name")
     })
     .build()?
     .eval(Some(&bindings.to_string()))?;
