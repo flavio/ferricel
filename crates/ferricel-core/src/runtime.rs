@@ -38,8 +38,9 @@
 pub use ferricel_types::{CelRuntimeError, ExtensionOrigin};
 use ferricel_types::{
     LogLevel,
-    extensions::{ExtensionCallPayload, ExtensionCallResponse, ExtensionDecl},
+    extensions::{ExtensionCallResponse, ExtensionDecl},
 };
+use serde::Deserialize;
 use wasmtime::{Caller, Engine as WasmEngine, InstancePre, Linker, Module, Store};
 
 use crate::compiler::ExtensionKey;
@@ -64,18 +65,44 @@ pub struct Extension {
     pub implementation: ExtensionFn,
 }
 
+/// A hook that authorizes an extension call before the runtime parses its
+/// arguments.
+///
+/// The runtime calls this hook with the `(namespace, function)` of the
+/// call, before it parses the arguments and before it calls the
+/// implementation. `Err(msg)` rejects the call. The guest receives `msg`
+/// as a CEL runtime error, the same way it receives an error for an
+/// unknown extension or a wrong argument count. Use this hook to reject a
+/// call that the current context does not allow, before the runtime does
+/// the work of parsing the arguments. Set the hook with
+/// [`Extensions::with_extension_authorizer`],
+/// [`Extensions::set_extension_authorizer`], or
+/// [`Builder::with_extension_authorizer`].
+pub type ExtensionAuthorizer =
+    std::sync::Arc<dyn Fn(&ExtensionKey) -> Result<(), String> + Send + Sync>;
+
 /// The set of host extension functions that a Wasm module can call during
 /// evaluation.
 ///
 /// `ferricel-core` treats every Wasm module as untrusted input. The module
 /// can come from a source other than the ferricel compiler. As a result, the
-/// arguments in a `cel_call_extension` request can have any count.
+/// arguments in a `cel_call_extension` request can have any count and any
+/// size.
 ///
-/// `Extensions` stores each implementation with its [`ExtensionDecl`]. Before
-/// the runtime calls an implementation, it makes sure that
-/// `args.len() == decl.num_args`. A wrong count (for example, an empty list)
-/// becomes a CEL evaluation error. The runtime never calls the closure with
-/// the wrong count.
+/// `Extensions` stores each implementation with its [`ExtensionDecl`], and
+/// an optional [`ExtensionAuthorizer`]. For each request, the runtime does
+/// this work in this order:
+///
+/// 1. It reads `namespace` and `function` and looks up the extension. An
+///    unknown extension is a CEL evaluation error.
+/// 2. It calls the extension authorizer, if one is set, with the
+///    [`ExtensionKey`]. `Err(msg)` is a CEL evaluation error. The runtime
+///    has not parsed `args` at this point.
+/// 3. It parses `args`.
+/// 4. It makes sure that `args.len() == decl.num_args`. A wrong count (for
+///    example, an empty list) is a CEL evaluation error. The runtime never
+///    calls the closure with the wrong count.
+/// 5. It calls the implementation.
 ///
 /// Build the set with [`Extensions::new`] and [`Extensions::register`] or
 /// [`Extensions::with`]. Then pass it to [`EnginePre::rehydrate`].
@@ -83,12 +110,34 @@ pub struct Extension {
 #[derive(Clone, Default)]
 pub struct Extensions {
     inner: std::collections::HashMap<ExtensionKey, Extension>,
+    authorizer: Option<ExtensionAuthorizer>,
 }
 
 impl Extensions {
     /// Create an empty extension set.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Set the extension authorizer and return `self`.
+    ///
+    /// See [`ExtensionAuthorizer`]. A later call replaces it.
+    pub fn with_extension_authorizer(
+        mut self,
+        authorizer: impl Fn(&ExtensionKey) -> Result<(), String> + Send + Sync + 'static,
+    ) -> Self {
+        self.set_extension_authorizer(authorizer);
+        self
+    }
+
+    /// Set the extension authorizer in place.
+    ///
+    /// See [`ExtensionAuthorizer`]. A later call replaces it.
+    pub fn set_extension_authorizer(
+        &mut self,
+        authorizer: impl Fn(&ExtensionKey) -> Result<(), String> + Send + Sync + 'static,
+    ) {
+        self.authorizer = Some(std::sync::Arc::new(authorizer));
     }
 
     /// Register an extension implementation and return `self`.
@@ -159,37 +208,97 @@ impl Extensions {
     }
 }
 
+/// Phase-1 view of an [`ExtensionCallPayload`]: `args` is kept as raw JSON
+/// text.
+///
+/// `ferricel_types::extensions::ExtensionCallPayload` is the wire format
+/// that the guest serializes. The host does not deserialize into it.
+/// Instead, the host uses this struct, so that it can look up the
+/// extension and run the [`ExtensionAuthorizer`] before it builds a
+/// `serde_json::Value` tree for `args`. `RawValue` makes serde scan `args`
+/// once, to validate its syntax and find its end, without allocating a
+/// tree.
+///
+/// [`ExtensionCallPayload`]: ferricel_types::extensions::ExtensionCallPayload
+#[derive(Deserialize)]
+struct ExtensionCallEnvelope<'a> {
+    namespace: Option<String>,
+    function: String,
+    #[serde(borrow)]
+    args: &'a serde_json::value::RawValue,
+}
+
+/// The reason [`dispatch_extension`] failed.
+#[derive(Debug, PartialEq)]
+enum DispatchError {
+    /// The request bytes are not a valid `ExtensionCallPayload`. This is a
+    /// bug in the guest, not a CEL error. The host import turns it into a
+    /// trap.
+    Malformed(String),
+    /// The runtime rejected the call (unknown extension, authorizer
+    /// denial, or wrong arity), or the implementation returned `Err`. The
+    /// guest receives it as [`ExtensionCallResponse::Error`] and reports a
+    /// CEL runtime error.
+    Runtime(String),
+}
+
 /// Dispatch an extension call from the guest to a registered extension.
 ///
-/// This function makes sure that `payload.args.len() == decl.num_args`
-/// before it calls the implementation. If the count is wrong, or the
-/// extension is unknown, it returns `Err` and does not call host code. The
-/// host sends the `Err` to the guest as [`ExtensionCallResponse::Error`].
-/// The guest then reports it as a CEL runtime error.
+/// `req` holds the JSON `ExtensionCallPayload` that the guest sent. See
+/// [`Extensions`] for the reason behind each step. The function works in
+/// this order:
+///
+/// 1. It parses the envelope (`namespace` and `function`), and keeps
+///    `args` as raw text. A syntax error becomes
+///    [`DispatchError::Malformed`].
+/// 2. It looks up the extension. An unknown key becomes
+///    [`DispatchError::Runtime`].
+/// 3. It calls the [`ExtensionAuthorizer`], if one is set. `Err(msg)`
+///    becomes [`DispatchError::Runtime`].
+/// 4. It parses `args`. A value that is not a JSON array becomes
+///    [`DispatchError::Malformed`]. A single-phase parse into
+///    `ExtensionCallPayload` gives the same error for this input.
+/// 5. It makes sure that `args.len() == decl.num_args`. A mismatch
+///    becomes [`DispatchError::Runtime`].
+/// 6. It calls the implementation with `args` moved in. `Err(msg)`
+///    becomes [`DispatchError::Runtime`].
 fn dispatch_extension(
     extensions: &Extensions,
-    payload: &ExtensionCallPayload,
-) -> Result<serde_json::Value, String> {
-    let key = ExtensionKey::new(payload.namespace.clone(), payload.function.clone());
-    let full_name = match &payload.namespace {
-        Some(ns) => format!("{}.{}", ns, payload.function),
-        None => payload.function.clone(),
+    req: &[u8],
+) -> Result<serde_json::Value, DispatchError> {
+    let envelope: ExtensionCallEnvelope<'_> =
+        serde_json::from_slice(req).map_err(|e| DispatchError::Malformed(e.to_string()))?;
+
+    let key = ExtensionKey::new(envelope.namespace, envelope.function);
+    let full_name = || match &key.namespace {
+        Some(ns) => format!("{}.{}", ns, key.function),
+        None => key.function.clone(),
     };
 
     let Some(ext) = extensions.get(&key) else {
-        return Err(format!("Extension not found: {}", full_name));
+        return Err(DispatchError::Runtime(format!(
+            "Extension not found: {}",
+            full_name()
+        )));
     };
 
-    if payload.args.len() != ext.decl.num_args {
-        return Err(format!(
-            "{} expects {} argument(s), got {}",
-            full_name,
-            ext.decl.num_args,
-            payload.args.len()
-        ));
+    if let Some(authorizer) = &extensions.authorizer {
+        authorizer(&key).map_err(DispatchError::Runtime)?;
     }
 
-    (ext.implementation)(payload.args.clone())
+    let args: Vec<serde_json::Value> = serde_json::from_str(envelope.args.get())
+        .map_err(|e| DispatchError::Malformed(format!("invalid `args`: {}", e)))?;
+
+    if args.len() != ext.decl.num_args {
+        return Err(DispatchError::Runtime(format!(
+            "{} expects {} argument(s), got {}",
+            full_name(),
+            ext.decl.num_args,
+            args.len()
+        )));
+    }
+
+    (ext.implementation)(args).map_err(DispatchError::Runtime)
 }
 
 /// Decode the bytes that the guest passes to `cel_abort`.
@@ -201,6 +310,35 @@ fn parse_abort_payload(bytes: &[u8]) -> Result<CelRuntimeError, wasmtime::Error>
     serde_json::from_slice::<CelRuntimeError>(bytes).map_err(|e| {
         wasmtime::Error::msg(format!("Invalid cel_abort payload from the guest: {}", e))
     })
+}
+
+/// Copy `len` bytes at `ptr` out of guest memory.
+///
+/// Both values come from the guest. The function checks them against the
+/// memory size before it allocates. As a result, a guest cannot make the
+/// host allocate more than the memory holds. The function also skips the
+/// zero-fill step that `vec![0u8; len]` needs before `Memory::read`.
+///
+/// An out-of-bounds range is a bug in the guest. It produces a
+/// `wasmtime::Error`, which traps the instance.
+fn read_guest_bytes(
+    memory: &wasmtime::Memory,
+    ctx: impl wasmtime::AsContext,
+    ptr: usize,
+    len: usize,
+) -> Result<Vec<u8>, wasmtime::Error> {
+    fn out_of_bounds(ptr: usize, len: usize) -> wasmtime::Error {
+        wasmtime::Error::msg(format!("guest pointer out of bounds: ptr={ptr} len={len}"))
+    }
+
+    let end = ptr
+        .checked_add(len)
+        .ok_or_else(|| out_of_bounds(ptr, len))?;
+    memory
+        .data(&ctx)
+        .get(ptr..end)
+        .map(<[u8]>::to_vec)
+        .ok_or_else(|| out_of_bounds(ptr, len))
 }
 
 /// Make sure that `wasm_bytes` has the ABI version this runtime supports.
@@ -567,6 +705,26 @@ impl Builder {
         self
     }
 
+    /// Set an [`ExtensionAuthorizer`] on the extension set.
+    ///
+    /// The runtime calls `authorizer` with the `(namespace, function)` of
+    /// every extension call. It calls `authorizer` after it finds the
+    /// extension and before it parses the arguments. `Err(msg)` rejects
+    /// the call. The guest receives `msg` as a CEL runtime error, with the
+    /// extension as its origin. Use this method to reject a call that the
+    /// current context does not allow, before the runtime spends work on
+    /// the arguments.
+    ///
+    /// See the [Host Extensions](https://flavio.github.io/ferricel/host-extensions.html)
+    /// user guide for details.
+    pub fn with_extension_authorizer(
+        mut self,
+        authorizer: impl Fn(&ExtensionKey) -> Result<(), String> + Send + Sync + 'static,
+    ) -> Self {
+        self.extensions.set_extension_authorizer(authorizer);
+        self
+    }
+
     /// Provide a pre-configured [`wasmtime::Engine`] to use during compilation
     /// and execution.
     ///
@@ -716,8 +874,8 @@ impl Builder {
                     .and_then(|e| e.into_memory())
                     .ok_or_else(|| wasmtime::Error::msg("Failed to get Wasm memory"))?;
 
-                let mut buffer = vec![0u8; len as usize];
-                memory.read(&caller, ptr as usize, &mut buffer)?;
+                let buffer =
+                    read_guest_bytes(&memory, &caller, ptr as u32 as usize, len as u32 as usize)?;
 
                 let event: ferricel_types::LogEvent =
                     serde_json::from_slice(&buffer).map_err(|e| {
@@ -773,8 +931,7 @@ impl Builder {
                     .and_then(|e| e.into_memory())
                     .ok_or_else(|| wasmtime::Error::msg("Failed to get Wasm memory for error"))?;
 
-                let mut buffer = vec![0u8; length as usize];
-                memory.read(&caller, address as usize, &mut buffer)?;
+                let buffer = read_guest_bytes(&memory, &caller, address as usize, length as usize)?;
 
                 let error = parse_abort_payload(&buffer)?;
 
@@ -803,20 +960,21 @@ impl Builder {
                     .and_then(|e| e.into_memory())
                     .ok_or_else(|| wasmtime::Error::msg("Failed to get Wasm memory"))?;
 
-                let mut req_buf = vec![0u8; req_len];
-                memory.read(&caller, req_ptr, &mut req_buf)?;
+                let req_buf = read_guest_bytes(&memory, &caller, req_ptr, req_len)?;
 
-                let payload: ExtensionCallPayload =
-                    serde_json::from_slice(&req_buf).map_err(|e| {
-                        wasmtime::Error::msg(format!(
-                            "Failed to deserialize extension payload: {}",
-                            e
-                        ))
-                    })?;
-
-                let response = match dispatch_extension(&caller.data().extensions, &payload) {
+                // A malformed payload is a bug in the guest, not a CEL
+                // error. It traps the instance. Every other failure goes
+                // back to the guest as `ExtensionCallResponse::Error`. The
+                // guest reports it as a CEL runtime error.
+                let response = match dispatch_extension(&caller.data().extensions, &req_buf) {
                     Ok(v) => ExtensionCallResponse::Ok(v),
-                    Err(msg) => ExtensionCallResponse::Error(msg),
+                    Err(DispatchError::Runtime(msg)) => ExtensionCallResponse::Error(msg),
+                    Err(DispatchError::Malformed(msg)) => {
+                        return Err(wasmtime::Error::msg(format!(
+                            "Failed to deserialize extension payload: {}",
+                            msg
+                        )));
+                    }
                 };
 
                 let resp_json = serde_json::to_vec(&response).unwrap_or_else(|e| {
@@ -1009,8 +1167,7 @@ impl Engine {
 
         let ptr = (encoded_result & 0xFFFFFFFF) as u32;
         let len = (encoded_result >> 32) as u32;
-        let mut json_bytes = vec![0u8; len as usize];
-        memory.read(&store, ptr as usize, &mut json_bytes)?;
+        let json_bytes = read_guest_bytes(&memory, &store, ptr as usize, len as usize)?;
 
         String::from_utf8(json_bytes)
             .map_err(|e| anyhow::anyhow!("Failed to parse result as UTF-8: {}", e))
@@ -1057,8 +1214,12 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
 
+    use ferricel_types::extensions::ExtensionCallPayload;
     use rstest::rstest;
 
     use super::*;
@@ -1073,12 +1234,42 @@ mod tests {
         }
     }
 
-    fn payload(args: Vec<serde_json::Value>) -> ExtensionCallPayload {
-        ExtensionCallPayload {
+    /// The request bytes for a call to `myFunc` with `args`, in the wire
+    /// format that the guest produces.
+    fn payload(args: Vec<serde_json::Value>) -> Vec<u8> {
+        serde_json::to_vec(&ExtensionCallPayload {
             namespace: None,
             function: "myFunc".to_string(),
             args,
-        }
+        })
+        .unwrap()
+    }
+
+    /// The request bytes for a call to `myFunc`, with `args_json` parsed
+    /// and used as the `args` field. Use this function to build a payload
+    /// whose `args` is valid JSON but not an array, something a real guest
+    /// never sends.
+    fn raw_payload(args_json: &str) -> Vec<u8> {
+        let args: serde_json::Value = serde_json::from_str(args_json).unwrap();
+        serde_json::to_vec(&serde_json::json!({
+            "namespace": null,
+            "function": "myFunc",
+            "args": args,
+        }))
+        .unwrap()
+    }
+
+    /// Register `myFunc` with `num_args`, and a closure that records
+    /// whether it ran.
+    fn extensions_with_probe(num_args: usize) -> (Extensions, std::sync::Arc<AtomicBool>) {
+        let called = std::sync::Arc::new(AtomicBool::new(false));
+        let called_clone = called.clone();
+        let mut extensions = Extensions::new();
+        extensions.register(test_decl(num_args), move |_args| {
+            called_clone.store(true, Ordering::SeqCst);
+            Ok(serde_json::json!(42))
+        });
+        (extensions, called)
     }
 
     #[rstest]
@@ -1091,18 +1282,14 @@ mod tests {
         #[case] args: Vec<serde_json::Value>,
         #[case] expected_msg: &str,
     ) {
-        let called = std::sync::Arc::new(AtomicBool::new(false));
-        let called_clone = called.clone();
-        let mut extensions = Extensions::new();
-        extensions.register(test_decl(1), move |_args| {
-            called_clone.store(true, Ordering::SeqCst);
-            Ok(serde_json::Value::Null)
-        });
+        let (extensions, called) = extensions_with_probe(1);
 
         let result = dispatch_extension(&extensions, &payload(args));
 
         assert!(!called.load(Ordering::SeqCst));
-        let err = result.unwrap_err();
+        let Err(DispatchError::Runtime(err)) = result else {
+            panic!("expected Runtime error, got: {result:?}");
+        };
         assert!(err.contains(expected_msg), "got: {err}");
     }
 
@@ -1128,7 +1315,7 @@ mod tests {
 
         let result = dispatch_extension(&extensions, &payload(vec![]));
 
-        assert_eq!(result.unwrap_err(), "boom");
+        assert_eq!(result, Err(DispatchError::Runtime("boom".to_string())));
     }
 
     #[test]
@@ -1137,8 +1324,153 @@ mod tests {
 
         let result = dispatch_extension(&extensions, &payload(vec![]));
 
-        let err = result.unwrap_err();
+        let Err(DispatchError::Runtime(err)) = result else {
+            panic!("expected Runtime error, got: {result:?}");
+        };
         assert!(err.contains("Extension not found: myFunc"), "got: {err}");
+    }
+
+    #[rstest]
+    #[case::not_json(b"not json".as_slice())]
+    #[case::args_not_an_array(br#"{"namespace":null,"function":"myFunc","args":"not-an-array"}"#)]
+    #[case::args_missing(br#"{"namespace":null,"function":"myFunc"}"#)]
+    fn dispatch_extension_malformed_payload_is_malformed_error(#[case] req: &[u8]) {
+        // A malformed payload is a bug in the guest. It must trap, not
+        // become a CEL runtime error. The closure must not run.
+        let (extensions, called) = extensions_with_probe(1);
+
+        let result = dispatch_extension(&extensions, req);
+
+        assert!(!called.load(Ordering::SeqCst));
+        assert!(
+            matches!(result, Err(DispatchError::Malformed(_))),
+            "got: {result:?}"
+        );
+    }
+
+    #[rstest]
+    // If there is no authorizer, phase 2 returns `Malformed`.
+    #[case::malformed_args(r#""not-an-array""#)]
+    // If there is no authorizer, the arity check returns
+    // `Runtime("myFunc expects 1 argument(s), got 2")`.
+    #[case::wrong_arity("[1, 2]")]
+    fn authorizer_denial_wins_over_later_checks(#[case] args_json: &str) {
+        // Each case fails with a different error if the authorizer runs
+        // later than planned. That is what proves the order: authorizer
+        // first, then the `args` parse, then the arity check.
+        let (mut extensions, called) = extensions_with_probe(1);
+        extensions.set_extension_authorizer(|_key| Err("denied".to_string()));
+
+        let result = dispatch_extension(&extensions, &raw_payload(args_json));
+
+        assert!(!called.load(Ordering::SeqCst));
+        assert_eq!(result, Err(DispatchError::Runtime("denied".to_string())));
+    }
+
+    #[test]
+    fn authorizer_receives_namespace_and_function() {
+        let seen: std::sync::Arc<Mutex<Option<ExtensionKey>>> = Default::default();
+        let seen_clone = seen.clone();
+        let decl = ExtensionDecl {
+            namespace: Some("math".to_string()),
+            function: "abs".to_string(),
+            receiver_style: false,
+            global_style: true,
+            num_args: 1,
+        };
+        let extensions = Extensions::new()
+            .with(decl, |_args| Ok(serde_json::Value::Null))
+            .with_extension_authorizer(move |key| {
+                *seen_clone.lock().unwrap() = Some(key.clone());
+                Ok(())
+            });
+        let req = serde_json::to_vec(&ExtensionCallPayload {
+            namespace: Some("math".to_string()),
+            function: "abs".to_string(),
+            args: vec![serde_json::json!(-1)],
+        })
+        .unwrap();
+
+        dispatch_extension(&extensions, &req).unwrap();
+
+        assert_eq!(
+            *seen.lock().unwrap(),
+            Some(ExtensionKey::new(
+                Some("math".to_string()),
+                "abs".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn authorizer_runs_after_unknown_extension_check() {
+        // An unknown extension is a mismatch between the compiler and the
+        // runtime, not an authorization question. The authorizer does not
+        // run for this case.
+        let authorizer_ran = std::sync::Arc::new(AtomicBool::new(false));
+        let authorizer_ran_clone = authorizer_ran.clone();
+        let extensions = Extensions::new().with_extension_authorizer(move |_key| {
+            authorizer_ran_clone.store(true, Ordering::SeqCst);
+            Err("denied".to_string())
+        });
+
+        let result = dispatch_extension(&extensions, &payload(vec![]));
+
+        assert!(!authorizer_ran.load(Ordering::SeqCst));
+        let Err(DispatchError::Runtime(err)) = result else {
+            panic!("expected Runtime error, got: {result:?}");
+        };
+        assert!(err.contains("Extension not found: myFunc"), "got: {err}");
+    }
+
+    #[test]
+    fn authorizer_ok_lets_call_through() {
+        let (mut extensions, called) = extensions_with_probe(1);
+        extensions.set_extension_authorizer(|_key| Ok(()));
+
+        let result = dispatch_extension(&extensions, &payload(vec![serde_json::json!(1)]));
+
+        assert!(called.load(Ordering::SeqCst));
+        assert_eq!(result.unwrap(), serde_json::json!(42));
+    }
+
+    /// A one-page memory whose first bytes are `0..=9`.
+    fn one_page_memory() -> (Store<()>, wasmtime::Memory) {
+        let engine = WasmEngine::default();
+        let mut store = Store::new(&engine, ());
+        let memory =
+            wasmtime::Memory::new(&mut store, wasmtime::MemoryType::new(1, Some(1))).unwrap();
+        memory
+            .write(&mut store, 0, &(0..10).collect::<Vec<u8>>())
+            .unwrap();
+        (store, memory)
+    }
+
+    const PAGE: usize = 65536;
+
+    #[rstest]
+    #[case::in_bounds(2, 5, Some(vec![2, 3, 4, 5, 6]))]
+    #[case::empty_at_end(PAGE, 0, Some(vec![]))]
+    #[case::len_past_end(PAGE - 4, 8, None)]
+    #[case::ptr_past_end(PAGE, 1, None)]
+    #[case::huge_len(0, u32::MAX as usize, None)]
+    #[case::ptr_plus_len_overflows(usize::MAX, 2, None)]
+    fn read_guest_bytes_checks_bounds_before_it_allocates(
+        #[case] ptr: usize,
+        #[case] len: usize,
+        #[case] expected: Option<Vec<u8>>,
+    ) {
+        let (store, memory) = one_page_memory();
+
+        let result = read_guest_bytes(&memory, &store, ptr, len);
+
+        match expected {
+            Some(bytes) => assert_eq!(result.unwrap(), bytes),
+            None => {
+                let err = result.unwrap_err().to_string();
+                assert!(err.contains("out of bounds"), "got: {err}");
+            }
+        }
     }
 
     #[rstest]

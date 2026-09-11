@@ -141,11 +141,12 @@ does not call the closure. So an implementation can trust
 `args.len() == decl.num_args` and read `args[0]`, `args[1]`, and so on.
 
 A failure at the extension boundary becomes a CEL runtime error. This
-includes three cases: an unknown extension, a wrong argument count, and an
-`Err(_)` value from the implementation. The `&&` and `||` operators can
-absorb this error. For example, `x.myFunc() || true` evaluates to `true`
-when `myFunc` fails. If no operator absorbs the error, the evaluation fails,
-like a division by zero.
+includes four cases: an unknown extension, a rejection by the
+[extension authorizer](#reject-a-call-before-its-arguments-are-parsed), a
+wrong argument count, and an `Err(_)` value from the implementation. The
+`&&` and `||` operators can absorb this error. For example, `x.myFunc() ||
+true` evaluates to `true` when `myFunc` fails. If no operator absorbs the
+error, the evaluation fails, the same way a division by zero fails.
 
 In that case `Engine::eval` returns an error that downcasts to
 `ferricel_core::CelRuntimeError`. Its `origin` field names the extension
@@ -155,6 +156,51 @@ built-in operator has no `origin`.
 The runtime cannot check the call style (`receiver_style` and
 `global_style`). The wire format does not contain this information. Only the
 compiler checks the call style, at the CEL call sites.
+
+### Reject a call before its arguments are parsed
+
+A host often decides whether it allows a call from the extension name
+alone. For example, a policy engine grants each policy a set of host
+capabilities, one per `(namespace, function)`. Such a host does not need
+the arguments to make this decision.
+
+An *extension authorizer* is a hook that runs before the runtime parses
+the arguments. Register one to reject a call by name alone. A denied call
+then costs the host almost nothing, no matter the size of the arguments.
+
+The runtime calls the authorizer with the `ExtensionKey` of each call. It
+calls the authorizer after it finds the extension and before it parses
+`args`. `Err(msg)` rejects the call. The guest receives `msg` as a CEL
+runtime error, with the extension as its `origin`, the same way it
+receives an `Err(_)` from the implementation. The implementation does not
+run.
+
+```rust
+use ferricel_core::runtime;
+
+let allowed = ["abs", "reverse"];
+
+let engine = runtime::Builder::new()
+    .with_extension(abs_decl, abs_impl)
+    .with_extension_authorizer(move |key| {
+        if allowed.contains(&key.function.as_str()) {
+            Ok(())
+        } else {
+            Err(format!("extension {} is not allowed", key.function))
+        }
+    })
+    .with_wasm(wasm)
+    .build()?;
+```
+
+You can also set this hook on `Extensions`, with `with_extension_authorizer`
+and `set_extension_authorizer`, for the
+[`EnginePre::rehydrate`](#reuse-extensions-with-enginepre) path. Build a new
+`Extensions` per request when the decision depends on request context.
+
+The authorizer sees only the name. A check that depends on argument values
+still belongs in the implementation. For example, a check on a Kubernetes
+`kind` needs the parsed arguments.
 
 ### Dotted namespaces
 
