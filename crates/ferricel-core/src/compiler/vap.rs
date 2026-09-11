@@ -1,17 +1,22 @@
 //! VAP (ValidatingAdmissionPolicy) compilation.
 //!
 //! Each CEL expression in the VAP spec (matchConditions, variables, validations,
-//! messageExpressions) is compiled as an isolated sub-function.  An orchestrating
-//! `evaluate` function ties them together following K8s VAP evaluation order:
+//! messageExpressions) is compiled as an isolated sub-function. An orchestrating
+//! `evaluate` function ties them together in the same order as the Kubernetes
+//! VAP validator:
 //!
-//! 1. **matchConditions** — if any evaluates to `false`, the policy does not
-//!    apply; return `{"accepted":true}` immediately (policy skipped, not a
-//!    rejection).
-//! 2. **variables** — evaluated in declaration order; each result is inserted
-//!    into a `variables` map so subsequent expressions can access
-//!    `variables.<name>`.
-//! 3. **validations** — evaluated in order; first `false` result returns a
-//!    rejection response with the appropriate message and HTTP status code.
+//! 1. **params** (only when `spec.paramKind` is set). The runtime resolves the
+//!    list of param objects from `paramRef`. See "Params" below.
+//! 2. For each param (or once, when there is no `paramKind`):
+//!    1. **matchConditions**. If any evaluates to `false`, this param is
+//!       skipped. It is not a rejection.
+//!    2. **variables**. Evaluated in declaration order. Each result is
+//!       inserted into a `variables` map so later expressions can access
+//!       `variables.<name>`. The map is rebuilt for each param.
+//!    3. **validations**. Evaluated in order. The first `false` result
+//!       returns a rejection response with the message and HTTP status code
+//!       of that validation.
+//! 3. When no param produced a rejection, return `{"accepted":true}`.
 //!
 //! ## Runtime errors
 //!
@@ -22,18 +27,39 @@
 //!
 //! On the host, [`Engine::eval`](crate::runtime::Engine::eval) returns an
 //! error that downcasts to [`CelRuntimeError`](crate::CelRuntimeError).
-//! When the `params` lookup fails, the error's `origin` is `kw.k8s.get`.
+//! When the `params` lookup fails, the error's `origin` is `kw.k8s.get` or
+//! `kw.k8s.list`.
 //!
-//! A `variables` entry that evaluates to an error is stored as-is; the error
+//! A `variables` entry that evaluates to an error is stored as-is. The error
 //! propagates only into the expressions that reference it (matching the lazy
 //! semantics of Kubernetes). A `messageExpression` that errors or does not
 //! produce a string falls back to the static `message`.
 //!
-//! ## K8s resource fetching (params)
+//! ## Params
+//!
+//! The host supplies `paramRef` (the `spec.paramRef` of the binding) and
+//! `request` in the bindings. The guest runtime reads them and calls the
+//! host:
+//!
+//! - `paramRef.name`: one `kw.k8s.get` call. One param object.
+//! - `paramRef.selector`: one `kw.k8s.list` call with the selector formatted
+//!   as a label selector string. One param object per item.
+//!
+//! The namespace is `paramRef.namespace`. If that is empty, it is
+//! `request.namespace`. If that is also empty, it is `""`.
+//!
+//! When the host call fails, or the list is empty, `parameterNotFoundAction`
+//! decides the result. `Allow` accepts the request. Any other value (the
+//! default is `Deny`) traps, and the host applies its `failurePolicy`.
+//!
+//! When several params match a selector and more than one produces a
+//! rejection, the response holds the first rejection only. Kubernetes
+//! aggregates every rejection message.
 //!
 //! The host must register a `kw.k8s` builder-chain implementation on the
-//! `Engine`. The chain is declared via [`kw_k8s_chain`] and injected
-//! automatically by [`crate::compiler::Compiler::compile_vap_from_policy`].
+//! `Engine`, for both `get` and `list`. The chain is declared via
+//! [`kw_k8s_chain`] and injected automatically by
+//! [`crate::compiler::Compiler::compile_vap_from_policy`].
 
 use anyhow::Context as _;
 use cel::parser::Parser;
@@ -42,17 +68,14 @@ use ferricel_types::{
     functions::RuntimeFunction,
 };
 use k8s_openapi::api::admissionregistration::v1::{
-    MatchCondition, ParamKind, ValidatingAdmissionPolicySpec, Validation, Variable,
+    MatchCondition, ValidatingAdmissionPolicySpec, Validation, Variable,
 };
-use walrus::{FunctionBuilder, FunctionId, ValType};
+use walrus::{FunctionBuilder, FunctionId, InstrSeqBuilder, LocalId, ValType, ir::InstrSeqId};
 
 use crate::compiler::{
     context::{CompilerContext, CompilerEnv},
     expr::compile_expr,
-    helpers::{
-        compile_string_to_local, emit_get_variable, emit_set_variable, emit_string_const,
-        get_memory_id,
-    },
+    helpers::{compile_string_to_local, emit_set_variable, emit_string_const, get_memory_id},
 };
 
 // ─── kw.k8s builder chain ─────────────────────────────────────────────────────
@@ -328,6 +351,40 @@ fn compile_sub_fn(
 
 // ─── Orchestrating function ───────────────────────────────────────────────────
 
+/// Wasm locals that the orchestrator and [`emit_param_evaluation`] share.
+struct OrchestratorLocals {
+    /// Scratch `*mut CelValue` for the result of the last sub-function call.
+    val: LocalId,
+    /// The `variables` map for the current param.
+    variables_map: LocalId,
+}
+
+/// Build the exported `evaluate(bindings: i64) -> i64` function.
+///
+/// Emitted pseudo-code:
+///
+/// ```text
+/// bindings = deserialize(arg); init_bindings(bindings)
+/// if spec.paramKind is set:
+///     list = cel_vap_resolve_params(apiVersion, kind); abort_if_error(list)
+///     n = cel_array_len(list); i = 0
+///     block exit {
+///       loop next {
+///         br_if exit (i >= n)
+///         set_variable("params", cel_array_get(list, i))
+///         i += 1
+///         block skip { <matchConditions, variables, validations> }
+///         br next
+///       }
+///     }
+/// else:
+///     block skip { <matchConditions, variables, validations> }
+/// return serialize_accept()
+/// ```
+///
+/// A false `matchCondition` branches to `skip`. A false validation returns a
+/// rejection response from inside the block. When the loop ends, or the
+/// param list is empty, the function returns an acceptance response.
 fn build_orchestrator(
     module: &mut walrus::Module,
     env: &CompilerEnv,
@@ -335,8 +392,10 @@ fn build_orchestrator(
 ) -> Result<FunctionId, anyhow::Error> {
     let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I64], &[ValType::I64]);
     let bindings_arg = module.locals.add(ValType::I64);
-    let val_local = module.locals.add(ValType::I32);
-    let variables_map = module.locals.add(ValType::I32);
+    let locals = OrchestratorLocals {
+        val: module.locals.add(ValType::I32),
+        variables_map: module.locals.add(ValType::I32),
+    };
     let mut body = func.func_body();
 
     // 1. Deserialize + init bindings
@@ -344,30 +403,131 @@ fn build_orchestrator(
         .call(env.get(RuntimeFunction::DeserializeJson))
         .call(env.get(RuntimeFunction::InitBindings));
 
-    // 2. matchConditions — false → policy skipped → accept.
+    match &args.spec.param_kind {
+        Some(param_kind) => {
+            let api_version = param_kind.api_version.as_deref().unwrap_or("");
+            let kind = param_kind.kind.as_deref().unwrap_or("");
+            emit_params_loop(&mut body, api_version, kind, &args, env, module, &locals)?;
+        }
+        None => {
+            let skip_id = body.dangling_instr_seq(None).id();
+            body.instr(walrus::ir::Block { seq: skip_id });
+            let mut skip_body = body.instr_seq(skip_id);
+            emit_param_evaluation(&mut skip_body, skip_id, &args, env, module, &locals)?;
+        }
+    }
+
+    // Every param passed (or was skipped) → accept.
+    body.call(env.get(RuntimeFunction::VapSerializeAccept));
+
+    Ok(func.finish(vec![bindings_arg], &mut module.funcs))
+}
+
+/// Emit the `params` resolution and the per-param loop. See
+/// [`build_orchestrator`] for the pseudo-code.
+fn emit_params_loop(
+    body: &mut InstrSeqBuilder,
+    api_version: &str,
+    kind: &str,
+    args: &OrchestratorArgs<'_>,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+    locals: &OrchestratorLocals,
+) -> Result<(), anyhow::Error> {
+    let mem = get_memory_id(module)?;
+    let list_local = module.locals.add(ValType::I32);
+    let len_local = module.locals.add(ValType::I32);
+    let index_local = module.locals.add(ValType::I32);
+    let param_local = module.locals.add(ValType::I32);
+
+    // list = cel_vap_resolve_params(apiVersion, kind); abort_if_error(list)
+    emit_string_const(api_version, body, env, mem, module);
+    emit_string_const(kind, body, env, mem, module);
+    body.call(env.get(RuntimeFunction::VapResolveParams))
+        .local_set(list_local)
+        .local_get(list_local)
+        .call(env.get(RuntimeFunction::AbortIfError));
+
+    // n = cel_array_len(list); i = 0
+    body.local_get(list_local)
+        .call(env.get(RuntimeFunction::ArrayLen))
+        .local_set(len_local);
+    body.i32_const(0).local_set(index_local);
+
+    // block exit { loop next { ... } }
+    let exit_id = body.dangling_instr_seq(None).id();
+    let loop_id = body.dangling_instr_seq(None).id();
+    let skip_id = body.dangling_instr_seq(None).id();
+
+    body.instr(walrus::ir::Block { seq: exit_id });
+    body.instr_seq(exit_id)
+        .instr(walrus::ir::Loop { seq: loop_id });
+
+    {
+        let mut loop_body = body.instr_seq(loop_id);
+
+        // br_if exit (i >= n)
+        loop_body
+            .local_get(index_local)
+            .local_get(len_local)
+            .binop(walrus::ir::BinaryOp::I32GeU)
+            .instr(walrus::ir::BrIf { block: exit_id });
+
+        // set_variable("params", cel_array_get(list, i))
+        loop_body
+            .local_get(list_local)
+            .local_get(index_local)
+            .call(env.get(RuntimeFunction::ArrayGet))
+            .local_set(param_local);
+        emit_set_variable("params", param_local, &mut loop_body, env, module)?;
+
+        // i += 1 (before the body, so `skip` only needs to fall through)
+        loop_body
+            .local_get(index_local)
+            .i32_const(1)
+            .binop(walrus::ir::BinaryOp::I32Add)
+            .local_set(index_local);
+
+        // block skip { ... }; br next
+        loop_body.instr(walrus::ir::Block { seq: skip_id });
+        loop_body.instr(walrus::ir::Br { block: loop_id });
+    }
+
+    let mut skip_body = body.instr_seq(skip_id);
+    emit_param_evaluation(&mut skip_body, skip_id, args, env, module, locals)
+}
+
+/// Emit the evaluation of one param: `matchConditions`, `variables`, then
+/// `validations`.
+///
+/// A false `matchCondition` branches to `skip_id`, the enclosing block. A
+/// false validation returns a rejection response. When every validation
+/// passes, control falls through to the end of `body`.
+fn emit_param_evaluation(
+    body: &mut InstrSeqBuilder,
+    skip_id: InstrSeqId,
+    args: &OrchestratorArgs<'_>,
+    env: &CompilerEnv,
+    module: &mut walrus::Module,
+    locals: &OrchestratorLocals,
+) -> Result<(), anyhow::Error> {
+    // 1. matchConditions — false → skip this param.
     //    A CEL runtime error traps so the host can apply `failurePolicy`.
     for &fn_id in &args.match_conditions_fns {
         body.call(fn_id)
-            .local_set(val_local)
-            .local_get(val_local)
+            .local_set(locals.val)
+            .local_get(locals.val)
             .call(env.get(RuntimeFunction::AbortIfError))
-            .local_get(val_local)
-            .call(env.get(RuntimeFunction::IsStrictlyFalse));
-        body.if_else(
-            None,
-            |then| {
-                then.call(env.get(RuntimeFunction::VapSerializeAccept))
-                    .return_();
-            },
-            |_| {},
-        );
+            .local_get(locals.val)
+            .call(env.get(RuntimeFunction::IsStrictlyFalse))
+            .instr(walrus::ir::BrIf { block: skip_id });
     }
 
-    // 3. Create `variables` map.
+    // 2. Create a fresh `variables` map.
     body.call(env.get(RuntimeFunction::CreateMap))
-        .local_set(variables_map);
+        .local_set(locals.variables_map);
 
-    // 4. Evaluate variables in order, insert each into the map, then update the
+    // 3. Evaluate variables in order, insert each into the map, then update the
     //    "variables" binding so that subsequent variable expressions (and all
     //    validation expressions) can access `variables.<name>`.
     //
@@ -375,30 +535,25 @@ fn build_orchestrator(
     //    expressions can reference earlier ones via `variables.X` (per K8s spec).
     let variables = args.spec.variables.as_deref().unwrap_or(&[]);
     for (i, var) in variables.iter().enumerate() {
-        body.call(args.variables_fns[i]).local_set(val_local);
+        body.call(args.variables_fns[i]).local_set(locals.val);
 
-        let key_local = compile_string_to_local(&var.name, &mut body, env, module)?;
-        body.local_get(variables_map);
+        let key_local = compile_string_to_local(&var.name, body, env, module)?;
+        body.local_get(locals.variables_map);
         body.local_get(key_local);
-        body.local_get(val_local);
+        body.local_get(locals.val);
         body.call(env.get(RuntimeFunction::MapInsert));
 
         // Re-register the (now-updated) map so subsequent lookups see the new entry.
-        emit_set_variable("variables", variables_map, &mut body, env, module)?;
+        emit_set_variable("variables", locals.variables_map, body, env, module)?;
     }
 
     // If there are no variables, still register an empty map so that
     // expressions that reference `variables` (even if unused) don't error.
     if variables.is_empty() {
-        emit_set_variable("variables", variables_map, &mut body, env, module)?;
+        emit_set_variable("variables", locals.variables_map, body, env, module)?;
     }
 
-    // 5. params (after variables so expressions can reference variables)
-    if let Some(ref pk) = args.spec.param_kind {
-        emit_fetch_params(pk, &mut body, env, module)?;
-    }
-
-    // 6. Validations — pre-allocate static message locals, then emit conditionals
+    // 4. Validations — pre-allocate static message locals, then emit conditionals
     let validations_spec = args.spec.validations.as_deref().unwrap_or(&[]);
     for (i, compiled) in args.validations.iter().enumerate() {
         let val_spec = &validations_spec[i];
@@ -408,8 +563,8 @@ fn build_orchestrator(
         // Evaluate the validation expression. A CEL runtime error must surface
         // to the host (trap), not be mistaken for a non-`false` (passing) result.
         body.call(compiled.id)
-            .local_set(val_local)
-            .local_get(val_local)
+            .local_set(locals.val)
+            .local_get(locals.val)
             .call(env.get(RuntimeFunction::AbortIfError));
 
         // Pre-compute the static message (needs &mut module, so must be outside
@@ -420,9 +575,9 @@ fn build_orchestrator(
             .message
             .clone()
             .unwrap_or_else(|| format!("failed expression: {}", val_spec.expression));
-        let static_msg_local = compile_string_to_local(&text, &mut body, env, module)?;
+        let static_msg_local = compile_string_to_local(&text, body, env, module)?;
 
-        body.local_get(val_local)
+        body.local_get(locals.val)
             .call(env.get(RuntimeFunction::IsStrictlyFalse));
         body.if_else(
             None,
@@ -443,117 +598,5 @@ fn build_orchestrator(
         );
     }
 
-    // 7. All validations passed → accept
-    body.call(env.get(RuntimeFunction::VapSerializeAccept));
-
-    Ok(func.finish(vec![bindings_arg], &mut module.funcs))
-}
-
-// ─── K8s resource fetch emitters ─────────────────────────────────────────────
-
-/// Emit code to fetch `params` via `kw.k8s.apiVersion(...).kind(...).get(name)`.
-///
-/// The `paramRef.name` and `paramRef.namespace` are read from the bindings map
-/// at runtime (injected by the host).
-///
-/// Emitted pseudo-code:
-/// ```text
-/// paramRef = get_variable("paramRef")
-/// name_val = paramRef["name"]
-/// ns_val   = paramRef["namespace"]
-///
-/// // kw.k8s.apiVersion(api_version).kind(kind).namespace(ns).get(name)
-/// builder = cel_builder_step(null, "kw.k8s.ClientBuilder", "apiVersion", api_version_str, 0)
-/// builder = cel_builder_step(builder, "kw.k8s.Client", "kind", kind_str, 0)
-/// builder = cel_builder_step(builder, "kw.k8s.Client", "namespace", ns_val, 0)
-/// builder = cel_builder_step(builder, "kw.k8s.Client", "name", name_val, 0)
-/// params  = ExtCall1("kw.k8s", "get", builder)
-/// set_variable("params", params)
-/// ```
-fn emit_fetch_params(
-    param_kind: &ParamKind,
-    body: &mut walrus::InstrSeqBuilder,
-    env: &CompilerEnv,
-    module: &mut walrus::Module,
-) -> Result<(), anyhow::Error> {
-    let mem = get_memory_id(module)?;
-
-    let param_ref = module.locals.add(ValType::I32);
-    let name_val = module.locals.add(ValType::I32);
-    let ns_val = module.locals.add(ValType::I32);
-    let builder = module.locals.add(ValType::I32);
-    let result = module.locals.add(ValType::I32);
-
-    // Read paramRef from bindings
-    emit_get_variable("paramRef", body, env, module)?;
-    body.local_set(param_ref);
-
-    // Extract paramRef.name and paramRef.namespace
-    body.local_get(param_ref);
-    emit_string_const("name", body, env, mem, module);
-    body.call(env.get(RuntimeFunction::GetField))
-        .local_set(name_val);
-
-    body.local_get(param_ref);
-    emit_string_const("namespace", body, env, mem, module);
-    body.call(env.get(RuntimeFunction::GetField))
-        .local_set(ns_val);
-
-    let api_version = param_kind.api_version.as_deref().unwrap_or("");
-    let kind = param_kind.kind.as_deref().unwrap_or("");
-
-    // Step 1: kw.k8s.apiVersion(api_version) → ClientBuilder
-    {
-        let api_version_local = compile_string_to_local(api_version, body, env, module)?;
-        body.i32_const(0); // null receiver
-        emit_string_const("kw.k8s.ClientBuilder", body, env, mem, module);
-        emit_string_const("apiVersion", body, env, mem, module);
-        body.local_get(api_version_local);
-        body.i32_const(0); // accumulate = false
-        body.call(env.get(RuntimeFunction::BuilderStepCall))
-            .local_set(builder);
-    }
-
-    // Step 2: .kind(kind) → Client
-    {
-        let kind_local = compile_string_to_local(kind, body, env, module)?;
-        body.local_get(builder);
-        emit_string_const("kw.k8s.Client", body, env, mem, module);
-        emit_string_const("kind", body, env, mem, module);
-        body.local_get(kind_local);
-        body.i32_const(0);
-        body.call(env.get(RuntimeFunction::BuilderStepCall))
-            .local_set(builder);
-    }
-
-    // Step 3: .namespace(ns_val) — ns_val is a *mut CelValue from runtime
-    {
-        body.local_get(builder);
-        emit_string_const("kw.k8s.Client", body, env, mem, module);
-        emit_string_const("namespace", body, env, mem, module);
-        body.local_get(ns_val);
-        body.i32_const(0);
-        body.call(env.get(RuntimeFunction::BuilderStepCall))
-            .local_set(builder);
-    }
-
-    // Step 4: fold name into the map so the host gets it
-    {
-        body.local_get(builder);
-        emit_string_const("kw.k8s.Client", body, env, mem, module);
-        emit_string_const("name", body, env, mem, module);
-        body.local_get(name_val);
-        body.i32_const(0);
-        body.call(env.get(RuntimeFunction::BuilderStepCall))
-            .local_set(builder);
-    }
-
-    // Terminal: ExtCall1("kw.k8s", "get", builder)
-    emit_string_const("kw.k8s", body, env, mem, module);
-    emit_string_const("get", body, env, mem, module);
-    body.local_get(builder);
-    body.call(env.get(RuntimeFunction::ExtCall1))
-        .local_set(result);
-
-    emit_set_variable("params", result, body, env, module)
+    Ok(())
 }

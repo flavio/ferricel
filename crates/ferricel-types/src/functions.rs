@@ -327,6 +327,18 @@ pub enum RuntimeFunction {
     /// `message` is the `messageExpression` result (or null); it is used only if
     /// it is a string, otherwise `fallback` (the static message) is used.
     VapSerializeReject,
+    /// Resolve the list of `params` objects for a VAP evaluation.
+    ///
+    /// Reads `paramRef` and `request` from the bindings, then calls the host
+    /// `kw.k8s.get` (for `paramRef.name`) or `kw.k8s.list` (for
+    /// `paramRef.selector`). Honors `paramRef.parameterNotFoundAction`.
+    ///
+    /// Arguments: `(api_version_ptr: i32, api_version_len: i32, kind_ptr: i32, kind_len: i32)`,
+    /// the UTF-8 bytes of `paramKind.apiVersion` and `paramKind.kind`.
+    ///
+    /// Returns a `*mut CelValue` that is a `CelValue::Array` of param objects,
+    /// or a `CelValue::Error`.
+    VapResolveParams,
 
     // Fluent builder chain support
     /// Produce or update a builder state map for a fluent-chain extension step.
@@ -622,6 +634,7 @@ impl RuntimeFunction {
 
             Self::VapSerializeAccept => "cel_serialize_vap_accept",
             Self::VapSerializeReject => "cel_serialize_vap_reject",
+            Self::VapResolveParams => "cel_vap_resolve_params",
 
             Self::BuilderStepCall => "cel_builder_step",
             Self::BuilderMapEntryCall => "cel_builder_map_entry",

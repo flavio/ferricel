@@ -1,9 +1,8 @@
-//! VAP (ValidatingAdmissionPolicy) response serialization.
+//! VAP response serialization.
 //!
 //! These functions produce a Kubewarden-compatible `ValidationResponse` JSON
-//! object (`{"accepted": true}` or `{"accepted": false, "message": "...", "code": N}`)
-//! and return the result as a packed ptr+len `i64` — the same encoding used by
-//! `cel_serialize_result`.
+//! object and return the result as a packed ptr+len `i64`, the same encoding
+//! used by `cel_serialize_result`.
 
 use std::collections::HashMap;
 

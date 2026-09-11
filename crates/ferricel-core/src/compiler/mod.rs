@@ -304,13 +304,15 @@ impl Compiler {
     /// a response: [`Engine::eval`](crate::runtime::Engine::eval) returns an
     /// error that downcasts to [`CelRuntimeError`](crate::CelRuntimeError).
     /// When the error came from the `params` lookup, its `origin` field is
-    /// `kw.k8s.get`.
+    /// `kw.k8s.get` or `kw.k8s.list`.
     ///
     /// The YAML must contain exactly one `ValidatingAdmissionPolicy` document.
     /// The caller must pass, at minimum, `object` in the bindings. When the
-    /// policy sets `paramKind`, the host must also register a `kw.k8s.get`
-    /// extension implementation on the `Engine`. See
-    /// [`vap::kw_k8s_get_extension`].
+    /// policy sets `paramKind`, the caller must also pass `paramRef` (and
+    /// `request`, for namespace defaulting) in the bindings, and register
+    /// both the `kw.k8s.get` and `kw.k8s.list` extension implementations on
+    /// the `Engine`. See [`vap::kw_k8s_get_extension`] and
+    /// [`vap::kw_k8s_list_extension`].
     ///
     /// # Example
     ///
@@ -410,11 +412,13 @@ impl Compiler {
         let evaluate_id = vap::build_vap_evaluate_function(&mut module, &env, &ctx, spec)?;
         module.exports.add("evaluate", evaluate_id);
 
-        // If the policy uses paramKind, the compiler emits a hardcoded kw.k8s.get
-        // call that doesn't go through the normal extension-call instrumentation.
-        // Record it explicitly here.
+        // If the policy uses paramKind, the runtime resolves `params` with a
+        // direct kw.k8s.get (paramRef.name) or kw.k8s.list (paramRef.selector)
+        // call. Which one runs depends on the binding at runtime, so neither
+        // goes through the normal extension-call instrumentation. Record both.
         if spec.param_kind.is_some() {
             ctx.record_extension(Some("kw.k8s"), "get");
+            ctx.record_extension(Some("kw.k8s"), "list");
         }
 
         walrus::passes::gc::run(&mut module);

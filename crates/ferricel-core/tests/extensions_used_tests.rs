@@ -158,7 +158,9 @@ spec:
 
     #[rstest]
     #[case::no_ext(VAP_NO_EXT, vec![])]
-    #[case::param_kind(VAP_PARAM_KIND, vec![used(Some("kw.k8s"), "get")])]
+    // `paramKind` records both `get` and `list`: the runtime picks one of
+    // them from `paramRef.name` or `paramRef.selector` at evaluation time.
+    #[case::param_kind(VAP_PARAM_KIND, vec![used(Some("kw.k8s"), "get"), used(Some("kw.k8s"), "list")])]
     #[case::list(VAP_LIST, vec![used(Some("kw.k8s"), "list")])]
     fn test_vap_extensions(#[case] yaml: &str, #[case] expected: Vec<UsedExtension>) {
         let wasm = Builder::new()

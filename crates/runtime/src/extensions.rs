@@ -31,10 +31,14 @@ unsafe extern "C" {
 /// is a `CelValue::Error` (for example, the result of `1 / 0`), this
 /// function returns that error and does not call the host.
 ///
+/// Rust code inside the runtime can call this helper directly. The VAP
+/// `params` resolver (`crate::vap`) uses it to call `kw.k8s.get` and
+/// `kw.k8s.list`.
+///
 /// # Safety
 ///
 /// All pointers in `args` must be valid, non-null `*mut CelValue` pointers.
-unsafe fn call_extension_impl(
+pub(crate) unsafe fn call_extension_impl(
     namespace: Option<&str>,
     function: &str,
     args: Vec<CelValue>,
