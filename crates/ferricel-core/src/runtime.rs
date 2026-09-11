@@ -203,6 +203,35 @@ fn parse_abort_payload(bytes: &[u8]) -> Result<CelRuntimeError, wasmtime::Error>
     })
 }
 
+/// Copy `len` bytes at `ptr` out of guest memory.
+///
+/// Both values come from the guest. The function checks them against the
+/// memory size before it allocates. As a result, a guest cannot make the
+/// host allocate more than the memory holds. The function also skips the
+/// zero-fill step that `vec![0u8; len]` needs before `Memory::read`.
+///
+/// An out-of-bounds range is a bug in the guest. It produces a
+/// `wasmtime::Error`, which traps the instance.
+fn read_guest_bytes(
+    memory: &wasmtime::Memory,
+    ctx: impl wasmtime::AsContext,
+    ptr: usize,
+    len: usize,
+) -> Result<Vec<u8>, wasmtime::Error> {
+    fn out_of_bounds(ptr: usize, len: usize) -> wasmtime::Error {
+        wasmtime::Error::msg(format!("guest pointer out of bounds: ptr={ptr} len={len}"))
+    }
+
+    let end = ptr
+        .checked_add(len)
+        .ok_or_else(|| out_of_bounds(ptr, len))?;
+    memory
+        .data(&ctx)
+        .get(ptr..end)
+        .map(<[u8]>::to_vec)
+        .ok_or_else(|| out_of_bounds(ptr, len))
+}
+
 /// Make sure that `wasm_bytes` has the ABI version this runtime supports.
 ///
 /// Reads the `ferricel.abi-version` custom section with [`crate::inspect`].
@@ -716,8 +745,8 @@ impl Builder {
                     .and_then(|e| e.into_memory())
                     .ok_or_else(|| wasmtime::Error::msg("Failed to get Wasm memory"))?;
 
-                let mut buffer = vec![0u8; len as usize];
-                memory.read(&caller, ptr as usize, &mut buffer)?;
+                let buffer =
+                    read_guest_bytes(&memory, &caller, ptr as u32 as usize, len as u32 as usize)?;
 
                 let event: ferricel_types::LogEvent =
                     serde_json::from_slice(&buffer).map_err(|e| {
@@ -773,8 +802,7 @@ impl Builder {
                     .and_then(|e| e.into_memory())
                     .ok_or_else(|| wasmtime::Error::msg("Failed to get Wasm memory for error"))?;
 
-                let mut buffer = vec![0u8; length as usize];
-                memory.read(&caller, address as usize, &mut buffer)?;
+                let buffer = read_guest_bytes(&memory, &caller, address as usize, length as usize)?;
 
                 let error = parse_abort_payload(&buffer)?;
 
@@ -803,8 +831,7 @@ impl Builder {
                     .and_then(|e| e.into_memory())
                     .ok_or_else(|| wasmtime::Error::msg("Failed to get Wasm memory"))?;
 
-                let mut req_buf = vec![0u8; req_len];
-                memory.read(&caller, req_ptr, &mut req_buf)?;
+                let req_buf = read_guest_bytes(&memory, &caller, req_ptr, req_len)?;
 
                 let payload: ExtensionCallPayload =
                     serde_json::from_slice(&req_buf).map_err(|e| {
@@ -1009,8 +1036,7 @@ impl Engine {
 
         let ptr = (encoded_result & 0xFFFFFFFF) as u32;
         let len = (encoded_result >> 32) as u32;
-        let mut json_bytes = vec![0u8; len as usize];
-        memory.read(&store, ptr as usize, &mut json_bytes)?;
+        let json_bytes = read_guest_bytes(&memory, &store, ptr as usize, len as usize)?;
 
         String::from_utf8(json_bytes)
             .map_err(|e| anyhow::anyhow!("Failed to parse result as UTF-8: {}", e))
@@ -1139,6 +1165,45 @@ mod tests {
 
         let err = result.unwrap_err();
         assert!(err.contains("Extension not found: myFunc"), "got: {err}");
+    }
+
+    /// A one-page memory whose first bytes are `0..=9`.
+    fn one_page_memory() -> (Store<()>, wasmtime::Memory) {
+        let engine = WasmEngine::default();
+        let mut store = Store::new(&engine, ());
+        let memory =
+            wasmtime::Memory::new(&mut store, wasmtime::MemoryType::new(1, Some(1))).unwrap();
+        memory
+            .write(&mut store, 0, &(0..10).collect::<Vec<u8>>())
+            .unwrap();
+        (store, memory)
+    }
+
+    const PAGE: usize = 65536;
+
+    #[rstest]
+    #[case::in_bounds(2, 5, Some(vec![2, 3, 4, 5, 6]))]
+    #[case::empty_at_end(PAGE, 0, Some(vec![]))]
+    #[case::len_past_end(PAGE - 4, 8, None)]
+    #[case::ptr_past_end(PAGE, 1, None)]
+    #[case::huge_len(0, u32::MAX as usize, None)]
+    #[case::ptr_plus_len_overflows(usize::MAX, 2, None)]
+    fn read_guest_bytes_checks_bounds_before_it_allocates(
+        #[case] ptr: usize,
+        #[case] len: usize,
+        #[case] expected: Option<Vec<u8>>,
+    ) {
+        let (store, memory) = one_page_memory();
+
+        let result = read_guest_bytes(&memory, &store, ptr, len);
+
+        match expected {
+            Some(bytes) => assert_eq!(result.unwrap(), bytes),
+            None => {
+                let err = result.unwrap_err().to_string();
+                assert!(err.contains("out of bounds"), "got: {err}");
+            }
+        }
     }
 
     #[rstest]
