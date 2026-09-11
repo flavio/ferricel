@@ -205,6 +205,9 @@ pub struct BuilderChainDecl {
 }
 
 /// Wire format payload sent from the Wasm guest to the host when calling an extension.
+///
+/// The host can reject a call from `namespace` and `function` alone, before
+/// it reads `args`. See `ferricel_core::runtime::ExtensionAuthorizer`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionCallPayload {
     /// Namespace of the function, or `null` for non-namespaced functions.
@@ -227,9 +230,9 @@ pub struct ExtensionCallPayload {
 /// that holds a [`crate::CelRuntimeError`]). The guest records the extension
 /// as the error's `origin`. The operators `&&` and `||` can absorb this
 /// error like any other CEL runtime error. If no operator absorbs it, the
-/// evaluation stops. `Error` covers three cases: an unknown extension, a
-/// wrong argument count, and an `Err(_)` value from the extension
-/// implementation.
+/// evaluation stops. `Error` covers four cases: an unknown extension, a
+/// rejection by the host's extension authorizer, a wrong argument count,
+/// and an `Err(_)` value from the extension implementation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExtensionCallResponse {

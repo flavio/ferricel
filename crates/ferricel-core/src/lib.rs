@@ -76,7 +76,7 @@ pub use compiler::{WELL_KNOWN_VAP_VARIABLES, vap_variables_used};
 pub use ferricel_types::{ABI_VERSION, extensions::UsedExtension};
 pub use inspect::{ModuleInfo, ProducerField, ProducerValue, abi_version, inspect};
 pub use runtime::{
-    CelRuntimeError, Engine, EnginePre, Extension, ExtensionFn, ExtensionOrigin, Extensions,
-    ResourceLimits,
+    CelRuntimeError, Engine, EnginePre, Extension, ExtensionAuthorizer, ExtensionFn,
+    ExtensionOrigin, Extensions, ResourceLimits,
 };
 pub use schema::ProtoSchema;
