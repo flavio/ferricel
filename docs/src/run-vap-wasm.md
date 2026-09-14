@@ -63,44 +63,102 @@ match engine.eval(Some(&bindings_json)) {
 
 `CelRuntimeError` has two fields:
 
-| Field     | Type                      | Description                                                          |
-| --------- | ------------------------- | -------------------------------------------------------------------- |
-| `message` | `String`                  | The error message, for example `divide by zero`.                     |
-| `origin`  | `Option<ExtensionOrigin>` | The host extension that produced the error, or `None`.               |
+| Field     | Type                      | Description                                            |
+| --------- | ------------------------- | ------------------------------------------------------ |
+| `message` | `String`                  | The error message, for example `divide by zero`.       |
+| `origin`  | `Option<ExtensionOrigin>` | The host extension that produced the error, or `None`. |
 
 `ExtensionOrigin` holds the `namespace` (for example `Some("kw.k8s")`) and
 the `function` (for example `get`) of the extension call. When the `params`
-lookup fails in the host, `origin` is `kw.k8s.get` or `kw.k8s.list`. A host
-can use this to tell a failed `params` lookup apart from other runtime errors.
+lookup fails in the host, `origin` is `kw.k8s.get` or `kw.k8s.list`. When the
+`namespaceObject` lookup fails, `origin` is `kw.k8s.get`. A host can use this
+to tell a failed `params` or `namespaceObject` lookup apart from other
+runtime errors.
 
 See [Runtime Errors](vap.md#runtime-errors) for the exact rules.
 
 ## Required Bindings
 
-| Binding           | Required when…                                                   |
-| ----------------- | ---------------------------------------------------------------- |
-| `object`          | Always (the resource being admitted)                             |
-| `oldObject`       | Policy expressions reference `oldObject`                         |
-| `request`         | Policy expressions reference `request`, or `paramKind` is set    |
-| `namespaceObject` | Policy expressions reference `namespaceObject`                   |
-| `paramRef`        | `paramKind` is set (see below)                                   |
+| Binding     | Required when…                                                                     |
+| ----------- | ---------------------------------------------------------------------------------- |
+| `object`    | Always (the resource being admitted)                                               |
+| `oldObject` | Policy expressions reference `oldObject`                                           |
+| `request`   | Policy expressions reference `request` or `namespaceObject`, or `paramKind` is set |
+| `paramRef`  | `paramKind` is set (see below)                                                     |
 
 `object`, `oldObject`, and `request` correspond directly to the fields of the
 Kubernetes
 [`AdmissionReview`](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#request)
-request object.
+request object. The module does not need `namespaceObject` in the
+bindings: it resolves the Namespace itself from `request`, through the
+gated `kw.k8s.get` host extension. See
+[Namespace object](#namespace-object) below.
 
 Determining whether a given policy actually references `oldObject`,
 `request`, or `namespaceObject` — without evaluating the policy or re-parsing
 its CEL/YAML source — is exactly what the `ferricel.vap-variables` custom
 section is for. Read it with `ferricel_core::vap_variables_used()` (or
-`ferricel inspect --json`) at policy-setup time and only fetch/bind what is
-actually needed. This is particularly relevant for `namespaceObject`, since
-fetching it requires an extra host-side lookup — see
+`ferricel inspect --json`) at policy-setup time. This is particularly
+relevant for `namespaceObject`: a host that finds it in the section must
+register `kw.k8s.get` and grant the policy access to `v1/Namespace` — see
 [Custom sections and inspection](wasm-spec.md#ferricelvap-variables-section)
 for details.
 
 ## Kubernetes Resource Fetching
+
+### Namespace object
+
+When a policy references `namespaceObject`, the compiled module resolves it
+itself at evaluation time, the same way it resolves `params`. The host does
+**not** supply `namespaceObject` in the bindings; it supplies `request`
+instead (see [Required Bindings](#required-bindings)). A host that still
+passes `namespaceObject` is not an error — the module's own value overwrites
+it — but a 0.11+ host should stop doing so.
+
+The module applies these rules, in order:
+
+1. `request` missing, or not a map: the module traps with
+   `request binding is missing`. The host contract requires `request`
+   whenever the policy references `namespaceObject`.
+2. `request.kind` is the core `v1/Namespace` GroupVersionKind (the resource
+   under admission is itself a Namespace): `namespaceObject` is `null`, and
+   the host is not called. On `CREATE`, `request.namespace` equals the new
+   Namespace's own name, and the Namespace does not exist yet — fetching it
+   would 404.
+3. `request.namespace` missing or empty (a cluster-scoped request):
+   `namespaceObject` is `null`, and the host is not called.
+4. Otherwise: one `kw.k8s.get` call for
+   `{apiVersion: "v1", kind: "Namespace", name: request.namespace}`. Unlike
+   the `params` request map, this map has **no** `namespace` key — Namespace
+   is cluster-scoped. A host error traps with origin `kw.k8s.get`, and the
+   host applies its `failurePolicy`.
+
+The fetch runs once per evaluation, before `params`, so `matchConditions` and
+`params`-dependent expressions can read `namespaceObject` too.
+
+Register `kw.k8s.get` the same way as for `params`:
+
+```rust
+use ferricel_core::compiler::vap;
+
+runtime::Builder::new()
+    .with_extension(vap::kw_k8s_get_extension(), |args| {
+        let map = &args[0];
+        let name        = map["name"].as_str().unwrap();
+        let api_version = map["apiVersion"].as_str().unwrap(); // "v1"
+        let kind        = map["kind"].as_str().unwrap();       // "Namespace"
+
+        // Fetch the Namespace from Kubernetes and return it as JSON.
+        let namespace = fetch_from_k8s(api_version, kind, "", name)?;
+        Ok(namespace)
+    })
+    // ... .with_wasm(...), other extensions, .build()?
+```
+
+A host that derives required capabilities from `ferricel.extensions` grants
+`kubernetes/get_resource` for `kw.k8s.get` automatically; it must also grant
+the policy access to `v1/Namespace` in its own authorization model (the
+`ferricel.vap-variables` section names the policies that need this grant).
 
 ### Params
 
@@ -279,6 +337,11 @@ single argument — a JSON object containing the accumulated builder state:
 For the `params` lookup, the module builds this map itself. It always sets
 `apiVersion`, `kind`, and `namespace`. It sets `name` for `paramRef.name` and
 `labelSelector` for `paramRef.selector`. See [Params](#params).
+
+For the `namespaceObject` lookup, the module also builds the map itself, but
+never sets `namespace` — `Namespace` is cluster-scoped. It sets `apiVersion`
+(`"v1"`), `kind` (`"Namespace"`), and `name` (`request.namespace`). See
+[Namespace object](#namespace-object).
 
 Register the extensions using the helpers from `ferricel_core::compiler::vap`:
 

@@ -44,11 +44,23 @@ type HostFn =
 /// bindings, returning the parsed `serde_json::Value`.
 ///
 /// `extension`, if set, registers a single host extension implementation
-/// (e.g. for `kw.k8s...`) on the `Engine`.
+/// (e.g. for `kw.k8s...`) on the `Engine`. For a test that needs more than
+/// one extension (e.g. `namespaceObject`'s `kw.k8s.get` together with
+/// `params`'s `kw.k8s.list`), use [`eval_vap_with_extensions`].
 fn eval_vap(
     spec_body: &str,
     bindings_json: &str,
     extension: Option<(ExtensionDecl, HostFn)>,
+) -> Result<serde_json::Value, anyhow::Error> {
+    eval_vap_with_extensions(spec_body, bindings_json, extension.into_iter().collect())
+}
+
+/// Like [`eval_vap`], but registers every extension in `extensions` on the
+/// `Engine`.
+fn eval_vap_with_extensions(
+    spec_body: &str,
+    bindings_json: &str,
+    extensions: Vec<(ExtensionDecl, HostFn)>,
 ) -> Result<serde_json::Value, anyhow::Error> {
     let logger = test_logger();
     let wasm_bytes = Builder::new()
@@ -60,7 +72,7 @@ fn eval_vap(
         .with_logger(logger)
         .with_log_level(LogLevel::Info)
         .with_wasm(wasm_bytes);
-    if let Some((decl, implementation)) = extension {
+    for (decl, implementation) in extensions {
         runtime_builder = runtime_builder.with_extension(decl, implementation);
     }
     let result_str = runtime_builder.build()?.eval(Some(bindings_json))?;
@@ -1567,6 +1579,264 @@ fn test_vap_kw_k8s_get_with_namespace() {
                 }))
             }),
         )),
+    );
+    assert_outcome(result, &Expected::Accepted);
+}
+
+// ─── namespaceObject ───────────────────────────────────────────────────────────
+//
+// These tests cover the `namespaceObject` resolution done by the runtime:
+// the Namespace-kind special case, cluster-scoped requests, the `request`
+// binding contract, and host error propagation.
+
+/// The policy used by most namespaceObject tests. Fails unless
+/// `namespaceObject` is non-null and its `metadata.name` is `team-a`.
+const NAMESPACE_OBJECT_SPEC: &str = r#"spec:
+  validations:
+    - expression: "namespaceObject != null && namespaceObject.metadata.name == 'team-a'"
+      message: "missing or wrong namespaceObject"
+"#;
+
+/// A policy that asserts `namespaceObject` is `null`.
+const NAMESPACE_OBJECT_NULL_SPEC: &str = r#"spec:
+  validations:
+    - expression: "namespaceObject == null"
+      message: "expected a null namespaceObject"
+"#;
+
+fn namespace_object_json(name: &str) -> serde_json::Value {
+    serde_json::json!({
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": { "name": name }
+    })
+}
+
+/// A `kw.k8s.get` host implementation for the Namespace lookup. Asserts the
+/// request map has no `namespace` key (the Namespace resource is
+/// cluster-scoped), then returns `response`.
+fn namespace_get(response: serde_json::Value) -> (ExtensionDecl, HostFn) {
+    (
+        vap::kw_k8s_get_extension(),
+        Box::new(move |args| {
+            let map = &args[0];
+            assert_eq!(map["apiVersion"], "v1");
+            assert_eq!(map["kind"], "Namespace");
+            assert!(
+                map.get("namespace").is_none(),
+                "the Namespace fetch must not carry a `namespace` key"
+            );
+            Ok(response.clone())
+        }),
+    )
+}
+
+/// A namespaced request: one `kw.k8s.get` call for `request.namespace`, with
+/// `name` forwarded, and the result visible to the validation.
+#[test]
+fn test_vap_namespace_object_namespaced_request() {
+    let bindings = serde_json::json!({
+        "request": { "namespace": "team-a" },
+        "object": { "kind": "Deployment", "metadata": { "namespace": "team-a" } }
+    })
+    .to_string();
+    let result = eval_vap(
+        NAMESPACE_OBJECT_SPEC,
+        &bindings,
+        Some((
+            vap::kw_k8s_get_extension(),
+            Box::new(|args| {
+                assert_eq!(args[0]["name"], "team-a");
+                Ok(namespace_object_json("team-a"))
+            }),
+        )),
+    );
+    assert_outcome(result, &Expected::Accepted);
+}
+
+/// A cluster-scoped request (`request.namespace` missing, then empty):
+/// `namespaceObject` is `null`, and the host is never called.
+#[rstest]
+#[case::namespace_missing(serde_json::json!({}))]
+#[case::namespace_empty(serde_json::json!({ "namespace": "" }))]
+fn test_vap_namespace_object_cluster_scoped_request(#[case] request: serde_json::Value) {
+    let bindings = serde_json::json!({ "request": request, "object": {} }).to_string();
+    let result = eval_vap(
+        NAMESPACE_OBJECT_NULL_SPEC,
+        &bindings,
+        Some(never_called(vap::kw_k8s_get_extension())),
+    );
+    assert_outcome(result, &Expected::Accepted);
+}
+
+/// The resource under admission is itself a `v1/Namespace`. `request.name`
+/// and `request.namespace` are the same value (the Kubernetes special
+/// case). `namespaceObject` is `null`, and the host is never called — this
+/// matters most on `CREATE`, where the Namespace does not exist yet.
+#[test]
+fn test_vap_namespace_object_namespace_kind_request() {
+    let bindings = serde_json::json!({
+        "request": {
+            "namespace": "team-a",
+            "name": "team-a",
+            "kind": { "group": "", "version": "v1", "kind": "Namespace" }
+        },
+        "object": { "kind": "Namespace", "metadata": { "name": "team-a" } }
+    })
+    .to_string();
+    let result = eval_vap(
+        NAMESPACE_OBJECT_NULL_SPEC,
+        &bindings,
+        Some(never_called(vap::kw_k8s_get_extension())),
+    );
+    assert_outcome(result, &Expected::Accepted);
+}
+
+/// The policy references `namespaceObject`, but the `request` binding is
+/// absent entirely. The host contract requires `request` in this case; the
+/// host is never called.
+#[test]
+fn test_vap_namespace_object_missing_request_is_error() {
+    let bindings = serde_json::json!({ "object": {} }).to_string();
+    let result = eval_vap(
+        NAMESPACE_OBJECT_SPEC,
+        &bindings,
+        Some(never_called(vap::kw_k8s_get_extension())),
+    );
+    assert_outcome(result, &Expected::Error("request binding is missing"));
+}
+
+/// A host error fetching the Namespace surfaces as a runtime error with
+/// origin `kw.k8s.get`, like a failed `params` fetch.
+#[test]
+fn test_vap_namespace_object_host_error() {
+    let bindings = serde_json::json!({
+        "request": { "namespace": "team-a" },
+        "object": {}
+    })
+    .to_string();
+    let result = eval_vap(
+        NAMESPACE_OBJECT_SPEC,
+        &bindings,
+        Some(failing(
+            vap::kw_k8s_get_extension(),
+            "namespaces \"team-a\" not found",
+        )),
+    );
+    assert_outcome(
+        result,
+        &Expected::ExtensionError {
+            message: "namespaces \"team-a\" not found",
+            namespace: Some("kw.k8s"),
+            function: "get",
+        },
+    );
+}
+
+/// A policy that never reads `namespaceObject` makes no `kw.k8s.get` call,
+/// even with a namespaced request. No extension needs to be registered.
+#[test]
+fn test_vap_namespace_object_not_referenced_makes_no_call() {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.spec.replicas <= 5"
+      message: "too many replicas"
+"#;
+    let bindings = serde_json::json!({
+        "request": { "namespace": "team-a" },
+        "object": { "spec": { "replicas": 3 } }
+    })
+    .to_string();
+    assert_outcome(eval_vap(spec, &bindings, None), &Expected::Accepted);
+}
+
+/// A host that still passes `namespaceObject` directly in the bindings does
+/// not win: the guest's own resolution overwrites it.
+#[test]
+fn test_vap_namespace_object_host_binding_is_overwritten() {
+    let bindings = serde_json::json!({
+        "request": { "namespace": "team-a" },
+        "object": {},
+        // Stale value a legacy (0.10-style) host might still pass. The
+        // guest must overwrite it with the host's `kw.k8s.get` response.
+        "namespaceObject": namespace_object_json("stale-value")
+    })
+    .to_string();
+    let result = eval_vap(
+        NAMESPACE_OBJECT_SPEC,
+        &bindings,
+        Some(namespace_get(namespace_object_json("team-a"))),
+    );
+    assert_outcome(result, &Expected::Accepted);
+}
+
+/// A `matchCondition` that reads `namespaceObject` sees the fetched value —
+/// the fetch runs before matchConditions are evaluated.
+#[test]
+fn test_vap_namespace_object_visible_in_match_condition() {
+    let spec = r#"spec:
+  matchConditions:
+    - name: team-a-only
+      expression: "namespaceObject.metadata.name == 'team-a'"
+  validations:
+    - expression: "false"
+      message: "should never run for non-team-a namespaces"
+"#;
+    let bindings = serde_json::json!({
+        "request": { "namespace": "team-b" },
+        "object": {}
+    })
+    .to_string();
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some(namespace_get(namespace_object_json("team-b"))),
+    );
+    // matchCondition is false (team-b != team-a) → this param (the only one,
+    // since there is no paramKind) is skipped → accepted, and the always
+    // failing validation never runs.
+    assert_outcome(result, &Expected::Accepted);
+}
+
+/// A `DELETE`-style request (`object` is `null`) still resolves
+/// `namespaceObject` from `request.namespace`.
+#[test]
+fn test_vap_namespace_object_delete_request() {
+    let bindings = serde_json::json!({
+        "request": { "namespace": "team-a" },
+        "object": null
+    })
+    .to_string();
+    let result = eval_vap(
+        NAMESPACE_OBJECT_SPEC,
+        &bindings,
+        Some(namespace_get(namespace_object_json("team-a"))),
+    );
+    assert_outcome(result, &Expected::Accepted);
+}
+
+/// `namespaceObject` together with `paramRef.selector`: both `kw.k8s.get`
+/// (for the Namespace) and `kw.k8s.list` (for `params`) are served in the
+/// same evaluation.
+#[test]
+fn test_vap_namespace_object_with_params_selector() {
+    let spec = r#"spec:
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  validations:
+    - expression: "namespaceObject.metadata.name == 'team-a' &&
+        object.spec.replicas <= int(params.data.maxReplicas)"
+      message: "rejected"
+"#;
+    let bindings = params_bindings(selector_ref(None), 3);
+    let result = eval_vap_with_extensions(
+        spec,
+        &bindings,
+        vec![
+            namespace_get(namespace_object_json("team-a")),
+            list_returning(vec![params_configmap("cfg", "5")]),
+        ],
     );
     assert_outcome(result, &Expected::Accepted);
 }

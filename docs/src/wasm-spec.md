@@ -394,12 +394,14 @@ expressions, validations, and messageExpressions are all considered):
 ["namespaceObject", "object"]
 ```
 
-Some of these variables require the host to do extra work before evaluation —
-most notably `namespaceObject`, which requires fetching and binding the
-resource's `Namespace` object. Kubewarden and similar hosts can inspect this
-section at policy-setup time to decide whether that extra wiring is needed,
-instead of always granting access unconditionally or trying to detect usage
-by re-parsing the CEL/YAML source.
+Some of these variables require extra host-side setup — most notably
+`namespaceObject`: the compiled module fetches the Namespace itself through
+the `kw.k8s.get` host extension (also recorded in `ferricel.extensions`), so
+the host must register that extension and grant the policy access to
+`v1/Namespace` in its own authorization model. Kubewarden and similar hosts
+can inspect this section at policy-setup time to decide whether that extra
+wiring is needed, instead of always granting access unconditionally or
+trying to detect usage by re-parsing the CEL/YAML source.
 
 The section is absent for plain CEL modules (`compile()`), and only ever lists
 names from the well-known set above — internal implementation details such as
@@ -412,7 +414,7 @@ use ferricel_core::vap_variables_used;
 
 let wasm = std::fs::read("policy.wasm")?;
 if vap_variables_used(&wasm)?.iter().any(|v| v == "namespaceObject") {
-    println!("policy needs namespaceObject bound");
+    println!("policy needs the v1/Namespace grant and a kw.k8s.get handler");
 }
 ```
 

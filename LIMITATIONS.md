@@ -114,13 +114,14 @@ These are not bugs but features not yet implemented in ferricel:
 
 The `block_ext` CSE constructs use `cel.iterVar(N, M)` and `cel.accuVar(N, M)` to refer to
 comprehension iteration and accumulator variables by nesting depth. When these appear as the
-*iteration variable* argument to macros like `map`, `filter`, `exists` (the first positional arg),
+_iteration variable_ argument to macros like `map`, `filter`, `exists` (the first positional arg),
 the `cel` crate parser rejects them with `"argument must be a simple name"` because its
 `extract_ident` helper requires a bare `Ident` node.
 
-`cel.iterVar`/`cel.accuVar` work correctly when used *inside* comprehension bodies.
+`cel.iterVar`/`cel.accuVar` work correctly when used _inside_ comprehension bodies.
 
 **Affected conformance tests (`block_ext` suite):**
+
 - `basic/multiple_macros_1` through `multiple_macros_3`
 - `basic/nested_macros_1`, `nested_macros_2`
 - `basic/adjacent_macros`
@@ -141,6 +142,7 @@ AST. It correctly preserves leading dots for `GlobalCall` and `CreateMessage` no
 not for bare identifiers.
 
 **Affected conformance tests (`namespace` suite):**
+
 - `namespace_shadowing/disambiguation` — `.y` should resolve to root-scope `y` (bypassing container `com.example`)
 - `namespace_shadowing/comprehension_shadowing_disambiguation` — `.y` inside comprehension should bypass local `y`
 - `namespace_shadowing/comprehension_shadowing_namespaced_selector_disambiguation` — `.y.z` inside comprehension should bypass local `y` and container
@@ -162,3 +164,21 @@ When `parameterNotFoundAction` is `Allow`, the module treats any error from the 
 ### 3. A missing resource and an authorization error look the same
 
 The host returns one error string for every failed `kw.k8s` call. The module cannot tell a 404 apart from an RBAC error. A typed "not found" result from the host is needed to fix limitations 2 and 3.
+
+---
+
+## VAP `namespaceObject` resolution
+
+These limitations apply to `ValidatingAdmissionPolicy` modules that reference `namespaceObject`. They are design choices, not bugs.
+
+### 1. A host error fails open to `failurePolicy`, unlike upstream Kubernetes
+
+A host error while fetching the Namespace is a CEL runtime error, subject to the policy's `failurePolicy` — the same treatment as a failed `params` fetch. Upstream Kubernetes hard-fails the whole admission request when it cannot fetch the Namespace, regardless of `failurePolicy`. This is a deliberate deviation: ferricel gives the host one uniform way (`failurePolicy`) to control every runtime error, `namespaceObject` included.
+
+### 2. A missing resource and an authorization error look the same
+
+Same as limitation 3 for `params`: the host returns one error string for every failed `kw.k8s.get` call, so the module cannot tell a 404 apart from an RBAC error. Both surface as a `CelRuntimeError` with origin `kw.k8s.get`.
+
+### 3. The fetch is eager
+
+The module resolves `namespaceObject` before `matchConditions`, even when only a `validations` expression that never runs (because a `matchCondition` skips the param) reads it. The host's extension-call cache (if any) absorbs the cost of the extra call; ferricel does not defer the fetch to first use.

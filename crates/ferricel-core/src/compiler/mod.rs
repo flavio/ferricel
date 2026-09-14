@@ -45,9 +45,11 @@ use crate::schema::ProtoSchema;
 ///
 /// Used to populate the `ferricel.vap-variables` custom section (see
 /// [`Compiler::compile_vap`]) so hosts (e.g. Kubewarden) can determine, at
-/// build/setup time, which of these a policy actually needs bound —
-/// notably `namespaceObject`, which requires the host to fetch and provide
-/// the Namespace object.
+/// build/setup time, which of these a policy actually needs — notably
+/// `namespaceObject`: the compiled module fetches the Namespace itself
+/// through the `kw.k8s.get` host extension (recorded in
+/// `ferricel.extensions`), so the host only needs to register that
+/// extension and grant `v1/Namespace` in its authorization model.
 #[cfg(feature = "k8s-vap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "k8s-vap")))]
 pub const WELL_KNOWN_VAP_VARIABLES: &[&str] = &[
@@ -421,6 +423,12 @@ impl Compiler {
             ctx.record_extension(Some("kw.k8s"), "list");
         }
 
+        // Likewise, when the policy references `namespaceObject`, the
+        // runtime resolves it with a direct kw.k8s.get call.
+        if ctx.used_variables.borrow().contains("namespaceObject") {
+            ctx.record_extension(Some("kw.k8s"), "get");
+        }
+
         walrus::passes::gc::run(&mut module);
         add_producers_entries(&mut module);
         add_abi_version_section(&mut module);
@@ -526,8 +534,10 @@ pub fn extensions_used(wasm: &[u8]) -> Result<Vec<UsedExtension>, anyhow::Error>
 /// ferricel).
 ///
 /// This lets a host (e.g. Kubewarden) determine ahead of time whether it needs
-/// to fetch and bind `namespaceObject` (or other variables requiring extra
-/// host-side wiring) before evaluating the policy.
+/// to register the `kw.k8s.get` extension and grant `v1/Namespace` (or wire
+/// up other variables requiring extra host-side setup) before evaluating the
+/// policy. The compiled module resolves `namespaceObject` itself; the host
+/// no longer fetches or binds it.
 ///
 /// # Errors
 ///
@@ -541,7 +551,7 @@ pub fn extensions_used(wasm: &[u8]) -> Result<Vec<UsedExtension>, anyhow::Error>
 ///
 /// let wasm = std::fs::read("policy.wasm").unwrap();
 /// if vap_variables_used(&wasm).unwrap().iter().any(|v| v == "namespaceObject") {
-///     println!("policy needs namespaceObject bound");
+///     println!("policy needs the v1/Namespace grant and a kw.k8s.get handler");
 /// }
 /// ```
 #[cfg(feature = "k8s-vap")]

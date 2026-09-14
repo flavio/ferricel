@@ -339,6 +339,18 @@ pub enum RuntimeFunction {
     /// Returns a `*mut CelValue` that is a `CelValue::Array` of param objects,
     /// or a `CelValue::Error`.
     VapResolveParams,
+    /// Resolve `namespaceObject` for a VAP evaluation.
+    ///
+    /// Reads `request` from the bindings. Returns `CelValue::Null` when the
+    /// request is cluster-scoped, or when the resource under admission is
+    /// itself a `v1/Namespace`. Otherwise calls the host `kw.k8s.get`
+    /// extension for the Namespace named `request.namespace`.
+    ///
+    /// Takes no arguments.
+    ///
+    /// Returns a `*mut CelValue` that is a `CelValue::Object` (the
+    /// Namespace), `CelValue::Null`, or a `CelValue::Error`.
+    VapResolveNamespaceObject,
 
     // Fluent builder chain support
     /// Produce or update a builder state map for a fluent-chain extension step.
@@ -635,6 +647,7 @@ impl RuntimeFunction {
             Self::VapSerializeAccept => "cel_serialize_vap_accept",
             Self::VapSerializeReject => "cel_serialize_vap_reject",
             Self::VapResolveParams => "cel_vap_resolve_params",
+            Self::VapResolveNamespaceObject => "cel_vap_resolve_namespace_object",
 
             Self::BuilderStepCall => "cel_builder_step",
             Self::BuilderMapEntryCall => "cel_builder_map_entry",

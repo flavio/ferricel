@@ -156,12 +156,45 @@ spec:
       message: "no pods"
 "#;
 
+    const VAP_NAMESPACE_OBJECT: &str = r#"
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: test-namespace-object
+spec:
+  validations:
+    - expression: "namespaceObject.metadata.name != ''"
+      message: "no namespace"
+"#;
+
+    const VAP_NAMESPACE_OBJECT_AND_PARAM_KIND: &str = r#"
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: test-namespace-object-and-params
+spec:
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  validations:
+    - expression: "namespaceObject.metadata.name != '' && object.spec.replicas <= int(params.data.maxreplicas)"
+      message: "too many replicas"
+"#;
+
     #[rstest]
     #[case::no_ext(VAP_NO_EXT, vec![])]
     // `paramKind` records both `get` and `list`: the runtime picks one of
     // them from `paramRef.name` or `paramRef.selector` at evaluation time.
     #[case::param_kind(VAP_PARAM_KIND, vec![used(Some("kw.k8s"), "get"), used(Some("kw.k8s"), "list")])]
     #[case::list(VAP_LIST, vec![used(Some("kw.k8s"), "list")])]
+    // `namespaceObject` records `get` only — the Namespace fetch is always
+    // a single-resource lookup.
+    #[case::namespace_object(VAP_NAMESPACE_OBJECT, vec![used(Some("kw.k8s"), "get")])]
+    // `namespaceObject` together with `paramKind`: `get` is not duplicated.
+    #[case::namespace_object_and_param_kind(
+        VAP_NAMESPACE_OBJECT_AND_PARAM_KIND,
+        vec![used(Some("kw.k8s"), "get"), used(Some("kw.k8s"), "list")]
+    )]
     fn test_vap_extensions(#[case] yaml: &str, #[case] expected: Vec<UsedExtension>) {
         let wasm = Builder::new()
             .with_logger(create_test_logger())
