@@ -49,7 +49,7 @@ targets:
     sourceid: taplo-checksum
     spec:
       file: .github/workflows/ci.yml
-      key: $.jobs.lint.steps[3].env.TAPLO_CHECKSUM
+      key: $.env.TAPLO_CHECKSUM
 
   update-version-updatecli-workflow:
     name: Update TAPLO_VERSION in updatecli workflow
@@ -67,7 +67,7 @@ targets:
     sourceid: taplo-checksum
     spec:
       file: .github/workflows/updatecli.yml
-      key: $.jobs.updatecli.steps[2].env.TAPLO_CHECKSUM
+      key: $.env.TAPLO_CHECKSUM
 
 actions:
   default:

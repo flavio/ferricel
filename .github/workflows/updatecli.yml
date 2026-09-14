@@ -13,6 +13,7 @@ permissions:
 
 env:
   TAPLO_VERSION: "0.10.0"
+  TAPLO_CHECKSUM: "8fe196b894ccf9072f98d4e1013a180306e17d244830b03986ee5e8eabeb6156"
 
 jobs:
   updatecli:
@@ -35,8 +36,6 @@ jobs:
           gunzip taplo-linux-x86_64.gz
           sudo mv taplo-linux-x86_64 /usr/local/bin/taplo
           sudo chmod +x /usr/local/bin/taplo
-        env:
-          TAPLO_CHECKSUM: "8fe196b894ccf9072f98d4e1013a180306e17d244830b03986ee5e8eabeb6156"
 
       - name: Run Updatecli
         run: updatecli pipeline apply --config updatecli/

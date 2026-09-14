@@ -17,6 +17,7 @@ permissions: {}
 
 env:
   TAPLO_VERSION: "0.10.0"
+  TAPLO_CHECKSUM: "8fe196b894ccf9072f98d4e1013a180306e17d244830b03986ee5e8eabeb6156"
 
 jobs:
   lint:
@@ -36,8 +37,6 @@ jobs:
           gunzip taplo-linux-x86_64.gz
           sudo mv taplo-linux-x86_64 /usr/local/bin/taplo
           sudo chmod +x /usr/local/bin/taplo
-        env:
-          TAPLO_CHECKSUM: "8fe196b894ccf9072f98d4e1013a180306e17d244830b03986ee5e8eabeb6156"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Run linter
         run: make lint
