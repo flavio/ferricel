@@ -12,7 +12,7 @@ permissions: {}
 
 jobs:
   ci:
-    uses: ./.github/workflows/ci.yml
+    uses: $/.github/workflows/ci.yml
     permissions: {}
     with:
       fast: true
@@ -21,7 +21,7 @@ jobs:
     name: Build ferricel CLI binaries
     needs:
       - ci
-    uses: ./.github/workflows/build-ferricel-cli.yml
+    uses: $/.github/workflows/build-ferricel-cli.yml
     permissions:
       contents: read
       id-token: write
