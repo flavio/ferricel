@@ -5,9 +5,12 @@
 //! `evaluate` function ties them together in the same order as the Kubernetes
 //! VAP validator:
 //!
-//! 1. **params** (only when `spec.paramKind` is set). The runtime resolves the
+//! 1. **namespaceObject** (only when the policy references it). The runtime
+//!    resolves the Namespace of the resource under admission. See
+//!    "Namespace object" below.
+//! 2. **params** (only when `spec.paramKind` is set). The runtime resolves the
 //!    list of param objects from `paramRef`. See "Params" below.
-//! 2. For each param (or once, when there is no `paramKind`):
+//! 3. For each param (or once, when there is no `paramKind`):
 //!    1. **matchConditions**. If any evaluates to `false`, this param is
 //!       skipped. It is not a rejection.
 //!    2. **variables**. Evaluated in declaration order. Each result is
@@ -16,7 +19,7 @@
 //!    3. **validations**. Evaluated in order. The first `false` result
 //!       returns a rejection response with the message and HTTP status code
 //!       of that validation.
-//! 3. When no param produced a rejection, return `{"accepted":true}`.
+//! 4. When no param produced a rejection, return `{"accepted":true}`.
 //!
 //! ## Runtime errors
 //!
@@ -28,12 +31,44 @@
 //! On the host, [`Engine::eval`](crate::runtime::Engine::eval) returns an
 //! error that downcasts to [`CelRuntimeError`](crate::CelRuntimeError).
 //! When the `params` lookup fails, the error's `origin` is `kw.k8s.get` or
-//! `kw.k8s.list`.
+//! `kw.k8s.list`. When the `namespaceObject` lookup fails, the origin is
+//! `kw.k8s.get`.
 //!
 //! A `variables` entry that evaluates to an error is stored as-is. The error
 //! propagates only into the expressions that reference it (matching the lazy
 //! semantics of Kubernetes). A `messageExpression` that errors or does not
 //! produce a string falls back to the static `message`.
+//!
+//! ## Namespace object
+//!
+//! The compiler emits the `namespaceObject` resolution call only when
+//! `CompilerContext::used_variables` contains `namespaceObject` (tracked
+//! while compiling matchConditions, variables, validations, and
+//! messageExpressions — see [`build_vap_evaluate_function`]). The host no
+//! longer binds `namespaceObject`; it must supply `request` instead.
+//!
+//! The guest runtime reads `request` from the bindings:
+//!
+//! - `request` missing, or not a map: a CEL runtime error. The host contract
+//!   requires `request` whenever the policy references `namespaceObject`.
+//! - `request.kind` is the core `v1/Namespace` GroupVersionKind: the
+//!   resource under admission is itself a Namespace. `namespaceObject` is
+//!   `null`, and no host call is made. This mirrors the Kubernetes special
+//!   case where a Namespace request carries its own name as
+//!   `request.namespace`, and the Namespace does not exist yet on `CREATE`.
+//! - `request.namespace` missing or empty: the request is cluster-scoped.
+//!   `namespaceObject` is `null`, and no host call is made.
+//! - Otherwise: one `kw.k8s.get` call for
+//!   `{apiVersion: "v1", kind: "Namespace", name: request.namespace}`. A
+//!   host error traps, and the host applies its `failurePolicy`. This is a
+//!   deliberate difference from the interpreted `cel-policy` runtime, which
+//!   hard-fails the whole admission on a Namespace lookup error.
+//!
+//! The fetch runs once per evaluation, before `params`, so `matchConditions`
+//! and `params`-dependent expressions can read `namespaceObject` too. The
+//! host must register `kw.k8s.get` (recorded in `ferricel.extensions` when
+//! the policy references `namespaceObject`) and grant `v1/Namespace` in its
+//! own authorization model.
 //!
 //! ## Params
 //!
@@ -230,6 +265,11 @@ struct OrchestratorArgs<'a> {
     /// Compiled validation expression + optional messageExpression pairs, in
     /// declaration order.
     validations: Vec<CompiledValidation>,
+    /// Whether the policy references `namespaceObject` anywhere
+    /// (matchConditions, variables, validations, messageExpressions).
+    /// Computed from `CompilerContext::used_variables`, which is complete
+    /// only after every sub-function above has been compiled.
+    resolve_namespace_object: bool,
 }
 
 // ─── Core compilation ─────────────────────────────────────────────────────────
@@ -254,6 +294,10 @@ pub(crate) fn build_vap_evaluate_function(
     let validations =
         compile_validation_fns(module, env, ctx, spec.validations.as_deref().unwrap_or(&[]))?;
 
+    // `used_variables` is complete only now that every sub-function above
+    // has been compiled.
+    let resolve_namespace_object = ctx.used_variables.borrow().contains("namespaceObject");
+
     build_orchestrator(
         module,
         env,
@@ -262,6 +306,7 @@ pub(crate) fn build_vap_evaluate_function(
             match_conditions_fns,
             variables_fns,
             validations,
+            resolve_namespace_object,
         },
     )
 }
@@ -365,6 +410,9 @@ struct OrchestratorLocals {
 ///
 /// ```text
 /// bindings = deserialize(arg); init_bindings(bindings)
+/// if policy references namespaceObject:
+///     ns = cel_vap_resolve_namespace_object(); abort_if_error(ns)
+///     set_variable("namespaceObject", ns)
 /// if spec.paramKind is set:
 ///     list = cel_vap_resolve_params(apiVersion, kind); abort_if_error(list)
 ///     n = cel_array_len(list); i = 0
@@ -402,6 +450,15 @@ fn build_orchestrator(
     body.local_get(bindings_arg)
         .call(env.get(RuntimeFunction::DeserializeJson))
         .call(env.get(RuntimeFunction::InitBindings));
+
+    // 2. Resolve `namespaceObject`, only when the policy references it.
+    if args.resolve_namespace_object {
+        body.call(env.get(RuntimeFunction::VapResolveNamespaceObject))
+            .local_set(locals.val)
+            .local_get(locals.val)
+            .call(env.get(RuntimeFunction::AbortIfError));
+        emit_set_variable("namespaceObject", locals.val, &mut body, env, module)?;
+    }
 
     match &args.spec.param_kind {
         Some(param_kind) => {

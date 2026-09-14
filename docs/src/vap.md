@@ -2,9 +2,10 @@
 
 ferricel can compile a Kubernetes
 [`ValidatingAdmissionPolicy`](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/)
-(VAP) into a self-contained WebAssembly module. The host that runs the Wasm module is
-responsible for supplying Kubernetes data, like the namespace object and param resources,
-via bindings and extensions.
+(VAP) into a self-contained WebAssembly module. The compiled module fetches
+Kubernetes data it needs — the namespace object and param resources —
+itself, through host extensions. The host supplies everything else (the
+resource under admission, the admission request) via bindings.
 
 This is a `ferricel-core` library feature. Enable it with the `k8s-vap` Cargo
 feature.
@@ -45,18 +46,23 @@ The `code` field is derived from the validation's `reason` field:
 The compiled module follows the evaluation order of the Kubernetes VAP
 validator:
 
-1. **`params`** (only when `paramKind` is set). The module resolves the list
+1. **`namespaceObject`** (only when the policy references it). The module
+   resolves the Namespace of the resource under admission from `request`.
+   See [Namespace object](run-vap-wasm.md#namespace-object) for the rules.
+
+2. **`params`** (only when `paramKind` is set). The module resolves the list
    of param resources from `paramRef`. See
    [Params](run-vap-wasm.md#params) for the rules. Without `paramKind`, the
    module evaluates the steps below once, with no `params` binding.
 
-2. For each param resource:
+3. For each param resource:
 
    1. **`matchConditions`**. Evaluated in declaration order. If any condition
       evaluates to `false`, this param does **not** apply to the request. The
       module skips the remaining `matchConditions`, the `variables`, and the
       `validations` for this param, and moves to the next param. A skip is
-      not a rejection. `params` is available in `matchConditions`.
+      not a rejection. `params` and `namespaceObject` are both available in
+      `matchConditions`.
 
    2. **`variables`**. Evaluated in declaration order. Each result is stored
       under `variables.<name>`. It is accessible to later `variables`
@@ -68,7 +74,7 @@ validator:
       The module does not evaluate the remaining validations or the remaining
       params.
 
-3. When no param produced a rejection, the module returns
+4. When no param produced a rejection, the module returns
    `{"accepted": true}`. An empty param list also produces this response.
 
 When several params match a `paramRef.selector` and more than one rejects
@@ -112,6 +118,17 @@ traps. For a host error, the `origin` field of the `CelRuntimeError` is
 `paramRef.selector`). For an empty result, the message is
 `no parameters found` and `origin` is `None`. See
 [Params](run-vap-wasm.md#params).
+
+The `namespaceObject` lookup traps before the `params` lookup, and before
+any `matchConditions` or `validations` run, when the `request` binding is
+missing or the host's `kw.k8s.get` call fails. For a host error, `origin` is
+`kw.k8s.get` — the same origin a failed `paramRef.name` lookup uses, so a
+host that only checks `origin == kw.k8s.get` cannot tell the two apart from
+the error alone. Unlike `params`, there is no `parameterNotFoundAction`
+equivalent: a cluster-scoped request, or a request for the Namespace
+resource itself, does not trap — it makes `namespaceObject` `null` without
+calling the host at all. See
+[Namespace object](run-vap-wasm.md#namespace-object).
 
 ## Known Limitations
 

@@ -6,18 +6,14 @@
 
 use std::collections::HashMap;
 
-use super::{get_str, label_selector::format_label_selector};
+use super::{
+    FetchFn, base_request_map, get_str, label_selector::format_label_selector, read_binding,
+};
 use crate::{
     error::{CelError, CelResult, into_raw_result},
     extensions::call_extension_impl,
-    globals::cel_get_variable,
     types::{CelMapKey, CelValue},
 };
-
-/// The `__type__` tag of the request map that `kw.k8s.get` and `kw.k8s.list`
-/// receive. It is the same tag that `cel_builder_step` writes for a
-/// `kw.k8s.apiVersion(...).kind(...)` chain.
-const KW_K8S_CLIENT_TYPE: &str = "kw.k8s.Client";
 
 /// Resolve the list of `params` objects for a VAP evaluation.
 ///
@@ -100,24 +96,6 @@ unsafe fn read_str<'a>(ptr: *const u8, len: i32) -> &'a str {
     })
 }
 
-/// Read one binding by name. Returns `None` when the binding is not set.
-///
-/// # Safety
-/// `cel_init_bindings` must have run before this function.
-unsafe fn read_binding(name: &str) -> Option<CelValue> {
-    let ptr = unsafe { cel_get_variable(name.as_ptr(), name.len() as i32) };
-    if ptr.is_null() {
-        None
-    } else {
-        Some(unsafe { (*ptr).clone() })
-    }
-}
-
-/// A host call that fetches params. The first argument is the `kw.k8s`
-/// function name (`get` or `list`). The second argument is the request map.
-/// The result is the host response, or a `CelValue::Error`.
-type FetchFn<'a> = dyn FnMut(&str, CelValue) -> CelValue + 'a;
-
 /// Where the params come from.
 enum ParamsSource<'a> {
     /// `paramRef.name`: one resource.
@@ -154,7 +132,7 @@ fn resolve_params(
 
     let outcome = match params_source(param_ref)? {
         ParamsSource::Name(name) => {
-            let mut request_map = base_request_map(api_version, kind, &namespace);
+            let mut request_map = base_request_map(api_version, kind, Some(&namespace));
             request_map.insert(CelMapKey::from("name"), CelValue::String(name.to_string()));
             match fetch("get", CelValue::Object(request_map)) {
                 CelValue::Error(err) => FetchOutcome::HostError(err),
@@ -163,7 +141,7 @@ fn resolve_params(
         }
         ParamsSource::Selector(selector) => {
             let label_selector = format_label_selector(selector)?;
-            let mut request_map = base_request_map(api_version, kind, &namespace);
+            let mut request_map = base_request_map(api_version, kind, Some(&namespace));
             request_map.insert(
                 CelMapKey::from("labelSelector"),
                 CelValue::String(label_selector),
@@ -226,33 +204,6 @@ fn resolve_namespace(
         return ns.to_string();
     }
     String::new()
-}
-
-/// Build the request map that both `kw.k8s.get` and `kw.k8s.list` share.
-///
-/// `namespace` is always present, possibly `""`. This differs from a
-/// `kw.k8s` chain written in CEL, where `namespace` is present only when the
-/// policy calls `.namespace()`.
-fn base_request_map(
-    api_version: &str,
-    kind: &str,
-    namespace: &str,
-) -> HashMap<CelMapKey, CelValue> {
-    let mut map = HashMap::new();
-    map.insert(
-        CelMapKey::from("__type__"),
-        CelValue::String(KW_K8S_CLIENT_TYPE.to_string()),
-    );
-    map.insert(
-        CelMapKey::from("apiVersion"),
-        CelValue::String(api_version.to_string()),
-    );
-    map.insert(CelMapKey::from("kind"), CelValue::String(kind.to_string()));
-    map.insert(
-        CelMapKey::from("namespace"),
-        CelValue::String(namespace.to_string()),
-    );
-    map
 }
 
 #[cfg(test)]
