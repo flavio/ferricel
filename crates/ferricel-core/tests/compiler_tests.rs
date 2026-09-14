@@ -1,4 +1,5 @@
 use ferricel_core::compiler::Builder;
+use rstest::rstest;
 
 use crate::common::*;
 
@@ -133,5 +134,44 @@ spec:
     assert!(
         !contains(b"ferricel.cel-source"),
         "ferricel.cel-source should not be present in a VAP compilation"
+    );
+}
+
+// ============================================================================
+// BACKTICK-ESCAPED FIELD SELECTION (`` `foo.bar` ``)
+// ============================================================================
+//
+// Regression tests for the cel-rust 0.14.5 parser change that rejects
+// backtick-quoted field selectors unless `enable_ident_escape_syntax(true)`
+// is set on the parser. See conformance/thresholds.toml `fields` entry and
+// the `quoted_map_fields` conformance section.
+
+#[rstest]
+#[case("{'a/b': 1}.`a/b`", 1)]
+#[case("{'foo.txt': 32, 'bar.csv': 1024}.`foo.txt`", 32)]
+#[case(
+    "{'content-type': 'application/json', 'content-length': 145}.`content-length`",
+    145
+)]
+fn test_backtick_field_selection(#[case] expr: &str, #[case] expected: i64) {
+    let result = compile_and_execute(expr).expect("Failed to execute");
+    assert_eq!(
+        result,
+        serde_json::json!(expected),
+        "Expression '{}' should evaluate to {}",
+        expr,
+        expected
+    );
+}
+
+#[rstest]
+#[case("has({'content-type': 'application/json'}.`content-type`)", true)]
+#[case("has({'/api/v1': true, '/api/v2': false}.`/api/v3`)", false)]
+fn test_backtick_field_selection_with_has(#[case] expr: &str, #[case] expected: bool) {
+    let result = compile_and_execute_bool(expr).expect("Failed to execute");
+    assert_eq!(
+        result, expected,
+        "Expression '{}' should evaluate to {}",
+        expr, expected
     );
 }

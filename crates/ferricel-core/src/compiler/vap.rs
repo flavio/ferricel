@@ -383,6 +383,7 @@ fn compile_sub_fn(
 ) -> Result<FunctionId, anyhow::Error> {
     let ast = Parser::new()
         .enable_optional_syntax(true)
+        .enable_ident_escape_syntax(true)
         .parse(cel_code)
         .map_err(|e| anyhow::anyhow!("CEL parse error: {:?}", e))
         .with_context(|| format!("failed to compile CEL expression: {cel_code:?}"))?;
