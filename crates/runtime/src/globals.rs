@@ -4,18 +4,37 @@
 //! any user-provided bindings (e.g., `object`, `oldObject`, `request` for K8s,
 //! or custom variables for general CEL expressions).
 
-use std::ptr;
+use std::{cell::UnsafeCell, collections::HashMap};
 
 use crate::{
     error::{CelError, abort_with_error},
     types::{CelMapKey, CelValue},
 };
 
-/// Global storage for all variable bindings as a Map
-/// Initialized by validate() before expression evaluation
-static mut BINDINGS: *mut CelValue = ptr::null_mut();
+/// Wrapper that lets us keep an owned, mutable global in a `static` without
+/// going through the (edition-2024-forbidden) `static mut` reference form.
+///
+/// # Safety
+/// The Wasm guest runtime executes on a single thread, so unsynchronized
+/// access to the wrapped value can never race.
+struct GlobalCell<T>(UnsafeCell<T>);
+
+// SAFETY: see struct doc comment above.
+unsafe impl<T> Sync for GlobalCell<T> {}
+
+/// Global storage for all variable bindings, as an owned `CelValue::Object`.
+///
+/// Initialized by [`cel_init_bindings`] before expression evaluation. The
+/// runtime *owns* this value: once handed to `cel_init_bindings`, the caller
+/// must not free it independently. It is dropped when the module instance is
+/// torn down (or replaced by a subsequent `cel_init_bindings` call).
+static BINDINGS: GlobalCell<Option<Box<CelValue>>> = GlobalCell(UnsafeCell::new(None));
 
 /// Initialize the global bindings map.
+///
+/// Takes ownership of `ptr`: the runtime becomes responsible for the pointee
+/// and the caller must not free it afterwards. Any previously stored
+/// bindings are dropped.
 ///
 /// # Parameters
 /// - `ptr`: Pointer to a boxed CelValue::Map (from cel_deserialize_json)
@@ -24,12 +43,51 @@ static mut BINDINGS: *mut CelValue = ptr::null_mut();
 ///
 /// # Safety
 /// - Must be called before any expression evaluation
-/// - `ptr` must be a valid pointer from cel_deserialize_json or null
+/// - `ptr` must be a valid, uniquely-owned pointer from cel_deserialize_json
+///   (or a compatible allocator), or null
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_init_bindings(ptr: *mut CelValue) {
     unsafe {
-        BINDINGS = ptr;
+        let new_value = if ptr.is_null() {
+            None
+        } else {
+            Some(Box::from_raw(ptr))
+        };
+        *BINDINGS.0.get() = new_value;
+    }
+}
+
+/// Borrow the bindings map, if bindings are initialized and hold an Object.
+///
+/// # Safety
+/// Must only be called from the single-threaded Wasm guest environment.
+unsafe fn bindings_map() -> Option<&'static HashMap<CelMapKey, CelValue>> {
+    unsafe {
+        match &*BINDINGS.0.get() {
+            Some(boxed) => match boxed.as_ref() {
+                CelValue::Object(m) => Some(m),
+                _ => None,
+            },
+            None => None,
+        }
+    }
+}
+
+/// Mutably borrow the bindings map, if bindings are initialized and hold an
+/// Object.
+///
+/// # Safety
+/// Must only be called from the single-threaded Wasm guest environment.
+unsafe fn bindings_map_mut() -> Option<&'static mut HashMap<CelMapKey, CelValue>> {
+    unsafe {
+        match &mut *BINDINGS.0.get() {
+            Some(boxed) => match boxed.as_mut() {
+                CelValue::Object(m) => Some(m),
+                _ => None,
+            },
+            None => None,
+        }
     }
 }
 
@@ -45,30 +103,22 @@ pub unsafe extern "C" fn cel_init_bindings(ptr: *mut CelValue) {
 ///
 /// # Safety
 /// - Safe to call after cel_init_bindings in single-threaded Wasm environment
-/// - Returned pointer is valid until cel_reset_globals is called
+/// - The returned pointer is a freshly-allocated clone owned by the caller;
+///   it stays valid independently of the global bindings' lifetime
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_get_variable(name_ptr: *const u8, name_len: i32) -> *mut CelValue {
     unsafe {
-        // Check if bindings are initialized
-        if BINDINGS.is_null() {
-            return ptr::null_mut();
-        }
-
-        // Get the bindings value
-        let bindings_ref = &*BINDINGS;
-
-        // Extract the map from the CelValue
-        let map = match bindings_ref {
-            CelValue::Object(m) => m,
-            _ => return ptr::null_mut(), // Bindings should be a map
+        // Get the bindings map, if initialized and shaped as an Object.
+        let Some(map) = bindings_map() else {
+            return std::ptr::null_mut();
         };
 
         // Read the variable name from Wasm memory
         let name_slice = std::slice::from_raw_parts(name_ptr, name_len as usize);
         let name = match std::str::from_utf8(name_slice) {
             Ok(s) => s,
-            Err(_) => return ptr::null_mut(),
+            Err(_) => return std::ptr::null_mut(),
         };
 
         // Look up the variable in the map using CelMapKey
@@ -76,7 +126,7 @@ pub unsafe extern "C" fn cel_get_variable(name_ptr: *const u8, name_len: i32) ->
 
         match map.get(&key) {
             Some(value) => Box::into_raw(Box::new(value.clone())),
-            None => ptr::null_mut(),
+            None => std::ptr::null_mut(),
         }
     }
 }
@@ -103,7 +153,7 @@ pub unsafe extern "C" fn cel_set_variable(
     value_ptr: *mut CelValue,
 ) {
     unsafe {
-        if BINDINGS.is_null() {
+        if (*BINDINGS.0.get()).is_none() {
             abort_with_error("cel_set_variable called before cel_init_bindings");
         }
 
@@ -120,7 +170,10 @@ pub unsafe extern "C" fn cel_set_variable(
             (*value_ptr).clone()
         };
 
-        if let CelValue::Object(ref mut map) = *BINDINGS {
+        // Bindings are initialized (checked above); if they are not shaped as
+        // an Object, silently ignore the write (mirrors `cel_get_variable`'s
+        // behavior for non-Object bindings).
+        if let Some(map) = bindings_map_mut() {
             map.insert(key, value);
         }
     }
@@ -174,8 +227,9 @@ mod tests {
             let value = Box::from_raw(var_ptr);
             assert!(matches!(*value, CelValue::Int(42)));
 
-            // Cleanup
-            let _boxed = Box::from_raw(ptr);
+            // NOTE: `cel_init_bindings` took ownership of `ptr`; it is owned
+            // and will be dropped by `BINDINGS` (or replaced by the next
+            // test's `cel_init_bindings` call). Do not free it here.
         }
     }
 
@@ -192,9 +246,6 @@ mod tests {
             let name = b"nonexistent";
             let var_ptr = cel_get_variable(name.as_ptr(), name.len() as i32);
             assert!(var_ptr.is_null());
-
-            // Cleanup
-            let _boxed = Box::from_raw(ptr);
         }
     }
 
@@ -202,7 +253,7 @@ mod tests {
     #[serial]
     fn test_null_bindings() {
         unsafe {
-            cel_init_bindings(ptr::null_mut());
+            cel_init_bindings(std::ptr::null_mut());
 
             let name = b"x";
             let var_ptr = cel_get_variable(name.as_ptr(), name.len() as i32);
@@ -229,9 +280,35 @@ mod tests {
             let got = Box::from_raw(var_ptr);
             assert!(matches!(*got, CelValue::Int(99)));
 
-            // Cleanup
-            let _ = Box::from_raw(ptr);
+            // Cleanup: `value` was cloned by `cel_set_variable`, so it is
+            // still owned by this test and must be freed here. `ptr` is
+            // owned by `BINDINGS` and must not be freed.
             let _ = Box::from_raw(value);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_reinit_replaces_bindings() {
+        let mut map1 = std::collections::HashMap::new();
+        map1.insert(CelMapKey::String("x".to_string()), CelValue::Int(1));
+        let ptr1 = Box::into_raw(Box::new(CelValue::Object(map1)));
+
+        let mut map2 = std::collections::HashMap::new();
+        map2.insert(CelMapKey::String("x".to_string()), CelValue::Int(2));
+        let ptr2 = Box::into_raw(Box::new(CelValue::Object(map2)));
+
+        unsafe {
+            cel_init_bindings(ptr1);
+            // Re-initializing drops the previous bindings and takes
+            // ownership of the new ones; `ptr1` must not be freed separately.
+            cel_init_bindings(ptr2);
+
+            let name = b"x";
+            let var_ptr = cel_get_variable(name.as_ptr(), name.len() as i32);
+            assert!(!var_ptr.is_null());
+            let got = Box::from_raw(var_ptr);
+            assert!(matches!(*got, CelValue::Int(2)));
         }
     }
 }
