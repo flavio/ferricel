@@ -235,6 +235,7 @@ impl Compiler {
         // 3. Parse the CEL expression
         let root_ast = Parser::new()
             .enable_optional_syntax(true)
+            .enable_ident_escape_syntax(true)
             .parse(cel_code)
             .map_err(|e| anyhow::anyhow!("Parse error: {:?}", e))?;
 
