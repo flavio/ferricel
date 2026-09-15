@@ -24,20 +24,36 @@ link it. A module compiled by a ferricel with an incompatible ABI makes
 
 ## Runtime Errors and `failurePolicy`
 
-`eval()` returns `Err` when a `matchConditions` or `validations` expression
-fails at runtime (for example, division by zero, an unbound variable, or a
-`kw.k8s` extension that returns an error). The error downcasts to
-`ferricel_core::CelRuntimeError`. Its `Display` text starts with
-`CEL runtime error:`. The module never turns such a failure into an accept or
-a reject response.
+The host passes the `failurePolicy` of the policy in the bindings, as the
+`failurePolicy` key. The value is `"Fail"` or `"Ignore"`. A missing or `null`
+key means `Fail`. The module does not read `spec.failurePolicy` from the VAP.
+
+Make sure that the value is valid before it reaches the bindings. If the
+value is anything else (for example `"ignore"`, in lowercase), the module
+traps with a CEL runtime error before the first expression runs. A host that
+maps every `CelRuntimeError` to "allow" under `Ignore` turns its own
+configuration error into an accept.
+
+Under `Fail`, `eval()` returns `Err` when a `matchConditions` or
+`validations` expression evaluates to a runtime error. Examples: division by
+zero, an unbound variable, or a `kw.k8s` extension that returns an error.
+The error downcasts to `ferricel_core::CelRuntimeError`. Its `Display` text
+starts with `CEL runtime error:`. The module never turns such an error into
+an accept or a reject response.
+
+Under `Ignore`, the module skips the expression that evaluates to an error
+and continues. `eval()` returns `Ok`, and the response carries a `warnings`
+list with one entry per skipped expression. See
+[Runtime Errors](vap.md#runtime-errors) for the exact rules. Under `Ignore`,
+`eval()` still returns `Err` when the `params` or `namespaceObject` lookup
+fails, and when the `failurePolicy` value is invalid.
 
 `eval()` can also fail for reasons that are not CEL runtime errors: an
 epoch-deadline interrupt, a memory limit, a Wasm trap, or a bug in a host
 extension. These errors do not downcast to `CelRuntimeError`.
 
-The host is responsible for applying the policy's `failurePolicy`. With
-`downcast_ref`, the host can tell a CEL runtime error apart from other
-failures and decide how each kind maps to `failurePolicy`:
+With `downcast_ref`, the host can tell a CEL runtime error apart from other
+failures:
 
 ```rust
 use ferricel_core::CelRuntimeError;
@@ -46,10 +62,14 @@ match engine.eval(Some(&bindings_json)) {
     Ok(result_str) => {
         let result: serde_json::Value = serde_json::from_str(&result_str)?;
         // result["accepted"] == true / false
+        // result["warnings"]: present under `Ignore` when the module skipped
+        // an expression. Forward it to the client and the audit log.
     }
     Err(err) => match err.downcast_ref::<CelRuntimeError>() {
         Some(cel_err) => {
-            // The CEL expression evaluated to an error. Apply failurePolicy:
+            // A CEL expression evaluated to an error under `Fail`, or the
+            // `params` or `namespaceObject` lookup failed, or the
+            // `failurePolicy` binding is invalid. Apply failurePolicy:
             //   Fail   -> deny the request, report `cel_err.message`
             //   Ignore -> allow the request
         }
@@ -85,6 +105,7 @@ See [Runtime Errors](vap.md#runtime-errors) for the exact rules.
 | `oldObject` | Policy expressions reference `oldObject`                                           |
 | `request`   | Policy expressions reference `request` or `namespaceObject`, or `paramKind` is set |
 | `paramRef`  | `paramKind` is set (see below)                                                     |
+| `failurePolicy` | Optional. `"Fail"` (the default when missing or `null`) or `"Ignore"`. See [Runtime Errors and `failurePolicy`](#runtime-errors-and-failurepolicy) |
 
 `object`, `oldObject`, and `request` correspond directly to the fields of the
 Kubernetes

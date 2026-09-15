@@ -8,10 +8,7 @@
 
 use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
 
-use crate::{
-    error::{abort_with_error, read_ptr},
-    types::CelValue,
-};
+use crate::{error::abort_with_error, memory::read_ptr, types::CelValue};
 
 // Timestamp range constants (CEL spec)
 // Min: 0001-01-01T00:00:00Z

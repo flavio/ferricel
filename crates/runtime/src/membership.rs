@@ -10,11 +10,7 @@
 
 use slog::{debug, error};
 
-use crate::{
-    error::{abort_with_error, read_ptr},
-    helpers::cel_equals,
-    types::CelValue,
-};
+use crate::{error::abort_with_error, helpers::cel_equals, memory::read_ptr, types::CelValue};
 
 /// Check if an element exists in a container (list or map).
 ///

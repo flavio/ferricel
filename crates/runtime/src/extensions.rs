@@ -6,8 +6,8 @@
 use ferricel_types::extensions::{ExtensionCallPayload, ExtensionCallResponse};
 
 use crate::{
-    error::{CelError, read_ptr},
-    memory::cel_malloc,
+    error::CelError,
+    memory::{cel_malloc, read_ptr, read_str},
     serialization::encode_ptr_len,
     types::CelValue,
 };
@@ -222,23 +222,11 @@ pub unsafe extern "C" fn cel_ext_call_4(
 // Private helpers
 // ---------------------------------------------------------------------------
 
-/// Read a `&str` from a raw pointer + length without copying.
-///
-/// # Safety
-///
-/// `ptr` must point to `len` valid UTF-8 bytes that live at least as long as
-/// the returned reference.
-#[inline]
-unsafe fn read_str<'a>(ptr: *const u8, len: i32) -> &'a str {
-    let bytes: &'a [u8] = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
-    std::str::from_utf8(bytes).expect("Extension function name is not valid UTF-8")
-}
-
 /// Read a `&str` from a raw pointer + length, returning `None` when `len == 0`.
 ///
 /// # Safety
-///
-/// Same as [`read_str`]. When `len > 0`, `ptr` must point to `len` valid UTF-8 bytes.
+/// Same as [`crate::memory::read_str`]. When `len > 0`, `ptr` must point to
+/// `len` valid UTF-8 bytes.
 #[inline]
 unsafe fn read_optional_str<'a>(ptr: *const u8, len: i32) -> Option<&'a str> {
     if len == 0 {

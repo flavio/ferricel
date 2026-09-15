@@ -107,9 +107,9 @@ pub fn abort_with_error(message: &str) -> ! {
 /// Callers:
 /// - `cel_serialize_result`, before serializing the final result of a plain
 ///   CEL module.
-/// - The VAP orchestrator, after evaluating each `matchCondition` and
-///   `validation`, so a runtime error is never mistaken for a non-`false`
-///   (passing) result.
+/// - The VAP orchestrator, after the `namespaceObject` and `params`
+///   lookups. The `matchConditions` and `validations` results go through
+///   `cel_vap_expression_errored` instead, which applies `failurePolicy`.
 ///
 /// The pointer is not consumed. A null pointer is a no-op.
 ///
@@ -154,29 +154,6 @@ pub fn create_error_value(message: &str) -> *mut crate::types::CelValue {
     Box::into_raw(Box::new(crate::types::CelValue::Error(CelError::new(
         message,
     ))))
-}
-
-/// Read a `CelValue` from a raw pointer, aborting hard if null.
-///
-/// Reads a `CelValue` out of a raw pointer, aborting on null.
-///
-/// A null pointer reaching an operator is a compiler or runtime bug — since
-/// `cel_get_variable` now returns a `CelValue::Error` (never null) for unbound
-/// variables, null should never appear here. If it does, abort loudly instead
-/// of silently producing a wrong error value.
-///
-/// Under the arena allocator (`lol_alloc::LeakingAllocator`) dealloc is a no-op,
-/// so `ptr::read` is used to bitwise-move the value out of arena memory without
-/// cloning or freeing.
-///
-/// # Safety
-/// `ptr` must point to a valid, aligned `CelValue` in live memory.
-#[inline]
-pub unsafe fn read_ptr(ptr: *mut crate::types::CelValue) -> crate::types::CelValue {
-    if ptr.is_null() {
-        abort_with_error("null CelValue pointer: this is a compiler or runtime bug");
-    }
-    unsafe { std::ptr::read(ptr) }
 }
 
 #[cfg(test)]

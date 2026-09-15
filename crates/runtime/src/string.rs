@@ -9,7 +9,7 @@
 
 use regex_lite::Regex;
 
-use crate::{error::read_ptr, types::CelValue};
+use crate::{memory::read_ptr, types::CelValue};
 
 /// Internal helper: Concatenate two strings.
 ///

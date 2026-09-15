@@ -19,7 +19,8 @@ use slog::error;
 use url::{Host, Url};
 
 use crate::{
-    error::{create_error_value, read_ptr},
+    error::create_error_value,
+    memory::read_ptr,
     types::{CelMapKey, CelValue},
 };
 

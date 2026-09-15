@@ -11,7 +11,7 @@
 //!
 //! The algorithms mirror the Go reference implementation (O(n*m) linear scans).
 
-use crate::{error::read_ptr, helpers::cel_equals, types::CelValue};
+use crate::{helpers::cel_equals, memory::read_ptr, types::CelValue};
 
 /// Check whether every element of `sublist` exists somewhere in `list`.
 ///

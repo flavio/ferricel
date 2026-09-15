@@ -41,6 +41,11 @@ The `code` field is derived from the validation's `reason` field:
 | `RequestEntityTooLarge` | 413       |
 | `Invalid` or unset      | 422       |
 
+Both responses can carry an optional `warnings` list of strings. The list is
+present only under `failurePolicy: Ignore`, and only when the module skipped
+at least one expression. The module skips an expression when it evaluates to
+a runtime error. See [`failurePolicy: Ignore`](#failurepolicy-ignore).
+
 ## Evaluation Order
 
 The compiled module follows the evaluation order of the Kubernetes VAP
@@ -83,25 +88,73 @@ aggregates every rejection message. See [LIMITATIONS.md](https://github.com/flav
 
 ## Runtime Errors
 
-A CEL expression can fail at runtime: division by zero, a missing field, an
-unbound variable, or a host extension (such as `kw.k8s`) that returns an error.
+A CEL expression can evaluate to a runtime error. Examples: division by
+zero, a missing field, an unbound variable, or a host extension (such as
+`kw.k8s`) that returns an error.
+
+The host passes the `failurePolicy` of the policy in the `failurePolicy`
+binding (see [Required Bindings](run-vap-wasm.md#required-bindings)). The
+value is `"Fail"` or `"Ignore"`. A missing or `null` binding means `Fail`. If
+the value is anything else, the module traps with a runtime error before the
+first expression runs. The module does not read `spec.failurePolicy` from the
+VAP. The host owns that value.
+
+### `failurePolicy: Fail`
 
 When a `matchConditions` or `validations` expression evaluates to a runtime
-error, the compiled module does **not** return `{"accepted": true}` or a
-rejection. Instead it traps, exactly like a plain CEL module does: the call to
-`evaluate` fails and `Engine::eval()` returns `Err`. The error downcasts to
-`ferricel_core::CelRuntimeError`. The host decides what to do with it, which
-is where `failurePolicy` applies: `Fail` denies the request, `Ignore` allows
-it.
+error, the module does **not** return `{"accepted": true}` or a rejection.
+The module traps, exactly like a plain CEL module does. The call to `evaluate`
+fails, and `Engine::eval()` returns `Err`. The error downcasts to
+`ferricel_core::CelRuntimeError`. The host denies the request.
 
 `Engine::eval()` can also fail for other reasons: an epoch-deadline
 interrupt, a memory limit, a Wasm trap, or a bug in a host extension. These
-errors do not downcast to `CelRuntimeError`. The host can tell the two kinds
-apart. How each kind maps to `failurePolicy` is the host's decision. See
+errors do not downcast to `CelRuntimeError`, so the host can tell the two
+kinds apart. See
 [Runtime Errors and `failurePolicy`](run-vap-wasm.md#runtime-errors-and-failurepolicy)
 for the host-side code.
 
-Two cases do not trap:
+### `failurePolicy: Ignore`
+
+The module applies the policy to each expression on its own, the same way
+Kubernetes does:
+
+- When a `validations` expression evaluates to an error, the module skips it.
+  The next validation runs. A `false` result from any other validation
+  rejects the request.
+- When a `matchConditions` expression evaluates to an error, the module skips
+  the current param, like for a `false` condition. With `paramKind`, the next
+  param runs. Without `paramKind`, the policy does not apply, and the module
+  accepts the request.
+
+Each skipped expression adds one entry to the `warnings` list of the
+response. The list is present on both accept and reject responses. It is
+absent when the module skipped nothing:
+
+```json
+{"accepted": true, "warnings": ["The module skipped validation[0] because the expression evaluated to an error (failurePolicy is Ignore): no such key: 'count'"]}
+```
+
+```json
+{"accepted": false, "message": "...", "code": 422, "warnings": ["The module skipped validation[0] because the expression evaluated to an error (failurePolicy is Ignore): no such key: 'count'"]}
+```
+
+The text names the expression (`validation[<i>]` or
+`matchCondition '<name>'`) and carries the error message. With `paramKind`,
+the text names the param (`params <namespace>/<name>`), so an operator can
+tell the params apart. Kubernetes sends no client warning for a skipped
+expression. It records a metric and an audit annotation instead. The
+warnings are a ferricel addition.
+
+`Ignore` does not cover the `params` and `namespaceObject` lookups. An error
+there always traps (see below). `Ignore` also does not cover runtime
+functions that abort instead of returning an error value, such as
+`int("x")`. See
+[LIMITATIONS.md](https://github.com/flavio/ferricel/blob/main/LIMITATIONS.md).
+
+### Errors that are never errors
+
+Two cases are not runtime errors under either policy:
 
 - A `variables` entry that evaluates to an error is stored as-is. The error
   propagates only into the expressions that reference `variables.<name>`. An
@@ -110,8 +163,10 @@ Two cases do not trap:
 - Errors absorbed by CEL short-circuit operators are not errors. For example,
   `(1 / 0) == 1 || true` evaluates to `true`.
 
+### Lookups that always trap
+
 The `params` lookup traps before any `matchConditions` or `validations`
-run. If the host's `kw.k8s` extension fails, or the lookup finds no
+run, under both `Fail` and `Ignore`. If the host's `kw.k8s` extension fails, or the lookup finds no
 resource, and `paramRef.parameterNotFoundAction` is not `Allow`, the module
 traps. For a host error, the `origin` field of the `CelRuntimeError` is
 `kw.k8s.get` (for `paramRef.name`) or `kw.k8s.list` (for
@@ -136,6 +191,6 @@ The following VAP features are not yet implemented or are not part of ferricel's
 
 | Feature                 | Status          | Notes                                                                                                                                       |
 | ----------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `failurePolicy`         | Out of scope    | The module traps on a runtime error (see [Runtime Errors](#runtime-errors)). The host maps that error to deny (`Fail`) or allow (`Ignore`). |
+| `failurePolicy`         | Implemented     | Via the `failurePolicy` binding (see [Runtime Errors](#runtime-errors)). Under `Ignore`, the module skips an expression that evaluates to an error and records a warning. |
 | `auditAnnotations`      | Not implemented | Requires a separate compilation path and an additional field in the response JSON.                                                          |
 | `matchConstraints`      | Out of scope    | This is a server-side filter applied by the API server, not a CEL expression. The compiled module does not enforce it.                      |

@@ -11,26 +11,52 @@
 //! 2. **params** (only when `spec.paramKind` is set). The runtime resolves the
 //!    list of param objects from `paramRef`. See "Params" below.
 //! 3. For each param (or once, when there is no `paramKind`):
-//!    1. **matchConditions**. If any evaluates to `false`, this param is
-//!       skipped. It is not a rejection.
+//!    1. **matchConditions**. If any evaluates to `false`, the module skips
+//!       this param. This is not a rejection. Under `failurePolicy: Ignore`,
+//!       the module also skips this param when a condition evaluates to an
+//!       error.
 //!    2. **variables**. Evaluated in declaration order. Each result is
 //!       inserted into a `variables` map so later expressions can access
 //!       `variables.<name>`. The map is rebuilt for each param.
 //!    3. **validations**. Evaluated in order. The first `false` result
 //!       returns a rejection response with the message and HTTP status code
-//!       of that validation.
+//!       of that validation. Under `failurePolicy: Ignore`, the module skips
+//!       a validation that evaluates to an error.
 //! 4. When no param produced a rejection, return `{"accepted":true}`.
 //!
 //! ## Runtime errors
 //!
-//! If a `matchCondition` or `validation` expression evaluates to a CEL runtime
-//! error, the module traps via `cel_abort` (like a plain CEL module does), so
-//! the host receives an error from `evaluate`. An error is never treated as a
-//! pass or as a rejection.
+//! The host passes the `failurePolicy` of the policy in the `failurePolicy`
+//! binding. The value is `"Fail"` or `"Ignore"`. A missing or `null` binding
+//! means `Fail`. If the value is anything else, the module traps with a CEL
+//! runtime error before the first expression runs. The module never reads
+//! `spec.failurePolicy` of the VAP.
 //!
-//! On the host, [`Engine::eval`](crate::runtime::Engine::eval) returns an
-//! error that downcasts to [`CelRuntimeError`](crate::CelRuntimeError).
-//! When the `params` lookup fails, the error's `origin` is `kw.k8s.get` or
+//! Under `Fail`, when a `matchCondition` or `validation` expression evaluates
+//! to a CEL runtime error, the module traps via `cel_abort`, like a plain
+//! CEL module does. The host receives an error from `evaluate`. The module
+//! never treats an error as a pass or as a rejection.
+//!
+//! Under `Ignore`, the module applies the policy to each expression on its
+//! own, like Kubernetes does:
+//!
+//! - When a `validation` evaluates to an error, the module skips it. The
+//!   next validation runs, and a `false` result rejects.
+//! - When a `matchCondition` evaluates to an error, the module skips the
+//!   current param, the same as for a `false` result. The next param runs.
+//!
+//! Each skipped expression adds one entry to the `warnings` list of the
+//! response. Example:
+//! `The module skipped validation[0] because the expression evaluated to an error (failurePolicy is Ignore): <error>`.
+//! When the policy has `paramKind`, the text names the param
+//! (`for params <namespace>/<name>`). Kubernetes sends no client warning for
+//! a skipped expression. The list is a ferricel addition.
+//!
+//! `Ignore` does not cover the `params` and `namespaceObject` lookups. An
+//! error there always traps. On the host,
+//! [`Engine::eval`](crate::runtime::Engine::eval) returns an error that
+//! downcasts to [`CelRuntimeError`](crate::CelRuntimeError). When the
+//! `params` lookup fails, the `origin` of the error is `kw.k8s.get` or
 //! `kw.k8s.list`. When the `namespaceObject` lookup fails, the origin is
 //! `kw.k8s.get`.
 //!
@@ -89,7 +115,9 @@
 //!
 //! When several params match a selector and more than one produces a
 //! rejection, the response holds the first rejection only. Kubernetes
-//! aggregates every rejection message.
+//! aggregates every rejection message. Under `failurePolicy: Ignore`, when
+//! an expression evaluates to an error for one param, the module still
+//! evaluates the next param.
 //!
 //! The host must register a `kw.k8s` builder-chain implementation on the
 //! `Engine`, for both `get` and `list`. The chain is declared via
@@ -411,6 +439,7 @@ struct OrchestratorLocals {
 ///
 /// ```text
 /// bindings = deserialize(arg); init_bindings(bindings)
+/// cel_vap_reset()                       ; clear warnings, read failurePolicy
 /// if policy references namespaceObject:
 ///     ns = cel_vap_resolve_namespace_object(); abort_if_error(ns)
 ///     set_variable("namespaceObject", ns)
@@ -431,6 +460,11 @@ struct OrchestratorLocals {
 /// return serialize_accept()
 /// ```
 ///
+/// Inside `skip`, each matchCondition and validation result goes through
+/// `cel_vap_expression_errored`. For an error, it traps under
+/// `failurePolicy: Fail` and returns 1 under `Ignore`. On 1, a matchCondition
+/// branches to `skip`, and a validation falls through to the next one.
+///
 /// A false `matchCondition` branches to `skip`. A false validation returns a
 /// rejection response from inside the block. When the loop ends, or the
 /// param list is empty, the function returns an acceptance response.
@@ -447,10 +481,13 @@ fn build_orchestrator(
     };
     let mut body = func.func_body();
 
-    // 1. Deserialize + init bindings
+    // 1. Deserialize + init bindings, then reset the per-evaluation VAP
+    //    state (warnings, failurePolicy). The reset traps on an invalid
+    //    `failurePolicy` binding before any expression runs.
     body.local_get(bindings_arg)
         .call(env.get(RuntimeFunction::DeserializeJson))
-        .call(env.get(RuntimeFunction::InitBindings));
+        .call(env.get(RuntimeFunction::InitBindings))
+        .call(env.get(RuntimeFunction::VapReset));
 
     // 2. Resolve `namespaceObject`, only when the policy references it.
     if args.resolve_namespace_object {
@@ -561,6 +598,12 @@ fn emit_params_loop(
 /// A false `matchCondition` branches to `skip_id`, the enclosing block. A
 /// false validation returns a rejection response. When every validation
 /// passes, control falls through to the end of `body`.
+///
+/// Each matchCondition and validation result goes through
+/// `cel_vap_expression_errored`. When the result is an error, that function
+/// traps under `failurePolicy: Fail` and returns 1 under `Ignore`. On 1, a
+/// matchCondition branches to `skip_id` like a false one, and the module
+/// skips a validation and runs the next one.
 fn emit_param_evaluation(
     body: &mut InstrSeqBuilder,
     skip_id: InstrSeqId,
@@ -569,14 +612,22 @@ fn emit_param_evaluation(
     module: &mut walrus::Module,
     locals: &OrchestratorLocals,
 ) -> Result<(), anyhow::Error> {
-    // 1. matchConditions — false → skip this param.
-    //    A CEL runtime error traps so the host can apply `failurePolicy`.
-    for &fn_id in &args.match_conditions_fns {
-        body.call(fn_id)
-            .local_set(locals.val)
-            .local_get(locals.val)
-            .call(env.get(RuntimeFunction::AbortIfError))
-            .local_get(locals.val)
+    let mem = get_memory_id(module)?;
+
+    // 1. matchConditions: false → skip this param.
+    //    A CEL runtime error traps under `Fail`. Under `Ignore`, it skips
+    //    this param and records a warning. Both skips are a `br_if skip`.
+    let match_conditions = args.spec.match_conditions.as_deref().unwrap_or(&[]);
+    for (i, &fn_id) in args.match_conditions_fns.iter().enumerate() {
+        let label = format!("matchCondition '{}'", match_conditions[i].name);
+        body.call(fn_id).local_set(locals.val);
+
+        body.local_get(locals.val);
+        emit_string_const(&label, body, env, mem, module);
+        body.call(env.get(RuntimeFunction::VapExpressionErrored))
+            .instr(walrus::ir::BrIf { block: skip_id });
+
+        body.local_get(locals.val)
             .call(env.get(RuntimeFunction::IsStrictlyFalse))
             .instr(walrus::ir::BrIf { block: skip_id });
     }
@@ -617,13 +668,12 @@ fn emit_param_evaluation(
         let val_spec = &validations_spec[i];
         let http_code = reason_to_http_code(val_spec.reason.as_deref());
         let msg_expr_fn = compiled.msg_expr_fn;
+        let is_strictly_false = env.get(RuntimeFunction::IsStrictlyFalse);
+        let serialize_reject = env.get(RuntimeFunction::VapSerializeReject);
+        let val = locals.val;
 
-        // Evaluate the validation expression. A CEL runtime error must surface
-        // to the host (trap), not be mistaken for a non-`false` (passing) result.
-        body.call(compiled.id)
-            .local_set(locals.val)
-            .local_get(locals.val)
-            .call(env.get(RuntimeFunction::AbortIfError));
+        // Evaluate the validation expression.
+        body.call(compiled.id).local_set(locals.val);
 
         // Pre-compute the static message (needs &mut module, so must be outside
         // the closure). This is always emitted: it is the message when no
@@ -635,22 +685,40 @@ fn emit_param_evaluation(
             .unwrap_or_else(|| format!("failed expression: {}", val_spec.expression));
         let static_msg_local = compile_string_to_local(&text, body, env, module)?;
 
-        body.local_get(locals.val)
-            .call(env.get(RuntimeFunction::IsStrictlyFalse));
+        // The module must never treat a CEL runtime error as a non-`false`
+        // (passing) result. `cel_vap_expression_errored` traps under `Fail`.
+        // Under `Ignore`, it returns 1, and the module skips the
+        // strictly-false test. The next validation runs.
+        //
+        //   if cel_vap_expression_errored(val, "validation[i]") == 0:
+        //       if cel_is_strictly_false(val):
+        //           return cel_serialize_vap_reject(...)
+        body.local_get(locals.val);
+        emit_string_const(&format!("validation[{i}]"), body, env, mem, module);
+        body.call(env.get(RuntimeFunction::VapExpressionErrored))
+            .unop(walrus::ir::UnaryOp::I32Eqz);
         body.if_else(
             None,
-            move |then| {
-                // message_ptr: messageExpression result, or null if none
-                if let Some(fn_id) = msg_expr_fn {
-                    then.call(fn_id);
-                } else {
-                    then.i32_const(0);
-                }
-                // fallback_ptr: static message
-                then.local_get(static_msg_local)
-                    .i32_const(http_code)
-                    .call(env.get(RuntimeFunction::VapSerializeReject))
-                    .return_();
+            move |not_errored| {
+                not_errored.local_get(val).call(is_strictly_false);
+                not_errored.if_else(
+                    None,
+                    move |reject| {
+                        // message_ptr: messageExpression result, or null if none
+                        if let Some(fn_id) = msg_expr_fn {
+                            reject.call(fn_id);
+                        } else {
+                            reject.i32_const(0);
+                        }
+                        // fallback_ptr: static message
+                        reject
+                            .local_get(static_msg_local)
+                            .i32_const(http_code)
+                            .call(serialize_reject)
+                            .return_();
+                    },
+                    |_| {},
+                );
             },
             |_| {},
         );

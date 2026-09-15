@@ -171,9 +171,9 @@ The host returns one error string for every failed `kw.k8s` call. The module can
 
 These limitations apply to `ValidatingAdmissionPolicy` modules that reference `namespaceObject`. They are design choices, not bugs.
 
-### 1. A host error fails open to `failurePolicy`, unlike upstream Kubernetes
+### 1. A host error traps and defers to `failurePolicy`, unlike upstream Kubernetes
 
-A host error while fetching the Namespace is a CEL runtime error, subject to the policy's `failurePolicy` — the same treatment as a failed `params` fetch. Upstream Kubernetes hard-fails the whole admission request when it cannot fetch the Namespace, regardless of `failurePolicy`. This is a deliberate deviation: ferricel gives the host one uniform way (`failurePolicy`) to control every runtime error, `namespaceObject` included.
+When the Namespace fetch returns a host error, the module traps with a CEL runtime error. This is the same treatment as for a failed `params` fetch. The module does not read the `failurePolicy` binding for this lookup. It traps, and the host decides: deny under `Fail`, accept under `Ignore`. Upstream Kubernetes rejects the whole admission request when it cannot fetch the Namespace, regardless of `failurePolicy`. This is a deliberate deviation. Ferricel gives the host one uniform way (`failurePolicy`) to control every lookup error, `namespaceObject` included.
 
 ### 2. A missing resource and an authorization error look the same
 
@@ -182,3 +182,27 @@ Same as limitation 3 for `params`: the host returns one error string for every f
 ### 3. The fetch is eager
 
 The module resolves `namespaceObject` before `matchConditions`, even when only a `validations` expression that never runs (because a `matchCondition` skips the param) reads it. The host's extension-call cache (if any) absorbs the cost of the extra call; ferricel does not defer the fetch to first use.
+
+---
+
+## VAP `failurePolicy: Ignore`
+
+The module applies `failurePolicy: Ignore` to each `matchConditions` and `validations` expression on its own, as Kubernetes does. When an expression evaluates to an error, the module skips it and records a warning. The next expression, and the next param, run. These are the remaining differences.
+
+### 1. Some runtime failures abort instead of returning an error value
+
+Several runtime functions call `cel_abort` directly on a bad input instead of returning a CEL error value. Examples: `int("x")`, `uint(-1)`, some timestamp and duration operations, and out-of-range list indexing. To find them all, grep `abort_with_error` in `crates/runtime/src`. Such a failure is not a value. As a result, neither `||` nor `failurePolicy: Ignore` can absorb it. The module traps, and the host applies its `failurePolicy` to the whole policy. Under `Ignore`, the host accepts the request, and the expressions after the failing one never run.
+
+Errors that are values behave as documented: a missing key, division by zero, an unbound variable, or a `kw.k8s` host error. The module skips the expression. To close this gap, those functions must return `CelValue::Error` instead of aborting. This work is tracked separately.
+
+### 2. The module emits warnings, Kubernetes does not
+
+Each skipped expression adds one entry to the `warnings` list of the response. As a result, the client and the audit log can see that an expression did not run. Kubernetes records a metric and an audit annotation, and sends nothing to the client.
+
+### 3. A `false` validation returns before later validations run
+
+The module returns the first rejection. It never evaluates a later validation, so a later validation that evaluates to an error produces no warning. Kubernetes evaluates every validation and aggregates the results. The decision (deny) is the same.
+
+### 4. The `params` and `namespaceObject` lookups are not covered
+
+A failed lookup traps under both policies. See the sections above. Kubernetes behaves the same way for `params` (the binding fails as a whole), and rejects the whole request when the Namespace fetch fails.

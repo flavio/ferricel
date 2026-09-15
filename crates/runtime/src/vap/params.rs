@@ -12,6 +12,7 @@ use super::{
 use crate::{
     error::{CelError, CelResult, into_raw_result},
     extensions::call_extension_impl,
+    memory::read_str,
     types::{CelMapKey, CelValue},
 };
 
@@ -78,22 +79,6 @@ pub unsafe extern "C" fn cel_vap_resolve_params(
         request.as_ref(),
         &mut fetch,
     ))
-}
-
-/// Read a `&str` from a raw pointer and length. A zero length gives `""`
-/// without a memory read, because the compiler passes a null pointer for an
-/// empty string.
-///
-/// # Safety
-/// When `len > 0`, `ptr` must point to `len` valid UTF-8 bytes.
-unsafe fn read_str<'a>(ptr: *const u8, len: i32) -> &'a str {
-    if len <= 0 {
-        return "";
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
-    std::str::from_utf8(bytes).unwrap_or_else(|_| {
-        crate::error::abort_with_error("cel_vap_resolve_params: argument is not valid UTF-8")
-    })
 }
 
 /// Where the params come from.

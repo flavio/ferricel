@@ -26,10 +26,7 @@
 use semver::Version;
 use slog::error;
 
-use crate::{
-    error::{create_error_value, read_ptr},
-    types::CelValue,
-};
+use crate::{error::create_error_value, memory::read_ptr, types::CelValue};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parsing / normalization helpers

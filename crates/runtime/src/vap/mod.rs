@@ -2,7 +2,15 @@
 //!
 //! - [`response`]: the `ValidationResponse` JSON that the compiled module
 //!   returns (`{"accepted": true}` or
-//!   `{"accepted": false, "message": "...", "code": N}`).
+//!   `{"accepted": false, "message": "...", "code": N}`). Both carry a
+//!   `warnings` list when the module skipped an expression under
+//!   `failurePolicy: Ignore`.
+//! - [`failure_policy`]: `failurePolicy` support. The host passes the policy
+//!   in the `failurePolicy` binding (`"Fail"`, the default, or `"Ignore"`).
+//!   [`failure_policy::cel_vap_reset`] reads it once per evaluation.
+//!   [`failure_policy::cel_vap_expression_errored`] decides, for one
+//!   `matchConditions` or `validations` result, whether to trap (`Fail`) or
+//!   to skip the expression and record a warning (`Ignore`).
 //! - [`params`]: `params` resolution. [`params::cel_vap_resolve_params`]
 //!   reads `paramRef` from the bindings, calls the host `kw.k8s.get` or
 //!   `kw.k8s.list` extension, and returns the list of param objects that the
@@ -21,6 +29,7 @@ use crate::{
     types::{CelMapKey, CelValue},
 };
 
+mod failure_policy;
 mod label_selector;
 mod namespace_object;
 mod params;

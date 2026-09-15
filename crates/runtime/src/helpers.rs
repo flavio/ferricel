@@ -6,7 +6,8 @@ use slog::{debug, error};
 
 use crate::{
     arithmetic, array, bytes,
-    error::{CelError, abort_with_error, read_ptr},
+    error::{CelError, abort_with_error},
+    memory::read_ptr,
     string, temporal,
     types::CelValue,
 };

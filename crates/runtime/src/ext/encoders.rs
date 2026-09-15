@@ -4,10 +4,7 @@
 
 use base64::{Engine as _, engine::general_purpose};
 
-use crate::{
-    error::{CelError, read_ptr},
-    types::CelValue,
-};
+use crate::{error::CelError, memory::read_ptr, types::CelValue};
 
 /// `base64.encode(b) -> string` — encodes bytes to a standard base64 string (with padding).
 ///

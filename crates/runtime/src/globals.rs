@@ -17,7 +17,7 @@ use crate::{
 /// # Safety
 /// The Wasm guest runtime executes on a single thread, so unsynchronized
 /// access to the wrapped value can never race.
-struct GlobalCell<T>(UnsafeCell<T>);
+pub(crate) struct GlobalCell<T>(pub(crate) UnsafeCell<T>);
 
 // SAFETY: see struct doc comment above.
 unsafe impl<T> Sync for GlobalCell<T> {}

@@ -5,9 +5,7 @@
 use slog::{debug, error};
 
 use crate::{
-    error::{abort_with_error, read_ptr},
-    helpers::cel_create_duration,
-    types::CelValue,
+    error::abort_with_error, helpers::cel_create_duration, memory::read_ptr, types::CelValue,
 };
 
 // ---------------------------------------------------------------------------
