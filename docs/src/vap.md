@@ -62,13 +62,18 @@ validator:
 
 3. For each param resource:
 
-   1. **`matchConditions`**. Evaluated in declaration order. If any condition
-      evaluates to `false`, this param does **not** apply to the request. Only
-      a `false` result skips the param; a non-boolean result, like Kubernetes,
-      counts as a match. The module skips the remaining `matchConditions`,
-      the `variables`, and the `validations` for this param, and moves to the
-      next param. A skip is not a rejection. `params` and `namespaceObject`
-      are both available in `matchConditions`.
+   1. **`matchConditions`**. The module evaluates every condition in
+      declaration order first. If any evaluates to `false`, this param
+      does **not** apply to the request. Only a `false` result skips the
+      param; a non-boolean result, like Kubernetes, counts as a match. A
+      `false` result wins even when another condition in the same param
+      evaluates to a runtime error. Only when no condition is `false` does
+      `failurePolicy` decide what an error means (see
+      [Runtime Errors](#runtime-errors)). The module skips the remaining
+      `matchConditions`, the `variables`, and the `validations` for this
+      param, and moves to the next param. A skip is not a rejection.
+      `params` and `namespaceObject` are both available in
+      `matchConditions`.
 
    2. **`variables`**. Evaluated in declaration order. Each result is stored
       under `variables.<name>`. It is accessible to later `variables`
@@ -103,11 +108,18 @@ VAP. The host owns that value.
 
 ### `failurePolicy: Fail`
 
-When a `matchConditions` or `validations` expression evaluates to a runtime
-error, the module does **not** return `{"accepted": true}` or a rejection.
-The module traps, exactly like a plain CEL module does. The call to `evaluate`
-fails, and `Engine::eval()` returns `Err`. The error downcasts to
-`ferricel_core::CelRuntimeError`. The host denies the request.
+When a `validations` expression evaluates to a runtime error, the module
+does **not** return `{"accepted": true}` or a rejection. The module traps,
+exactly like a plain CEL module does.
+
+A `matchConditions` expression works the same way, but only when no
+condition in the same param is `false`. A `false` result always skips the
+param, even when another condition in the same param errors. This matches
+Kubernetes: a `false` match condition wins over a runtime error.
+
+When the module traps, the call to `evaluate` fails, and `Engine::eval()`
+returns `Err`. The error downcasts to `ferricel_core::CelRuntimeError`. The
+host denies the request.
 
 `Engine::eval()` can also fail for other reasons: an epoch-deadline
 interrupt, a memory limit, a Wasm trap, or a bug in a host extension. These
@@ -124,10 +136,13 @@ Kubernetes does:
 - When a `validations` expression evaluates to an error, the module skips it.
   The next validation runs. A `false` result from any other validation
   rejects the request.
-- When a `matchConditions` expression evaluates to an error, the module skips
-  the current param, like for a `false` condition. With `paramKind`, the next
-  param runs. Without `paramKind`, the policy does not apply, and the module
-  accepts the request.
+- When a `matchConditions` expression evaluates to an error, and no
+  condition in the same param is `false`, the module skips the current
+  param, the same as for a `false` result. With `paramKind`, the next
+  param runs. Without `paramKind`, the policy does not apply, and the
+  module accepts the request. A `false` result in another condition of
+  the same param wins over the error, and the module records no warning
+  for it.
 
 Each skipped expression adds one entry to the `warnings` list of the
 response. The list is present on both accept and reject responses. It is

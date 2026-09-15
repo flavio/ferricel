@@ -11,10 +11,11 @@
 //! 2. **params** (only when `spec.paramKind` is set). The runtime resolves the
 //!    list of param objects from `paramRef`. See "Params" below.
 //! 3. For each param (or once, when there is no `paramKind`):
-//!    1. **matchConditions**. If any evaluates to `false`, the module skips
-//!       this param. This is not a rejection. Under `failurePolicy: Ignore`,
-//!       the module also skips this param when a condition evaluates to an
-//!       error.
+//!    1. **matchConditions**. The module runs every condition first. If any
+//!       evaluates to `false`, the module skips this param. This is not a
+//!       rejection. A `false` result wins, even when another condition in
+//!       the same param errors. `failurePolicy` decides the outcome of an
+//!       error only when no condition is `false`.
 //!    2. **variables**. Evaluated in declaration order. Each result is
 //!       inserted into a `variables` map so later expressions can access
 //!       `variables.<name>`. The map is rebuilt for each param.
@@ -32,18 +33,23 @@
 //! runtime error before the first expression runs. The module never reads
 //! `spec.failurePolicy` of the VAP.
 //!
-//! Under `Fail`, when a `matchCondition` or `validation` expression evaluates
-//! to a CEL runtime error, the module traps via `cel_abort`, like a plain
-//! CEL module does. The host receives an error from `evaluate`. The module
-//! never treats an error as a pass or as a rejection.
+//! Under `Fail`, when a `validation` expression evaluates to a CEL runtime
+//! error, the module traps via `cel_abort`, like a plain CEL module does.
+//! For `matchConditions`, the module first checks every condition in the
+//! same param for a `false` result. A `false` result skips the param
+//! without a trap, even when another condition in the same param errors.
+//! Only when no condition is `false` does the module trap, on the first
+//! errored condition. The host receives an error from `evaluate`. The
+//! module never treats an error as a pass or as a rejection.
 //!
 //! Under `Ignore`, the module applies the policy to each expression on its
 //! own, like Kubernetes does:
 //!
 //! - When a `validation` evaluates to an error, the module skips it. The
 //!   next validation runs, and a `false` result rejects.
-//! - When a `matchCondition` evaluates to an error, the module skips the
-//!   current param, the same as for a `false` result. The next param runs.
+//! - When a `matchCondition` evaluates to an error, and no condition in the
+//!   same param is `false`, the module skips the current param, the same
+//!   as for a `false` result. The next param runs.
 //!
 //! Each skipped expression adds one entry to the `warnings` list of the
 //! response. Example:
@@ -460,14 +466,18 @@ struct OrchestratorLocals {
 /// return serialize_accept()
 /// ```
 ///
-/// Inside `skip`, each matchCondition and validation result goes through
-/// `cel_vap_expression_errored`. For an error, it traps under
-/// `failurePolicy: Fail` and returns 1 under `Ignore`. On 1, a matchCondition
-/// branches to `skip`, and a validation falls through to the next one.
+/// Inside `skip`, the module runs every matchCondition first and branches
+/// to `skip` as soon as one is `false`. A `false` result wins, even when
+/// another condition in the same param errors. Only when no condition is
+/// `false` does each result go through `cel_vap_expression_errored`, which
+/// traps under `failurePolicy: Fail` and returns 1 under `Ignore`. On 1,
+/// the module branches to `skip`. Each validation result also goes
+/// through `cel_vap_expression_errored`; there, a 1 falls through to the
+/// next validation instead.
 ///
-/// A false `matchCondition` branches to `skip`. A false validation returns a
-/// rejection response from inside the block. When the loop ends, or the
-/// param list is empty, the function returns an acceptance response.
+/// A false validation returns a rejection response from inside the block.
+/// When the loop ends, or the param list is empty, the function returns an
+/// acceptance response.
 fn build_orchestrator(
     module: &mut walrus::Module,
     env: &CompilerEnv,
@@ -601,11 +611,18 @@ fn emit_params_loop(
 /// like Kubernetes. When every validation passes, control falls through to
 /// the end of `body`.
 ///
-/// Each matchCondition and validation result goes through
-/// `cel_vap_expression_errored`. When the result is an error, that function
-/// traps under `failurePolicy: Fail` and returns 1 under `Ignore`. On 1, a
-/// matchCondition branches to `skip_id` like a false one, and the module
-/// skips a validation and runs the next one.
+/// The module runs all `matchConditions` in two passes, the same way
+/// Kubernetes does. Pass 1 runs every condition and branches to `skip_id`
+/// as soon as one is `false`. A `false` result always wins over an error in
+/// another condition, even one that comes first. Pass 2 runs only when no
+/// condition was `false`. There, each result goes through
+/// `cel_vap_expression_errored`. Under `failurePolicy: Fail`, that function
+/// traps on the first error. Under `Ignore`, it records one warning per
+/// errored condition and returns 1, and a `br_if skip` follows.
+///
+/// Each validation result also goes through `cel_vap_expression_errored`.
+/// Under `Fail`, an error traps. Under `Ignore`, it skips that validation
+/// and lets the next one run.
 fn emit_param_evaluation(
     body: &mut InstrSeqBuilder,
     skip_id: InstrSeqId,
@@ -616,21 +633,32 @@ fn emit_param_evaluation(
 ) -> Result<(), anyhow::Error> {
     let mem = get_memory_id(module)?;
 
-    // 1. matchConditions: false → skip this param.
-    //    A CEL runtime error traps under `Fail`. Under `Ignore`, it skips
-    //    this param and records a warning. Both skips are a `br_if skip`.
+    // 1. matchConditions. A `false` result always skips this param, even
+    //    when another condition in the same param errors. Only when no
+    //    condition is `false` does `failurePolicy` decide what an error
+    //    means. This matches the Kubernetes match-condition matcher.
     let match_conditions = args.spec.match_conditions.as_deref().unwrap_or(&[]);
-    for (i, &fn_id) in args.match_conditions_fns.iter().enumerate() {
-        let label = format!("matchCondition '{}'", match_conditions[i].name);
-        body.call(fn_id).local_set(locals.val);
+    let match_condition_vals: Vec<LocalId> = match_conditions
+        .iter()
+        .map(|_| module.locals.add(ValType::I32))
+        .collect();
 
-        body.local_get(locals.val);
+    // Pass 1: evaluate every condition and store its result. Branch to
+    // `skip_id` as soon as one is `false`.
+    for (&fn_id, &val_local) in args.match_conditions_fns.iter().zip(&match_condition_vals) {
+        body.call(fn_id).local_set(val_local);
+        body.local_get(val_local)
+            .call(env.get(RuntimeFunction::IsStrictlyFalse))
+            .instr(walrus::ir::BrIf { block: skip_id });
+    }
+
+    // Pass 2: reached only when no condition was `false`. An error in any
+    // condition now decides the outcome, in declaration order.
+    for (i, &val_local) in match_condition_vals.iter().enumerate() {
+        let label = format!("matchCondition '{}'", match_conditions[i].name);
+        body.local_get(val_local);
         emit_string_const(&label, body, env, mem, module);
         body.call(env.get(RuntimeFunction::VapExpressionErrored))
-            .instr(walrus::ir::BrIf { block: skip_id });
-
-        body.local_get(locals.val)
-            .call(env.get(RuntimeFunction::IsStrictlyFalse))
             .instr(walrus::ir::BrIf { block: skip_id });
     }
 

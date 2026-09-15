@@ -34,12 +34,17 @@ traps with a CEL runtime error before the first expression runs. A host that
 maps every `CelRuntimeError` to "allow" under `Ignore` turns its own
 configuration error into an accept.
 
-Under `Fail`, `eval()` returns `Err` when a `matchConditions` or
-`validations` expression evaluates to a runtime error. Examples: division by
-zero, an unbound variable, or a `kw.k8s` extension that returns an error.
-The error downcasts to `ferricel_core::CelRuntimeError`. Its `Display` text
-starts with `CEL runtime error:`. The module never turns such an error into
-an accept or a reject response.
+Under `Fail`, `eval()` returns `Err` when a `validations` expression
+evaluates to a runtime error. Examples: division by zero, an unbound
+variable, or a `kw.k8s` extension that returns an error. The error
+downcasts to `ferricel_core::CelRuntimeError`. Its `Display` text starts
+with `CEL runtime error:`. The module never turns such an error into an
+accept or a reject response.
+
+A `matchConditions` expression works the same way, but only when no
+condition in the same param is `false`. A `false` result always wins, even
+over an error in another condition of the same param. See
+[matchConditions](vap.md#evaluation-order) for the exact rule.
 
 Under `Ignore`, the module skips the expression that evaluates to an error
 and continues. `eval()` returns `Ok`, and the response carries a `warnings`
