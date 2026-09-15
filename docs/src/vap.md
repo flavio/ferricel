@@ -63,11 +63,12 @@ validator:
 3. For each param resource:
 
    1. **`matchConditions`**. Evaluated in declaration order. If any condition
-      evaluates to `false`, this param does **not** apply to the request. The
-      module skips the remaining `matchConditions`, the `variables`, and the
-      `validations` for this param, and moves to the next param. A skip is
-      not a rejection. `params` and `namespaceObject` are both available in
-      `matchConditions`.
+      evaluates to `false`, this param does **not** apply to the request. Only
+      a `false` result skips the param; a non-boolean result, like Kubernetes,
+      counts as a match. The module skips the remaining `matchConditions`,
+      the `variables`, and the `validations` for this param, and moves to the
+      next param. A skip is not a rejection. `params` and `namespaceObject`
+      are both available in `matchConditions`.
 
    2. **`variables`**. Evaluated in declaration order. Each result is stored
       under `variables.<name>`. It is accessible to later `variables`
@@ -75,9 +76,10 @@ validator:
       `variables` map for each param.
 
    3. **`validations`**. Evaluated in declaration order. The first expression
-      that evaluates to `false` makes the module return a rejection response.
-      The module does not evaluate the remaining validations or the remaining
-      params.
+      that does not evaluate to `true` makes the module return a rejection
+      response. A non-boolean result, for example a string or `null`, is a
+      rejection, like Kubernetes. The module does not evaluate the remaining
+      validations or the remaining params.
 
 4. When no param produced a rejection, the module returns
    `{"accepted": true}`. An empty param list also produces this response.

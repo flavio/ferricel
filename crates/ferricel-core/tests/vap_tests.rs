@@ -488,6 +488,126 @@ fn test_vap_all_validations_pass() {
     assert_outcome(eval_vap(spec, &bindings, None), &Expected::Accepted);
 }
 
+// ─── Non-boolean validation results ────────────────────────────────────────
+//
+// Kubernetes denies a validation whose result is not exactly `true`, not
+// only a validation that evaluates to `false`. This matters for a
+// validation that reads a dynamically typed field: the field can hold a
+// string, a number, `null`, or a collection instead of a boolean. The
+// module must treat every one of these results as a rejection, like
+// Kubernetes.
+//
+// A matchCondition works differently: only `false` skips the param, like
+// Kubernetes. `test_vap_match_condition_non_boolean_result_matches` below
+// checks this.
+
+/// A validation that reads `object.spec.approved`, a dynamically typed
+/// field. Only `true` accepts the request. Every other value, including a
+/// string, a number, `null`, a list, and a map, rejects it with the
+/// validation's message.
+#[rstest]
+#[case::string_false(serde_json::json!("false"))]
+#[case::string_true(serde_json::json!("true"))]
+#[case::null(serde_json::json!(null))]
+#[case::zero(serde_json::json!(0))]
+#[case::one(serde_json::json!(1))]
+#[case::empty_list(serde_json::json!([]))]
+#[case::empty_map(serde_json::json!({}))]
+fn test_vap_non_boolean_validation_result_rejects(#[case] approved: serde_json::Value) {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.spec.approved"
+      message: "must be approved"
+      reason: "Forbidden"
+"#;
+    let bindings =
+        serde_json::json!({ "object": { "spec": { "approved": approved } } }).to_string();
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::rejected("must be approved", 403),
+    );
+}
+
+/// Sanity check: the boolean values still behave the usual way. `true`
+/// accepts. `false` rejects.
+#[rstest]
+#[case::bool_true(serde_json::json!(true), Expected::Accepted)]
+#[case::bool_false(serde_json::json!(false), Expected::rejected("must be approved", 403))]
+fn test_vap_boolean_validation_result(
+    #[case] approved: serde_json::Value,
+    #[case] expected: Expected,
+) {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.spec.approved"
+      message: "must be approved"
+      reason: "Forbidden"
+"#;
+    let bindings =
+        serde_json::json!({ "object": { "spec": { "approved": approved } } }).to_string();
+    assert_outcome(eval_vap(spec, &bindings, None), &expected);
+}
+
+/// Under `failurePolicy: Ignore`, a non-boolean result is still a
+/// rejection, not a skipped expression. Only a CEL runtime error triggers a
+/// skip and a warning.
+#[test]
+fn test_vap_ignore_non_boolean_validation_result_still_rejects() {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.spec.approved"
+      message: "must be approved"
+      reason: "Forbidden"
+"#;
+    let bindings = bindings_with_failure_policy(
+        Some(serde_json::json!("Ignore")),
+        serde_json::json!({ "spec": { "approved": "false" } }),
+    );
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::rejected("must be approved", 403),
+    );
+}
+
+/// A `messageExpression` still runs when the validation result is a
+/// non-boolean value, and its result still wins over the static message.
+#[test]
+fn test_vap_non_boolean_validation_result_uses_message_expression() {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.spec.approved"
+      messageExpression: "'approval value: ' + string(object.spec.approved)"
+      message: "must be approved"
+"#;
+    let bindings = serde_json::json!({ "object": { "spec": { "approved": "false" } } }).to_string();
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::Rejected {
+            message: Some("approval value: false"),
+            code: None,
+        },
+    );
+}
+
+/// A matchCondition that evaluates to a non-boolean result still counts as
+/// a match, like Kubernetes. Only `false` skips the param.
+#[test]
+fn test_vap_match_condition_non_boolean_result_matches() {
+    let spec = r#"spec:
+  matchConditions:
+    - name: has-tier
+      expression: "object.spec.tier"
+  validations:
+    - expression: "false"
+      message: "never passes"
+"#;
+    let bindings = serde_json::json!({ "object": { "spec": { "tier": "gold" } } }).to_string();
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::rejected("never passes", 422),
+    );
+}
+
 // ─── Runtime errors ───────────────────────────────────────────────────────────
 //
 // These tests send no `failurePolicy` binding, so the policy is `Fail`. When

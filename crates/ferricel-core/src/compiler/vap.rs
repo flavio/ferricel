@@ -596,8 +596,10 @@ fn emit_params_loop(
 /// `validations`.
 ///
 /// A false `matchCondition` branches to `skip_id`, the enclosing block. A
-/// false validation returns a rejection response. When every validation
-/// passes, control falls through to the end of `body`.
+/// validation that does not evaluate to `true` returns a rejection response.
+/// This includes a non-boolean result, for example a string or `null`,
+/// like Kubernetes. When every validation passes, control falls through to
+/// the end of `body`.
 ///
 /// Each matchCondition and validation result goes through
 /// `cel_vap_expression_errored`. When the result is an error, that function
@@ -668,7 +670,7 @@ fn emit_param_evaluation(
         let val_spec = &validations_spec[i];
         let http_code = reason_to_http_code(val_spec.reason.as_deref());
         let msg_expr_fn = compiled.msg_expr_fn;
-        let is_strictly_false = env.get(RuntimeFunction::IsStrictlyFalse);
+        let is_strictly_true = env.get(RuntimeFunction::IsStrictlyTrue);
         let serialize_reject = env.get(RuntimeFunction::VapSerializeReject);
         let val = locals.val;
 
@@ -685,13 +687,17 @@ fn emit_param_evaluation(
             .unwrap_or_else(|| format!("failed expression: {}", val_spec.expression));
         let static_msg_local = compile_string_to_local(&text, body, env, module)?;
 
-        // The module must never treat a CEL runtime error as a non-`false`
-        // (passing) result. `cel_vap_expression_errored` traps under `Fail`.
-        // Under `Ignore`, it returns 1, and the module skips the
-        // strictly-false test. The next validation runs.
+        // The module must never treat a CEL runtime error as a passing
+        // result. `cel_vap_expression_errored` traps under `Fail`. Under
+        // `Ignore`, it returns 1, and the module skips the strictly-true
+        // test. The next validation runs.
+        //
+        // A validation rejects on any result that is not `Bool(true)`. This
+        // matches Kubernetes: a string, a number, `null`, a list, or a map
+        // all count as a rejection, the same as `false`.
         //
         //   if cel_vap_expression_errored(val, "validation[i]") == 0:
-        //       if cel_is_strictly_false(val):
+        //       if !cel_is_strictly_true(val):
         //           return cel_serialize_vap_reject(...)
         body.local_get(locals.val);
         emit_string_const(&format!("validation[{i}]"), body, env, mem, module);
@@ -700,7 +706,10 @@ fn emit_param_evaluation(
         body.if_else(
             None,
             move |not_errored| {
-                not_errored.local_get(val).call(is_strictly_false);
+                not_errored
+                    .local_get(val)
+                    .call(is_strictly_true)
+                    .unop(walrus::ir::UnaryOp::I32Eqz);
                 not_errored.if_else(
                     None,
                     move |reject| {
