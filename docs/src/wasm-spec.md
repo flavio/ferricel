@@ -97,11 +97,18 @@ Evaluates the compiled CEL expression using JSON-encoded variable bindings.
 
 The `bindings` value points to the data previously loaded via `cel_malloc`.
 
-**Returns** a packed `i64` pointing to a UTF-8 JSON string that contains the
-result of the CEL expression.
+**Returns** a packed `i64` pointing to a UTF-8 JSON string.
 
-If the expression produces a runtime error (overflow, divide-by-zero, unbound
+For a plain CEL module, the string is the result of the expression. If the
+expression produces a runtime error (overflow, divide-by-zero, unbound
 variable, etc.) the module traps and the host receives an error from the call.
+
+For a VAP module, the string is a `ValidationResponse` object:
+`{"accepted": true}` or `{"accepted": false, "message": "...", "code": N}`.
+Both forms can carry a `warnings` list. See
+[Response Shape](vap.md#response-shape) for the fields, and
+[Runtime Errors](vap.md#runtime-errors) for when the module traps and when it
+returns a warning instead.
 
 ---
 
