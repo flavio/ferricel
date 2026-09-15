@@ -26,10 +26,7 @@ use slog::error;
 use url::Url;
 use uuid::Uuid;
 
-use crate::{
-    error::{create_error_value, read_ptr},
-    types::CelValue,
-};
+use crate::{error::create_error_value, memory::read_ptr, types::CelValue};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Regex constants (compiled once)

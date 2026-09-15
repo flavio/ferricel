@@ -6,7 +6,8 @@ use slog::{debug, error};
 
 use crate::{
     arithmetic, array, bytes,
-    error::{CelError, abort_with_error, read_ptr},
+    error::{CelError, abort_with_error},
+    memory::read_ptr,
     string, temporal,
     types::CelValue,
 };
@@ -54,21 +55,6 @@ pub unsafe extern "C" fn cel_create_bool(value: i64) -> *mut CelValue {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_create_double(value: f64) -> *mut CelValue {
     Box::into_raw(Box::new(CelValue::Double(value)))
-}
-
-/// Creates a CelValue::Duration on the heap and returns a pointer to it.
-///
-/// # Arguments
-/// * `seconds` - Number of seconds (can be negative)
-/// * `nanos` - Nanoseconds component (0-999,999,999 or negative)
-///
-/// # Safety
-///
-/// This function is unsafe because it returns a raw pointer. The caller must ensure:
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_create_duration(seconds: i64, nanos: i64) -> *mut CelValue {
-    let duration = crate::chrono_helpers::parts_to_duration(seconds, nanos);
-    Box::into_raw(Box::new(CelValue::Duration(duration)))
 }
 
 /// Creates a CelValue::Null on the heap and returns a pointer to it.
@@ -827,39 +813,40 @@ pub unsafe extern "C" fn cel_value_lte(
 }
 
 /// Polymorphic size function for CelValue objects.
-/// Returns the size/length of the value:
+/// Returns the size of a string, bytes, array, or map:
 /// - String: number of Unicode codepoints
 /// - Bytes: number of bytes
 /// - Array: number of elements
 /// - Map: number of keys
 ///
+/// A non-collection value, or an error value, is an error (`no such
+/// overload`, or the propagated input error), instead of a trap: this is
+/// what lets `size(object.missing)` evaluate to the "no such key" error
+/// instead of aborting.
+///
 /// # Safety
-/// - `ptr` must be a valid, non-null CelValue pointer
+/// `ptr` must be a valid, non-null CelValue pointer
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cel_value_size(ptr: *mut CelValue) -> i64 {
+pub unsafe extern "C" fn cel_value_size(ptr: *mut CelValue) -> *mut CelValue {
     let log = crate::logging::get_logger();
 
-    let value = unsafe {
-        if ptr.is_null() {
-            error!(log, "Cannot get size of null value"; "function" => "cel_value_size");
-            abort_with_error("no such overload");
-        }
-        &*ptr
-    };
-
-    match value {
-        CelValue::String(_) => string::cel_string_size(ptr),
-        CelValue::Bytes(_) => bytes::cel_bytes_size(ptr),
-        CelValue::Array(arr) => arr.len() as i64,
-        CelValue::Object(map) => map.len() as i64,
-        other => {
-            error!(log, "size() not supported for this type";
-                "function" => "cel_value_size",
-                "type" => format!("{:?}", other));
-            abort_with_error("no such overload");
-        }
+    if ptr.is_null() {
+        abort_with_error("cel_value_size: null pointer, this is a compiler bug");
     }
+
+    let value = unsafe { &*ptr };
+    let result = match value {
+        CelValue::String(s) => CelValue::Int(s.chars().count() as i64),
+        CelValue::Bytes(b) => CelValue::Int(b.len() as i64),
+        CelValue::Array(arr) => CelValue::Int(arr.len() as i64),
+        CelValue::Object(map) => CelValue::Int(map.len() as i64),
+        other => {
+            debug!(log, "size() not supported for this type"; "type" => format!("{:?}", other));
+            CelValue::Error(crate::error::no_such_overload(other))
+        }
+    };
+    Box::into_raw(Box::new(result))
 }
 
 /// Polymorphic negation operator.
@@ -1286,6 +1273,52 @@ mod tests {
             assert_eq!(&*result_ptr, &expected);
             // a_ptr and b_ptr are consumed by read_ptr inside cel_value_gte
             drop(Box::from_raw(result_ptr));
+        }
+    }
+
+    // --- cel_value_size ---
+
+    #[rstest]
+    #[case::string_ascii(CelValue::String("hello".into()), 5)]
+    #[case::string_unicode(CelValue::String("café".into()), 4)]
+    #[case::string_emoji(CelValue::String("👋".into()), 1)]
+    #[case::bytes(CelValue::Bytes(vec![1, 2, 3]), 3)]
+    #[case::bytes_empty(CelValue::Bytes(vec![]), 0)]
+    #[case::array(CelValue::Array(vec![CelValue::Int(1), CelValue::Int(2)]), 2)]
+    #[case::map(CelValue::Object(std::collections::HashMap::from([(
+        crate::types::CelMapKey::String("a".into()),
+        CelValue::Int(1),
+    )])), 1)]
+    fn test_value_size(#[case] input: CelValue, #[case] expected: i64) {
+        unsafe {
+            let ptr = Box::into_raw(Box::new(input));
+            let result_ptr = cel_value_size(ptr);
+            assert_eq!(&*result_ptr, &CelValue::Int(expected));
+            drop(Box::from_raw(result_ptr));
+        }
+    }
+
+    /// A non-collection value, or a propagated error, is an error value
+    /// (not a trap): this lets `size(object.missing)` evaluate to the
+    /// "no such key" error instead of aborting.
+    #[rstest]
+    #[case::wrong_type(CelValue::Int(1), "no such overload")]
+    #[case::propagates_error(
+        CelValue::Error(CelError::new("no such key: 'x'")),
+        "no such key: 'x'"
+    )]
+    fn test_value_size_rejects_non_collection(#[case] input: CelValue, #[case] expected: &str) {
+        unsafe {
+            let ptr = Box::into_raw(Box::new(input));
+            let result_ptr = cel_value_size(ptr);
+            match Box::from_raw(result_ptr).as_ref() {
+                CelValue::Error(err) => assert!(
+                    err.message.contains(expected),
+                    "expected {expected:?} in {:?}",
+                    err.message
+                ),
+                other => panic!("expected an error value, got {other:?}"),
+            }
         }
     }
 }

@@ -9,17 +9,19 @@
 //! Usage pattern emitted by the compiler:
 //! ```text
 //! prepared = cel_iter_prepare(range)
-//! len      = cel_array_len(prepared)
-//! loop i from 0..len:
-//!   var1 = cel_iter_var1(range, prepared, i)
-//!   var2 = cel_iter_var2(range, prepared, i)
-//!   ... body using var1, var2 ...
+//! if is_error(prepared): result = prepared   // range was not iterable
+//! else:
+//!   len      = cel_array_len(prepared)
+//!   loop i from 0..len:
+//!     var1 = cel_iter_var1(range, prepared, i)
+//!     var2 = cel_iter_var2(range, prepared, i)
+//!     ... body using var1, var2 ...
 //! ```
 
 use slog::error;
 
 use crate::{
-    error::abort_with_error,
+    error::{abort_with_error, no_such_overload},
     types::{CelMapKey, CelValue},
 };
 
@@ -27,6 +29,10 @@ use crate::{
 ///
 /// - For `CelValue::Array`: returns the array pointer itself (iteration index → element).
 /// - For `CelValue::Object` (map): returns a new `CelValue::Array` of the map's keys.
+/// - For anything else, including `CelValue::Error`: returns an error value
+///   (`no such overload`, or the propagated input error). The compiler checks
+///   for this with `IsError` right after calling this function, and uses the
+///   error as the result of the whole comprehension instead of iterating.
 ///
 /// The returned array is used with `cel_array_len` to drive the loop, and passed
 /// alongside the original `range` to `cel_iter_var1`/`cel_iter_var2`.
@@ -41,7 +47,7 @@ pub unsafe extern "C" fn cel_iter_prepare(range_ptr: *mut CelValue) -> *mut CelV
 
     if range_ptr.is_null() {
         error!(log, "range_ptr is null"; "function" => "cel_iter_prepare");
-        abort_with_error("no such overload");
+        abort_with_error("cel_iter_prepare: null pointer, this is a compiler bug");
     }
 
     let range = unsafe { &*range_ptr };
@@ -68,11 +74,7 @@ pub unsafe extern "C" fn cel_iter_prepare(range_ptr: *mut CelValue) -> *mut CelV
                 .collect();
             Box::into_raw(Box::new(CelValue::Array(keys)))
         }
-        _ => {
-            error!(log, "iter_prepare: expected list or map";
-                "actual" => format!("{:?}", range));
-            abort_with_error("no such overload")
-        }
+        other => Box::into_raw(Box::new(CelValue::Error(no_such_overload(other)))),
     }
 }
 
@@ -282,6 +284,31 @@ mod tests {
         }
         unsafe {
             let _ = Box::from_raw(map_ptr);
+        }
+    }
+
+    /// A non-collection range is an error value, not a trap: this is what
+    /// lets `object.missing.all(x, true)` evaluate to the "no such key"
+    /// error instead of aborting. An error range propagates unchanged.
+    #[rstest]
+    #[case::wrong_type(CelValue::Int(1), "no such overload")]
+    #[case::propagates_error(
+        CelValue::Error(crate::error::CelError::new("no such key: 'x'")),
+        "no such key: 'x'"
+    )]
+    fn test_iter_prepare_non_collection_is_an_error(
+        #[case] input: CelValue,
+        #[case] expected: &str,
+    ) {
+        let ptr = make_val(input);
+        let prepared = unsafe { cel_iter_prepare(ptr) };
+        match read_val(prepared) {
+            CelValue::Error(err) => assert!(
+                err.message.contains(expected),
+                "expected {expected:?} in {:?}",
+                err.message
+            ),
+            other => panic!("expected an error value, got {other:?}"),
         }
     }
 

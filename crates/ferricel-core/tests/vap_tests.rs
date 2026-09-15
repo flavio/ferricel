@@ -62,6 +62,23 @@ fn eval_vap_with_extensions(
     bindings_json: &str,
     extensions: Vec<(ExtensionDecl, HostFn)>,
 ) -> Result<serde_json::Value, anyhow::Error> {
+    let mut results = eval_vap_repeatedly(spec_body, &[bindings_json], extensions)?;
+    results.pop().expect("one evaluation, one result")
+}
+
+/// Compile a VAP `spec:` YAML fragment once, then evaluate it once per entry
+/// of `bindings` on the **same** `Engine`, in order. Returns one result per
+/// evaluation.
+///
+/// A test uses this function to make sure that per-evaluation state (like
+/// the `failurePolicy` warnings) does not leak from one request into the
+/// next. The Kubewarden host uses one `Engine` for many requests the same
+/// way.
+fn eval_vap_repeatedly(
+    spec_body: &str,
+    bindings: &[&str],
+    extensions: Vec<(ExtensionDecl, HostFn)>,
+) -> Result<Vec<Result<serde_json::Value, anyhow::Error>>, anyhow::Error> {
     let logger = test_logger();
     let wasm_bytes = Builder::new()
         .with_logger(logger.clone())
@@ -75,22 +92,40 @@ fn eval_vap_with_extensions(
     for (decl, implementation) in extensions {
         runtime_builder = runtime_builder.with_extension(decl, implementation);
     }
-    let result_str = runtime_builder.build()?.eval(Some(bindings_json))?;
+    let engine = runtime_builder.build()?;
 
-    Ok(serde_json::from_str(&result_str)?)
+    Ok(bindings
+        .iter()
+        .map(|bindings_json| {
+            let result_str = engine.eval(Some(bindings_json))?;
+            Ok(serde_json::from_str(&result_str)?)
+        })
+        .collect())
 }
 
 // ─── Expected outcome + single assertion ───────────────────────────────────
 
-/// The three possible outcomes of evaluating a compiled VAP module.
+/// The possible outcomes of evaluating a compiled VAP module.
 #[derive(Debug, Clone)]
 enum Expected {
-    /// `{"accepted": true}`, with no `message` field.
+    /// `{"accepted": true}`, with no `message` and no `warnings` field.
     Accepted,
-    /// `{"accepted": false, ...}`, optionally asserting `message` and/or `code`.
+    /// `{"accepted": true, "warnings": [...]}`. Each entry is a substring
+    /// that `warnings[i]` must contain. The list lengths must match.
+    AcceptedWithWarnings(Vec<&'static str>),
+    /// `{"accepted": false, ...}`, optionally asserting `message` and/or
+    /// `code`, with no `warnings` field.
     Rejected {
         message: Option<&'static str>,
         code: Option<i32>,
+    },
+    /// Like [`Expected::Rejected`], with a `warnings` list. Each entry is a
+    /// substring that `warnings[i]` must contain. The list lengths must
+    /// match.
+    RejectedWithWarnings {
+        message: Option<&'static str>,
+        code: Option<i32>,
+        warnings: Vec<&'static str>,
     },
     /// The module traps: `eval()` returns `Err` that downcasts to
     /// [`CelRuntimeError`], whose message contains the given text, and
@@ -121,6 +156,27 @@ impl Expected {
             code: None,
         }
     }
+
+    /// A rejection asserting `message`, with no assertion on `code`.
+    fn rejected_message(message: &'static str) -> Self {
+        Expected::Rejected {
+            message: Some(message),
+            code: None,
+        }
+    }
+
+    /// A rejection asserting `message`, `code`, and the `warnings` list.
+    fn rejected_with_warnings(
+        message: &'static str,
+        code: i32,
+        warnings: Vec<&'static str>,
+    ) -> Self {
+        Expected::RejectedWithWarnings {
+            message: Some(message),
+            code: Some(code),
+            warnings,
+        }
+    }
 }
 
 /// Assert that `result` matches `expected`.
@@ -128,37 +184,27 @@ fn assert_outcome(result: Result<serde_json::Value, anyhow::Error>, expected: &E
     match expected {
         Expected::Accepted => {
             let result = result.expect("expected an accepted response, got an error");
-            assert_eq!(
-                result.get("accepted"),
-                Some(&serde_json::Value::Bool(true)),
-                "expected accepted=true, got: {result}"
-            );
-            assert!(
-                result.get("message").is_none(),
-                "accepted response should have no message, got: {result}"
-            );
+            assert_accepted(&result);
+            assert_no_warnings(&result);
+        }
+        Expected::AcceptedWithWarnings(warnings) => {
+            let result = result.expect("expected an accepted response, got an error");
+            assert_accepted(&result);
+            assert_warnings(&result, warnings);
         }
         Expected::Rejected { message, code } => {
             let result = result.expect("expected a rejected response, got an error");
-            assert_eq!(
-                result.get("accepted"),
-                Some(&serde_json::Value::Bool(false)),
-                "expected accepted=false, got: {result}"
-            );
-            if let Some(expected_msg) = message {
-                assert_eq!(
-                    result.get("message").and_then(|v| v.as_str()),
-                    Some(*expected_msg),
-                    "unexpected rejection message, got: {result}"
-                );
-            }
-            if let Some(expected_code) = code {
-                assert_eq!(
-                    result.get("code").and_then(|v| v.as_i64()),
-                    Some(i64::from(*expected_code)),
-                    "unexpected rejection code, got: {result}"
-                );
-            }
+            assert_rejected(&result, *message, *code);
+            assert_no_warnings(&result);
+        }
+        Expected::RejectedWithWarnings {
+            message,
+            code,
+            warnings,
+        } => {
+            let result = result.expect("expected a rejected response, got an error");
+            assert_rejected(&result, *message, *code);
+            assert_warnings(&result, warnings);
         }
         Expected::Error(message) => {
             let cel_err = assert_cel_runtime_error(result, message);
@@ -183,6 +229,74 @@ fn assert_outcome(result: Result<serde_json::Value, anyhow::Error>, expected: &E
                 "unexpected extension origin in: {cel_err:?}"
             );
         }
+    }
+}
+
+fn assert_accepted(result: &serde_json::Value) {
+    assert_eq!(
+        result.get("accepted"),
+        Some(&serde_json::Value::Bool(true)),
+        "expected accepted=true, got: {result}"
+    );
+    assert!(
+        result.get("message").is_none(),
+        "accepted response should have no message, got: {result}"
+    );
+}
+
+fn assert_rejected(result: &serde_json::Value, message: Option<&str>, code: Option<i32>) {
+    assert_eq!(
+        result.get("accepted"),
+        Some(&serde_json::Value::Bool(false)),
+        "expected accepted=false, got: {result}"
+    );
+    if let Some(expected_msg) = message {
+        assert_eq!(
+            result.get("message").and_then(|v| v.as_str()),
+            Some(expected_msg),
+            "unexpected rejection message, got: {result}"
+        );
+    }
+    if let Some(expected_code) = code {
+        assert_eq!(
+            result.get("code").and_then(|v| v.as_i64()),
+            Some(i64::from(expected_code)),
+            "unexpected rejection code, got: {result}"
+        );
+    }
+}
+
+/// The `warnings` key must be absent, not an empty list. As a result, a
+/// module that skips nothing produces the same JSON as before
+/// `failurePolicy` support.
+fn assert_no_warnings(result: &serde_json::Value) {
+    assert!(
+        result.get("warnings").is_none(),
+        "response should have no warnings, got: {result}"
+    );
+}
+
+/// `warnings` must be a list of the same length as `expected`, and
+/// `warnings[i]` must contain `expected[i]`.
+fn assert_warnings(result: &serde_json::Value, expected: &[&str]) {
+    let warnings = result
+        .get("warnings")
+        .and_then(|w| w.as_array())
+        .unwrap_or_else(|| panic!("expected a warnings list, got: {result}"));
+    let warnings: Vec<&str> = warnings
+        .iter()
+        .map(|w| w.as_str().expect("warning is a string"))
+        .collect();
+    assert_eq!(
+        warnings.len(),
+        expected.len(),
+        "unexpected number of warnings, got: {warnings:?}"
+    );
+    for (got, want) in warnings.iter().zip(expected) {
+        assert!(
+            got.contains(want),
+            "expected {want:?} in warning, got: {got:?}"
+        );
     }
 }
 
@@ -242,10 +356,7 @@ fn test_vap_reject_static_message() {
     let bindings = serde_json::json!({ "object": { "spec": { "replicas": 10 } } }).to_string();
     assert_outcome(
         eval_vap(spec, &bindings, None),
-        &Expected::Rejected {
-            message: Some("too many replicas"),
-            code: None,
-        },
+        &Expected::rejected_message("too many replicas"),
     );
 }
 
@@ -260,10 +371,7 @@ fn test_vap_reject_message_expression() {
     let bindings = serde_json::json!({ "object": { "spec": { "replicas": 7 } } }).to_string();
     assert_outcome(
         eval_vap(spec, &bindings, None),
-        &Expected::Rejected {
-            message: Some("replicas 7 exceeds limit 5"),
-            code: None,
-        },
+        &Expected::rejected_message("replicas 7 exceeds limit 5"),
     );
 }
 
@@ -337,10 +445,7 @@ fn test_vap_multiple_validations_second_fails() {
     let bindings = serde_json::json!({ "object": { "spec": { "replicas": 10 } } }).to_string();
     assert_outcome(
         eval_vap(spec, &bindings, None),
-        &Expected::Rejected {
-            message: Some("too many replicas"),
-            code: None,
-        },
+        &Expected::rejected_message("too many replicas"),
     );
 }
 
@@ -382,11 +487,112 @@ fn test_vap_all_validations_pass() {
     assert_outcome(eval_vap(spec, &bindings, None), &Expected::Accepted);
 }
 
+// ─── Non-boolean validation results ────────────────────────────────────────
+//
+// Kubernetes denies a validation whose result is not exactly `true`, not
+// only a validation that evaluates to `false`. This matters for a
+// validation that reads a dynamically typed field: the field can hold a
+// string, a number, `null`, or a collection instead of a boolean. The
+// module must treat every one of these results as a rejection, like
+// Kubernetes.
+//
+// A matchCondition works differently: only `false` skips the param, like
+// Kubernetes. `test_vap_match_condition_non_boolean_result_matches` below
+// checks this.
+
+/// A validation that reads `object.spec.approved`, a dynamically typed
+/// field.
+const APPROVED_SPEC: &str = r#"spec:
+  validations:
+    - expression: "object.spec.approved"
+      message: "must be approved"
+      reason: "Forbidden"
+"#;
+
+/// Only `true` accepts the request. Every other value, including `false`,
+/// a string, a number, `null`, a list, and a map, rejects it with the
+/// validation's message.
+///
+/// A matchCondition works differently: only `false` skips the param, like
+/// Kubernetes. `test_vap_match_condition_non_boolean_result_matches` below
+/// checks this.
+#[rstest]
+#[case::bool_true(serde_json::json!(true), Expected::Accepted)]
+#[case::bool_false(serde_json::json!(false), Expected::rejected("must be approved", 403))]
+#[case::string_false(serde_json::json!("false"), Expected::rejected("must be approved", 403))]
+#[case::string_true(serde_json::json!("true"), Expected::rejected("must be approved", 403))]
+#[case::null(serde_json::json!(null), Expected::rejected("must be approved", 403))]
+#[case::zero(serde_json::json!(0), Expected::rejected("must be approved", 403))]
+#[case::one(serde_json::json!(1), Expected::rejected("must be approved", 403))]
+#[case::empty_list(serde_json::json!([]), Expected::rejected("must be approved", 403))]
+#[case::empty_map(serde_json::json!({}), Expected::rejected("must be approved", 403))]
+fn test_vap_validation_result_only_true_accepts(
+    #[case] approved: serde_json::Value,
+    #[case] expected: Expected,
+) {
+    let bindings =
+        serde_json::json!({ "object": { "spec": { "approved": approved } } }).to_string();
+    assert_outcome(eval_vap(APPROVED_SPEC, &bindings, None), &expected);
+}
+
+/// Under `failurePolicy: Ignore`, a non-boolean result is still a
+/// rejection, not a skipped expression. Only a CEL runtime error triggers a
+/// skip and a warning.
+#[test]
+fn test_vap_ignore_non_boolean_validation_result_still_rejects() {
+    let bindings = bindings_with_failure_policy(
+        Some(serde_json::json!("Ignore")),
+        serde_json::json!({ "spec": { "approved": "false" } }),
+    );
+    assert_outcome(
+        eval_vap(APPROVED_SPEC, &bindings, None),
+        &Expected::rejected("must be approved", 403),
+    );
+}
+
+/// A `messageExpression` still runs when the validation result is a
+/// non-boolean value, and its result still wins over the static message.
+#[test]
+fn test_vap_non_boolean_validation_result_uses_message_expression() {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.spec.approved"
+      messageExpression: "'approval value: ' + string(object.spec.approved)"
+      message: "must be approved"
+"#;
+    let bindings = serde_json::json!({ "object": { "spec": { "approved": "false" } } }).to_string();
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::rejected_message("approval value: false"),
+    );
+}
+
+/// A matchCondition that evaluates to a non-boolean result still counts as
+/// a match, like Kubernetes. Only `false` skips the param.
+#[test]
+fn test_vap_match_condition_non_boolean_result_matches() {
+    let spec = r#"spec:
+  matchConditions:
+    - name: has-tier
+      expression: "object.spec.tier"
+  validations:
+    - expression: "false"
+      message: "never passes"
+"#;
+    let bindings = serde_json::json!({ "object": { "spec": { "tier": "gold" } } }).to_string();
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::rejected("never passes", 422),
+    );
+}
+
 // ─── Runtime errors ───────────────────────────────────────────────────────────
 //
-// A CEL runtime error in a matchCondition or validation must surface to the
-// host as an `Err` from `eval()` (the module traps), never as a silent accept
-// or a rejection. This lets the host apply the policy's `failurePolicy`.
+// These tests send no `failurePolicy` binding, so the policy is `Fail`. When
+// a matchCondition or validation evaluates to a CEL runtime error, the module
+// must trap, and `eval()` must return `Err`. The module must never turn the
+// error into an accept or a rejection. The section "failurePolicy: Ignore"
+// below covers the `Ignore` behavior.
 
 const EMPTY_OBJECT_BINDINGS: &str = r#"{"object": {}}"#;
 
@@ -435,7 +641,8 @@ fn test_vap_missing_field_error_absorbed_by_or_is_accepted() {
     );
 }
 
-/// An erroring validation is not masked by earlier passing validations.
+/// Under `Fail`, a validation that passes does not hide a later validation
+/// that evaluates to an error.
 #[test]
 fn test_vap_validation_runtime_error_after_passing_validation() {
     let spec = r#"spec:
@@ -459,23 +666,6 @@ fn test_vap_validation_unbound_variable_is_surfaced() {
     assert_outcome(
         eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
         &Expected::Error("doesNotExist"),
-    );
-}
-
-/// A matchCondition whose expression errors → `eval()` returns `Err`, rather
-/// than treating the condition as `true` and running the validations.
-#[test]
-fn test_vap_match_condition_runtime_error_is_surfaced() {
-    let spec = r#"spec:
-  matchConditions:
-    - name: broken
-      expression: "(1 / 0) == 1"
-  validations:
-    - expression: "true"
-"#;
-    assert_outcome(
-        eval_vap(spec, EMPTY_OBJECT_BINDINGS, None),
-        &Expected::Error("divide by zero"),
     );
 }
 
@@ -539,10 +729,7 @@ fn test_vap_extension_error_in_validation_is_surfaced() {
     let result = eval_vap(
         spec,
         EMPTY_OBJECT_BINDINGS,
-        Some((
-            vap::kw_k8s_get_extension(),
-            Box::new(|_args| Err("boom".to_string())),
-        )),
+        Some(failing(vap::kw_k8s_get_extension(), "boom")),
     );
     assert_outcome(
         result,
@@ -551,6 +738,523 @@ fn test_vap_extension_error_in_validation_is_surfaced() {
             namespace: Some("kw.k8s"),
             function: "get",
         },
+    );
+}
+
+// ─── failurePolicy: Ignore ────────────────────────────────────────────────────
+//
+// The host passes `failurePolicy` in the bindings. Under `Ignore`, the module
+// applies the policy to each expression on its own, like Kubernetes. When a
+// validation evaluates to an error, the module skips it, records a warning,
+// and runs the next one. When a matchCondition evaluates to an error, the
+// module skips the current param and runs the next param. A `false` result
+// still rejects.
+
+/// Bindings with `object` and the given `failurePolicy` value. `None` omits
+/// the binding.
+fn bindings_with_failure_policy(
+    policy: Option<serde_json::Value>,
+    object: serde_json::Value,
+) -> String {
+    let mut bindings = serde_json::json!({ "object": object });
+    if let Some(policy) = policy {
+        bindings["failurePolicy"] = policy;
+    }
+    bindings.to_string()
+}
+
+/// `bindings_with_failure_policy` with `failurePolicy: Ignore`. Most
+/// `Ignore` tests need no other field on `object`.
+fn ignore_bindings(object: serde_json::Value) -> String {
+    bindings_with_failure_policy(Some("Ignore".into()), object)
+}
+
+/// Under `Ignore`, the module skips the validation that evaluates to an
+/// error, and the next one decides. Under `Fail` (explicit, missing, or
+/// `null`), the module traps.
+///
+/// `[0]` evaluates to an error because `object.missing` does not exist.
+/// `[1]` decides on `object.spec.replicas`.
+#[rstest]
+#[case::ignore_error_then_reject(
+    Some(serde_json::json!("Ignore")),
+    100,
+    Expected::rejected_with_warnings(
+        "too many replicas",
+        422,
+        vec!["The module skipped validation[0] because the expression evaluated to an error (failurePolicy is Ignore): no such key: 'missing'"],
+    )
+)]
+#[case::ignore_error_then_accept(
+    Some(serde_json::json!("Ignore")),
+    1,
+    Expected::AcceptedWithWarnings(vec!["The module skipped validation[0] because the expression evaluated to an error (failurePolicy is Ignore): no such key: 'missing'"])
+)]
+#[case::fail_explicit(Some(serde_json::json!("Fail")), 100, Expected::Error("no such key: 'missing'"))]
+#[case::fail_missing_binding(None, 100, Expected::Error("no such key: 'missing'"))]
+#[case::fail_null_binding(Some(serde_json::json!(null)), 100, Expected::Error("no such key: 'missing'"))]
+fn test_vap_failure_policy_error_then_validation(
+    #[case] policy: Option<serde_json::Value>,
+    #[case] replicas: i64,
+    #[case] expected: Expected,
+) {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.missing.x > 1"
+      message: "never used"
+    - expression: "object.spec.replicas <= 3"
+      message: "too many replicas"
+"#;
+    let bindings = bindings_with_failure_policy(
+        policy,
+        serde_json::json!({ "spec": { "replicas": replicas } }),
+    );
+    assert_outcome(eval_vap(spec, &bindings, None), &expected);
+}
+
+/// The motivating example: `int()` on a non-numeric annotation used to trap
+/// the whole policy even under `Ignore`, because `cel_int` aborted instead
+/// of returning an error value. It now evaluates to an error value like any
+/// other CEL runtime error, so `Ignore` skips it and the next validation
+/// decides.
+#[rstest]
+#[case::ignore_bad_annotation_second_denies(
+    Some(serde_json::json!("Ignore")),
+    "invalid",
+    100,
+    Expected::rejected_with_warnings(
+        "too many replicas",
+        422,
+        vec!["validation[0]"],
+    )
+)]
+#[case::ignore_bad_annotation_second_passes(
+    Some(serde_json::json!("Ignore")),
+    "invalid",
+    1,
+    Expected::AcceptedWithWarnings(vec!["validation[0]"])
+)]
+#[case::fail_bad_annotation(
+    Some(serde_json::json!("Fail")),
+    "invalid",
+    100,
+    Expected::Error("type conversion error from 'string' to 'int'")
+)]
+fn test_vap_failure_policy_int_conversion_error(
+    #[case] policy: Option<serde_json::Value>,
+    #[case] count: &str,
+    #[case] replicas: i64,
+    #[case] expected: Expected,
+) {
+    let spec = r#"spec:
+  validations:
+    - expression: "int(object.metadata.annotations['count']) <= 10"
+      message: "count too high"
+    - expression: "object.spec.replicas <= 3"
+      message: "too many replicas"
+"#;
+    let bindings = bindings_with_failure_policy(
+        policy,
+        serde_json::json!({
+            "metadata": { "annotations": { "count": count } },
+            "spec": { "replicas": replicas }
+        }),
+    );
+    assert_outcome(eval_vap(spec, &bindings, None), &expected);
+}
+
+/// The label names the validation that evaluated to an error, not the first
+/// one.
+#[test]
+fn test_vap_ignore_true_then_error_is_accepted_with_warning() {
+    let spec = r#"spec:
+  validations:
+    - expression: "true"
+    - expression: "(1 / 0) == 1"
+"#;
+    let bindings = ignore_bindings(serde_json::json!({}));
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::AcceptedWithWarnings(vec![
+            "The module skipped validation[1] because the expression evaluated to an error (failurePolicy is Ignore): divide by zero",
+        ]),
+    );
+}
+
+/// Each validation that evaluates to an error adds one warning. The order is
+/// the evaluation order.
+#[test]
+fn test_vap_ignore_two_errors_give_two_warnings_in_order() {
+    let spec = r#"spec:
+  validations:
+    - expression: "(1 / 0) == 1"
+    - expression: "object.missing.x > 1"
+"#;
+    let bindings = ignore_bindings(serde_json::json!({}));
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::AcceptedWithWarnings(vec![
+            "The module skipped validation[0] because the expression evaluated to an error (failurePolicy is Ignore): divide by zero",
+            "The module skipped validation[1] because the expression evaluated to an error (failurePolicy is Ignore): no such key: 'missing'",
+        ]),
+    );
+}
+
+/// The first `false` returns the rejection. The validation after it never
+/// runs, so there is no warning. Kubernetes runs `[1]` too, but the decision
+/// (deny) is the same.
+#[test]
+fn test_vap_ignore_false_then_error_rejects_without_warnings() {
+    let spec = r#"spec:
+  validations:
+    - expression: "false"
+      message: "first failed"
+    - expression: "(1 / 0) == 1"
+"#;
+    let bindings = ignore_bindings(serde_json::json!({}));
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::rejected("first failed", 422),
+    );
+}
+
+/// If the `failurePolicy` value is invalid, the module traps before the
+/// first expression runs. The value is case-sensitive, like the Kubernetes
+/// field.
+#[rstest]
+#[case::lowercase(serde_json::json!("ignore"))]
+#[case::bool(serde_json::json!(true))]
+#[case::int(serde_json::json!(1))]
+fn test_vap_invalid_failure_policy_is_error(#[case] policy: serde_json::Value) {
+    let spec = r#"spec:
+  validations:
+    - expression: "true"
+"#;
+    let bindings = bindings_with_failure_policy(Some(policy), serde_json::json!({}));
+    assert_outcome(
+        eval_vap(spec, &bindings, None),
+        &Expected::Error("failurePolicy"),
+    );
+}
+
+/// Build a VAP `spec:` with the given `matchConditions` (name, expression
+/// pairs) and one validation that always fails. A test that checks how
+/// `matchConditions` interact with `failurePolicy` uses this so that a
+/// skipped policy (accepted) is distinguishable from an enforced one
+/// (rejected).
+fn match_conditions_spec(conditions: &[(&str, &str)]) -> String {
+    let mut spec = String::from("spec:\n  matchConditions:\n");
+    for (name, expression) in conditions {
+        spec.push_str(&format!(
+            "    - name: {name}\n      expression: \"{expression}\"\n"
+        ));
+    }
+    spec.push_str(
+        "  validations:\n    - expression: \"false\"\n      message: \"never reached\"\n",
+    );
+    spec
+}
+
+/// How `matchConditions` interact with `failurePolicy`, across the number
+/// of conditions and their outcomes (`true`, `false`, error). A `false`
+/// result always wins over an error in another condition of the same
+/// param, whatever the order. `failurePolicy` decides the outcome of an
+/// error only when no condition is `false`. Under `Ignore`, the module
+/// stops at the first errored condition, so there is at most one warning
+/// per param.
+#[rstest]
+#[case::none_binding_error_traps(
+    None,
+    &[("broken", "(1 / 0) == 1")][..],
+    Expected::Error("divide by zero"),
+)]
+#[case::fail_error_traps(
+    Some("Fail"),
+    &[("broken", "(1 / 0) == 1")][..],
+    Expected::Error("divide by zero"),
+)]
+#[case::ignore_error_skips_policy(
+    Some("Ignore"),
+    &[("broken", "(1 / 0) == 1")][..],
+    Expected::AcceptedWithWarnings(vec![
+        "The module skipped the policy because matchCondition 'broken' evaluated to an error (failurePolicy is Ignore): divide by zero",
+    ]),
+)]
+#[case::ignore_two_errors_stop_at_first(
+    Some("Ignore"),
+    &[("broken", "(1 / 0) == 1"), ("also-broken", "object.missing.x > 1")][..],
+    Expected::AcceptedWithWarnings(vec!["matchCondition 'broken'"]),
+)]
+#[case::fail_false_wins_over_earlier_error(
+    Some("Fail"),
+    &[("broken", "(1 / 0) == 1"), ("excluded", "false")][..],
+    Expected::Accepted,
+)]
+#[case::fail_false_wins_over_later_error(
+    Some("Fail"),
+    &[("excluded", "false"), ("broken", "(1 / 0) == 1")][..],
+    Expected::Accepted,
+)]
+#[case::ignore_false_wins_over_error_no_warning(
+    Some("Ignore"),
+    &[("broken", "(1 / 0) == 1"), ("excluded", "false")][..],
+    Expected::Accepted,
+)]
+#[case::fail_true_then_error_still_traps(
+    Some("Fail"),
+    &[("passes", "true"), ("broken", "(1 / 0) == 1")][..],
+    Expected::Error("divide by zero"),
+)]
+#[case::ignore_true_then_error_one_warning(
+    Some("Ignore"),
+    &[("passes", "true"), ("broken", "(1 / 0) == 1")][..],
+    Expected::AcceptedWithWarnings(vec!["matchCondition 'broken'"]),
+)]
+fn test_vap_match_conditions_false_wins_over_error(
+    #[case] policy: Option<&str>,
+    #[case] conditions: &[(&str, &str)],
+    #[case] expected: Expected,
+) {
+    let spec = match_conditions_spec(conditions);
+    let bindings =
+        bindings_with_failure_policy(policy.map(|p| serde_json::json!(p)), serde_json::json!({}));
+    assert_outcome(eval_vap(&spec, &bindings, None), &expected);
+}
+
+/// A host extension error inside a validation is a CEL runtime error like
+/// any other. Under `Ignore`, the module skips the validation, and the
+/// warning carries the host message.
+#[test]
+fn test_vap_ignore_extension_error_in_validation_is_skipped() {
+    let spec = r#"spec:
+  validations:
+    - expression: "kw.k8s.apiVersion('v1').kind('ConfigMap').namespace('default').get('cfg').data.ok == 'true'"
+      message: "config must be ok"
+"#;
+    let bindings = ignore_bindings(serde_json::json!({}));
+    let result = eval_vap(
+        spec,
+        &bindings,
+        Some(failing(vap::kw_k8s_get_extension(), "boom")),
+    );
+    assert_outcome(
+        result,
+        &Expected::AcceptedWithWarnings(vec![
+            "The module skipped validation[0] because the expression evaluated to an error (failurePolicy is Ignore): boom",
+        ]),
+    );
+}
+
+/// `Ignore` does not cover the `params` lookup. A host error there traps,
+/// with its `kw.k8s.list` origin, so the host can apply the policy.
+#[test]
+fn test_vap_ignore_params_lookup_error_still_traps() {
+    let result = eval_vap(
+        PARAMS_SPEC,
+        &params_bindings_ignore(selector_ref(None), 3),
+        Some(failing(vap::kw_k8s_list_extension(), "forbidden")),
+    );
+    assert_outcome(
+        result,
+        &Expected::ExtensionError {
+            message: "forbidden",
+            namespace: Some("kw.k8s"),
+            function: "list",
+        },
+    );
+}
+
+/// `params_bindings` plus `failurePolicy: Ignore`.
+fn params_bindings_ignore(param_ref: serde_json::Value, replicas: i64) -> String {
+    let mut bindings: serde_json::Value =
+        serde_json::from_str(&params_bindings(param_ref, replicas)).unwrap();
+    bindings["failurePolicy"] = "Ignore".into();
+    bindings.to_string()
+}
+
+/// Two params from a selector. The first has no `maxReplicas`, so the
+/// validation evaluates to `no such key` for it. Under `Ignore`, the module
+/// skips that validation, records a warning, and the second param decides.
+/// The warning names the param.
+#[rstest]
+#[case::second_denies(
+    "1",
+    Expected::rejected_with_warnings(
+        "limit 1 from second",
+        422,
+        vec!["The module skipped validation[0] for params default/first because the expression evaluated to an error (failurePolicy is Ignore): no such key: 'maxReplicas'"],
+    )
+)]
+#[case::second_passes(
+    "10",
+    Expected::AcceptedWithWarnings(vec![
+        "The module skipped validation[0] for params default/first because the expression evaluated to an error (failurePolicy is Ignore): no such key: 'maxReplicas'",
+    ])
+)]
+fn test_vap_ignore_params_first_errors_second_decides(
+    #[case] second_max: &str,
+    #[case] expected: Expected,
+) {
+    let mut first = params_configmap("first", "1");
+    first["data"] = serde_json::json!({});
+    let items = vec![first, params_configmap("second", second_max)];
+    let result = eval_vap(
+        PARAMS_SPEC,
+        &params_bindings_ignore(selector_ref(None), 5),
+        Some(list_returning(items)),
+    );
+    assert_outcome(result, &expected);
+}
+
+/// Build a VAP `spec:` with `paramKind: v1/ConfigMap`, the given
+/// `matchConditions` (name, expression pairs), and a validation against
+/// `params.data.maxReplicas`. Used by tests that check how a per-param
+/// `matchCondition` interacts with `failurePolicy` under `paramKind`.
+fn params_match_conditions_spec(conditions: &[(&str, &str)]) -> String {
+    let mut spec = String::from(
+        "spec:\n  paramKind:\n    apiVersion: v1\n    kind: ConfigMap\n  matchConditions:\n",
+    );
+    for (name, expression) in conditions {
+        spec.push_str(&format!(
+            "    - name: {name}\n      expression: \"{expression}\"\n"
+        ));
+    }
+    spec.push_str(concat!(
+        "  validations:\n",
+        "    - expression: \"object.spec.replicas <= int(params.data.maxReplicas)\"\n",
+        "      messageExpression: \"'limit ' + params.data.maxReplicas + ' from ' + params.metadata.name\"\n",
+    ));
+    spec
+}
+
+/// A ConfigMap param with `maxReplicas`, and `data.enabled` only when
+/// `enabled` is `Some`.
+fn params_configmap_maybe_enabled(
+    name: &str,
+    max_replicas: &str,
+    enabled: Option<bool>,
+) -> serde_json::Value {
+    let mut cm = params_configmap(name, max_replicas);
+    if let Some(enabled) = enabled {
+        cm["data"]["enabled"] = enabled.into();
+    }
+    cm
+}
+
+/// A matchCondition that reads `params`, with two params from a selector.
+/// The first param has no `enabled` key, so the condition evaluates to an
+/// error for it. Under `Ignore`, the module skips that param, and the
+/// second param decides. The warning names the skipped param.
+///
+/// The third case adds a second condition to the first param: a `false`
+/// result that wins over the `enabled` error, so the module records no
+/// warning for it. This holds inside the `paramKind` loop, not only for a
+/// single param.
+#[rstest]
+#[case::second_denies(
+    &[("enabled", "params.data.enabled == true")][..],
+    "1",
+    Expected::rejected_with_warnings(
+        "limit 1 from second",
+        422,
+        vec![
+            "The module skipped params default/first because matchCondition 'enabled' evaluated to an error (failurePolicy is Ignore): no such key: 'enabled'",
+        ],
+    )
+)]
+#[case::second_passes(
+    &[("enabled", "params.data.enabled == true")][..],
+    "10",
+    Expected::AcceptedWithWarnings(vec![
+        "The module skipped params default/first because matchCondition 'enabled' evaluated to an error (failurePolicy is Ignore): no such key: 'enabled'",
+    ])
+)]
+#[case::false_condition_wins_over_error_no_warning(
+    &[
+        ("enabled", "params.data.enabled == true"),
+        ("not-first", "params.metadata.name != 'first'"),
+    ][..],
+    "10",
+    Expected::Accepted,
+)]
+fn test_vap_ignore_params_first_match_condition_errors_second_decides(
+    #[case] conditions: &[(&str, &str)],
+    #[case] second_max: &str,
+    #[case] expected: Expected,
+) {
+    let spec = params_match_conditions_spec(conditions);
+    let items = vec![
+        params_configmap_maybe_enabled("first", "1", None),
+        params_configmap_maybe_enabled("second", second_max, Some(true)),
+    ];
+    let result = eval_vap(
+        &spec,
+        &params_bindings_ignore(selector_ref(None), 5),
+        Some(list_returning(items)),
+    );
+    assert_outcome(result, &expected);
+}
+
+/// The warnings belong to one evaluation. A host uses one `Engine` for many
+/// requests, so the second evaluation must not see the warnings of the
+/// first.
+#[test]
+fn test_vap_ignore_warnings_reset_between_evaluations() {
+    let spec = r#"spec:
+  validations:
+    - expression: "object.a.x > 1"
+    - expression: "object.b.x > 1"
+"#;
+    // First: both keys missing → two warnings. Second: only `b` missing → one
+    // warning, for `[1]` only. Third: nothing missing → no warnings key.
+    let first = ignore_bindings(serde_json::json!({}));
+    let second = bindings_with_failure_policy(
+        Some("Ignore".into()),
+        serde_json::json!({ "a": { "x": 2 } }),
+    );
+    let third = bindings_with_failure_policy(
+        Some("Ignore".into()),
+        serde_json::json!({ "a": { "x": 2 }, "b": { "x": 2 } }),
+    );
+
+    let results = eval_vap_repeatedly(spec, &[&first, &second, &third], vec![]).unwrap();
+    let mut results = results.into_iter();
+
+    assert_outcome(
+        results.next().unwrap(),
+        &Expected::AcceptedWithWarnings(vec!["validation[0]", "validation[1]"]),
+    );
+    assert_outcome(
+        results.next().unwrap(),
+        &Expected::AcceptedWithWarnings(vec![
+            "The module skipped validation[1] because the expression evaluated to an error (failurePolicy is Ignore): no such key: 'b'",
+        ]),
+    );
+    assert_outcome(results.next().unwrap(), &Expected::Accepted);
+}
+
+/// The module reads `failurePolicy` on every evaluation, not only on the
+/// first.
+#[test]
+fn test_vap_failure_policy_reread_between_evaluations() {
+    let spec = r#"spec:
+  validations:
+    - expression: "(1 / 0) == 1"
+"#;
+    let ignore = ignore_bindings(serde_json::json!({}));
+    let fail = bindings_with_failure_policy(Some("Fail".into()), serde_json::json!({}));
+
+    let results = eval_vap_repeatedly(spec, &[&ignore, &fail, &ignore], vec![]).unwrap();
+    let mut results = results.into_iter();
+
+    assert_outcome(
+        results.next().unwrap(),
+        &Expected::AcceptedWithWarnings(vec!["validation[0]"]),
+    );
+    assert_outcome(results.next().unwrap(), &Expected::Error("divide by zero"));
+    assert_outcome(
+        results.next().unwrap(),
+        &Expected::AcceptedWithWarnings(vec!["validation[0]"]),
     );
 }
 

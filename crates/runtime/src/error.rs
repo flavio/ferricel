@@ -8,11 +8,33 @@
 //! When a runtime error occurs (divide by zero, overflow, out of bounds, etc.),
 //! the guest runtime calls `cel_abort` with the JSON-encoded error. The host
 //! stops execution and returns the error to its caller.
+//!
+//! ## Abort, or return an error value?
+//!
+//! A CEL runtime function must return `CelValue::Error` for any failure that
+//! depends on the *value* the expression produced: a type the function does
+//! not accept, a string that does not parse, a number out of range, a
+//! missing key. The CEL specification allows `&&`, `||`, `?:`, `all()`, and
+//! `exists()` to absorb such an error
+//! (`cel-spec/doc/langdef.md`, "Runtime Errors" and "Logical Operators").
+//! `int("x") == 1 || true` must evaluate to `true`; a function that aborts
+//! instead breaks this rule. An error value must also propagate an error
+//! *input* unchanged, the way `CelValue::Error(e) => CelValue::Error(e)` does
+//! in `conversion.rs`, matching cel-go's `MaybeNoSuchOverloadErr` (see
+//! [`no_such_overload`]).
+//!
+//! Abort is only for a broken invariant that no CEL expression can trigger:
+//! a null pointer, a value whose type the compiler already guaranteed (for
+//! example, `cel_value_to_bool` after `IsError` has ruled out an error), or a
+//! host binding that fails to decode before evaluation starts. These are
+//! ferricel bugs or a malformed host payload, not CEL runtime errors.
 
 /// The error type returned by all internal (Layer 2) runtime functions.
 ///
 /// At the ABI boundary the wrapper converts this to `CelValue::Error(err)`.
 pub use ferricel_types::CelRuntimeError as CelError;
+
+use crate::types::CelValue;
 
 /// Convert a `CelError` to a heap-allocated `CelValue::Error`, consuming it.
 pub fn into_cel_value(err: CelError) -> crate::types::CelValue {
@@ -31,6 +53,23 @@ pub fn into_raw_result(r: CelResult<crate::types::CelValue>) -> *mut crate::type
         Ok(v) => v,
         Err(e) => into_cel_value(e),
     }))
+}
+
+/// Build the error for a value that does not match the overload a function
+/// expects, propagating an existing error instead of masking it.
+///
+/// If `value` is already `CelValue::Error`, returns a clone of that error
+/// unchanged (so an error input, for example an unbound variable or a
+/// missing map key, keeps its original message instead of becoming a
+/// generic `no such overload`). Otherwise returns a fresh `no such overload`
+/// error naming the type mismatch.
+///
+/// This is the equivalent of cel-go's `types.MaybeNoSuchOverloadErr`.
+pub fn no_such_overload(value: &CelValue) -> CelError {
+    match value {
+        CelValue::Error(e) => e.clone(),
+        _ => CelError::new("no such overload"),
+    }
 }
 
 // This function never returns - it terminates Wasm execution.
@@ -107,9 +146,9 @@ pub fn abort_with_error(message: &str) -> ! {
 /// Callers:
 /// - `cel_serialize_result`, before serializing the final result of a plain
 ///   CEL module.
-/// - The VAP orchestrator, after evaluating each `matchCondition` and
-///   `validation`, so a runtime error is never mistaken for a non-`false`
-///   (passing) result.
+/// - The VAP orchestrator, after the `namespaceObject` and `params`
+///   lookups. The `matchConditions` and `validations` results go through
+///   `cel_vap_expression_errored` instead, which applies `failurePolicy`.
 ///
 /// The pointer is not consumed. A null pointer is a no-op.
 ///
@@ -156,33 +195,10 @@ pub fn create_error_value(message: &str) -> *mut crate::types::CelValue {
     ))))
 }
 
-/// Read a `CelValue` from a raw pointer, aborting hard if null.
-///
-/// Reads a `CelValue` out of a raw pointer, aborting on null.
-///
-/// A null pointer reaching an operator is a compiler or runtime bug — since
-/// `cel_get_variable` now returns a `CelValue::Error` (never null) for unbound
-/// variables, null should never appear here. If it does, abort loudly instead
-/// of silently producing a wrong error value.
-///
-/// Under the arena allocator (`lol_alloc::LeakingAllocator`) dealloc is a no-op,
-/// so `ptr::read` is used to bitwise-move the value out of arena memory without
-/// cloning or freeing.
-///
-/// # Safety
-/// `ptr` must point to a valid, aligned `CelValue` in live memory.
-#[inline]
-pub unsafe fn read_ptr(ptr: *mut crate::types::CelValue) -> crate::types::CelValue {
-    if ptr.is_null() {
-        abort_with_error("null CelValue pointer: this is a compiler or runtime bug");
-    }
-    unsafe { std::ptr::read(ptr) }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{test_helpers::make_val, types::CelValue};
+    use crate::test_helpers::make_val;
 
     #[test]
     fn abort_if_error_is_noop_for_non_error_values() {
@@ -200,4 +216,17 @@ mod tests {
     // unwind through an `extern "C"` boundary. It is covered end-to-end by the
     // ferricel-core integration tests (plain CEL `1 / 0` and the VAP
     // runtime-error tests).
+
+    #[test]
+    fn no_such_overload_on_non_error_value() {
+        let err = no_such_overload(&CelValue::Int(1));
+        assert_eq!(err.message, "no such overload");
+    }
+
+    #[test]
+    fn no_such_overload_propagates_an_existing_error() {
+        let original = CelError::new("no such key: 'x'");
+        let err = no_such_overload(&CelValue::Error(original.clone()));
+        assert_eq!(err, original);
+    }
 }

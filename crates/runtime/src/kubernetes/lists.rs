@@ -13,8 +13,9 @@
 use slog::error;
 
 use crate::{
-    error::{create_error_value, read_ptr},
+    error::create_error_value,
     helpers::{cel_equals, cel_value_less_than},
+    memory::read_ptr,
     types::CelValue,
 };
 

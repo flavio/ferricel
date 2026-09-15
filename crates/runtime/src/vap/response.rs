@@ -3,26 +3,39 @@
 //! These functions produce a Kubewarden-compatible `ValidationResponse` JSON
 //! object and return the result as a packed ptr+len `i64`, the same encoding
 //! used by `cel_serialize_result`.
+//!
+//! When the module skipped an expression under `failurePolicy: Ignore` in
+//! the current evaluation, both responses carry a `warnings` list with one
+//! entry per skipped expression. The key is absent when there is nothing to
+//! report. As a result, a module that never skips produces the same JSON as
+//! before.
 
 use std::collections::HashMap;
 
+use super::failure_policy::warnings;
 use crate::types::{CelMapKey, CelValue};
 
-/// Serialize an acceptance response: `{"accepted":true}`.
+/// Serialize an acceptance response: `{"accepted":true}`, plus `warnings`
+/// when the module skipped an expression.
 ///
 /// # Returns
 /// Packed i64 with ptr (low 32 bits) and len (high 32 bits) pointing to the
 /// JSON bytes in Wasm linear memory.
+///
+/// # Safety
+/// Must only be called from the single-threaded Wasm guest environment.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_serialize_vap_accept() -> i64 {
     let mut map = HashMap::new();
     map.insert(CelMapKey::from("accepted"), CelValue::Bool(true));
+    insert_warnings(&mut map, unsafe { warnings() });
     crate::serialization::serialize_to_json(&CelValue::Object(map))
 }
 
 /// Serialize a rejection response:
-/// `{"accepted":false,"message":"<msg>","code":<code>}`.
+/// `{"accepted":false,"message":"<msg>","code":<code>}`, plus `warnings`
+/// when the module skipped an expression.
 ///
 /// # Parameters
 /// - `message_ptr`: pointer to the result of the validation's
@@ -37,6 +50,9 @@ pub unsafe extern "C" fn cel_serialize_vap_accept() -> i64 {
 ///
 /// # Returns
 /// Packed i64 ptr+len pointing to the JSON bytes in Wasm linear memory.
+///
+/// # Safety
+/// Both pointers must be null or valid `CelValue` pointers.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_serialize_vap_reject(
@@ -50,7 +66,24 @@ pub unsafe extern "C" fn cel_serialize_vap_reject(
     map.insert(CelMapKey::from("accepted"), CelValue::Bool(false));
     map.insert(CelMapKey::from("message"), CelValue::String(message));
     map.insert(CelMapKey::from("code"), CelValue::Int(code as i64));
+    insert_warnings(&mut map, unsafe { warnings() });
     crate::serialization::serialize_to_json(&CelValue::Object(map))
+}
+
+/// Add `warnings` to the response map, only when there is at least one.
+fn insert_warnings(map: &mut HashMap<CelMapKey, CelValue>, warnings: &[String]) {
+    if warnings.is_empty() {
+        return;
+    }
+    map.insert(
+        CelMapKey::from("warnings"),
+        CelValue::Array(
+            warnings
+                .iter()
+                .map(|w| CelValue::String(w.clone()))
+                .collect(),
+        ),
+    );
 }
 
 /// Pick the rejection message: the `messageExpression` result if it is a
@@ -114,5 +147,39 @@ mod tests {
         assert_eq!(msg, "validation failed");
         let msg = unsafe { resolve_reject_message(make_int(1), make_val(CelValue::Null)) };
         assert_eq!(msg, "validation failed");
+    }
+
+    // ─── warnings ────────────────────────────────────────────────────────────
+
+    fn response_map(accepted: bool) -> HashMap<CelMapKey, CelValue> {
+        let mut map = HashMap::new();
+        map.insert(CelMapKey::from("accepted"), CelValue::Bool(accepted));
+        map
+    }
+
+    #[test]
+    fn warnings_key_is_absent_when_there_are_none() {
+        let mut map = response_map(true);
+        insert_warnings(&mut map, &[]);
+        assert!(map.get(&CelMapKey::from("warnings")).is_none());
+        assert_eq!(map.len(), 1);
+    }
+
+    #[test]
+    fn warnings_are_added_in_order() {
+        let mut map = response_map(false);
+        insert_warnings(&mut map, &["first".to_string(), "second".to_string()]);
+        assert_eq!(
+            map.get(&CelMapKey::from("warnings")),
+            Some(&CelValue::Array(vec![
+                CelValue::String("first".to_string()),
+                CelValue::String("second".to_string()),
+            ]))
+        );
+        // The other keys are untouched.
+        assert_eq!(
+            map.get(&CelMapKey::from("accepted")),
+            Some(&CelValue::Bool(false))
+        );
     }
 }

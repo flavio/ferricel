@@ -11,10 +11,7 @@
 use regex_lite::Regex;
 use slog::error;
 
-use crate::{
-    error::{create_error_value, read_ptr},
-    types::CelValue,
-};
+use crate::{error::create_error_value, memory::read_ptr, types::CelValue};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Replacement string conversion: CEL → regex_lite

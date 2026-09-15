@@ -151,6 +151,8 @@ pub enum Commands {
 
         /// Bindings JSON string containing variable values (mutually exclusive with --bindings-file)
         /// Example: --bindings-json '{"x": 42, "name": "Alice"}'
+        /// For a VAP module, add "failurePolicy": "Ignore". If an expression evaluates to
+        /// an error, the module then skips it and adds a warning. The default is "Fail".
         #[arg(long, conflicts_with = "bindings_file")]
         bindings_json: Option<String>,
 

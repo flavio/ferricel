@@ -2,7 +2,12 @@ use std::fmt;
 
 use strum::IntoEnumIterator;
 
-/// Enumeration of all functions exported by the runtime Wasm module
+/// Enumeration of all functions exported by the runtime Wasm module.
+///
+/// The `extern "C"` definitions in `crates/runtime` are the source of truth
+/// for each function's arguments, return value, and safety requirements.
+/// This enum only names and groups them; see [`RuntimeFunction::name`] for
+/// the exported symbol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter)]
 pub enum RuntimeFunction {
     // Memory
@@ -32,14 +37,9 @@ pub enum RuntimeFunction {
     IsStrictlyFalse,
     IsStrictlyTrue,
     IsError,
-    /// Abort via `cel_abort` if the value is `CelValue::Error`; no-op otherwise.
-    /// Turns an error *value* into a hard failure reported to the host.
-    /// Arguments: (value: *mut CelValue)
     AbortIfError,
 
     // Serialization
-    /// Serializes a `CelValue` to JSON, returning packed ptr+len as i64.
-    /// Aborts via `cel_abort` if the value is `CelValue::Error`.
     SerializeResult,
 
     // Deserialization
@@ -49,8 +49,6 @@ pub enum RuntimeFunction {
     // Globals
     InitBindings,
     GetVariable,
-    /// Insert or update a named variable in the global bindings map at runtime.
-    /// Used by the VAP compiler to store evaluated variable expressions.
     SetVariable,
     UnboundVariableError,
 
@@ -67,20 +65,14 @@ pub enum RuntimeFunction {
     // Map
     CreateMap,
     MapInsert,
-    /// Inserts all entries from a single-entry (or multi-entry) map into the accumulator map.
-    /// Returns the accumulator on success, or a CelValue::Error if a duplicate key is found.
     MapInsertEntry,
 
     // Polymorphic iteration primitives (work for both lists and maps)
-    /// Prepares the range for iteration: lists → self; maps → keys array.
     IterPrepare,
-    /// Returns var1 for the current iteration step: lists → Int(index); maps → key.
     IterVar1,
-    /// Returns var2 for the current iteration step: lists → element; maps → value.
     IterVar2,
 
     // Two-variable comprehension helpers
-    /// For existsOne: if pred=Bool(true) → accu+1; if Bool(false) → accu; if error → error.
     CondInc,
 
     // Value Creation Helpers
@@ -103,9 +95,7 @@ pub enum RuntimeFunction {
     StringCharAt,
     StringIndexOfOffset,
     StringLastIndexOfOffset,
-    /// Polymorphic indexOf: dispatches on receiver type (string → substring search, list → element search)
     IndexOfPoly,
-    /// Polymorphic lastIndexOf: dispatches on receiver type
     LastIndexOfPoly,
     StringLowerAscii,
     StringUpperAscii,
@@ -275,9 +265,7 @@ pub enum RuntimeFunction {
     OptionalValue,
     OptionalOrValue,
     OptionalOr,
-    /// `receiver?.field` — optional field/key select (handles maps, objects, Optional wrappers)
     OptionalSelect,
-    /// `container[?key]` — optional index (handles arrays, maps, Optional wrappers)
     OptionalIndex,
 
     // Kubernetes Format Extensions
@@ -319,63 +307,16 @@ pub enum RuntimeFunction {
     TimestampGetMilliseconds,
     TimestampGetMillisecondsTz,
 
-    // VAP (ValidatingAdmissionPolicy) response serialization
-    /// Serialize `{"accepted":true}` and return as packed ptr+len i64.
+    // VAP (ValidatingAdmissionPolicy)
     VapSerializeAccept,
-    /// Serialize `{"accepted":false,"message":"...","code":N}` and return as packed ptr+len i64.
-    /// Arguments: (message: *mut CelValue, fallback: *mut CelValue, code: i32)
-    /// `message` is the `messageExpression` result (or null); it is used only if
-    /// it is a string, otherwise `fallback` (the static message) is used.
     VapSerializeReject,
-    /// Resolve the list of `params` objects for a VAP evaluation.
-    ///
-    /// Reads `paramRef` and `request` from the bindings, then calls the host
-    /// `kw.k8s.get` (for `paramRef.name`) or `kw.k8s.list` (for
-    /// `paramRef.selector`). Honors `paramRef.parameterNotFoundAction`.
-    ///
-    /// Arguments: `(api_version_ptr: i32, api_version_len: i32, kind_ptr: i32, kind_len: i32)`,
-    /// the UTF-8 bytes of `paramKind.apiVersion` and `paramKind.kind`.
-    ///
-    /// Returns a `*mut CelValue` that is a `CelValue::Array` of param objects,
-    /// or a `CelValue::Error`.
     VapResolveParams,
-    /// Resolve `namespaceObject` for a VAP evaluation.
-    ///
-    /// Reads `request` from the bindings. Returns `CelValue::Null` when the
-    /// request is cluster-scoped, or when the resource under admission is
-    /// itself a `v1/Namespace`. Otherwise calls the host `kw.k8s.get`
-    /// extension for the Namespace named `request.namespace`.
-    ///
-    /// Takes no arguments.
-    ///
-    /// Returns a `*mut CelValue` that is a `CelValue::Object` (the
-    /// Namespace), `CelValue::Null`, or a `CelValue::Error`.
     VapResolveNamespaceObject,
+    VapReset,
+    VapExpressionErrored,
 
     // Fluent builder chain support
-    /// Produce or update a builder state map for a fluent-chain extension step.
-    ///
-    /// Arguments:
-    /// - `receiver: *mut CelValue` — existing state map, or null to create a fresh one
-    /// - `type_tag_ptr: i32, type_tag_len: i32` — `"__type__"` value for the output map
-    /// - `key_ptr: i32, key_len: i32` — field name to set/append
-    /// - `value: *mut CelValue` — value to store
-    /// - `accumulate: i32` — 0 = overwrite, 1 = append to array
-    ///
-    /// Returns a new `*mut CelValue` (Object map).
     BuilderStepCall,
-
-    /// Insert a runtime key→value pair into a nested map within the builder
-    /// state, used for dynamic-key accumulation (e.g. `.annotation("env","prod")`).
-    ///
-    /// Arguments:
-    /// - `receiver: *mut CelValue` — existing state map, or null to create a fresh one
-    /// - `type_tag_ptr: i32, type_tag_len: i32` — `"__type__"` value for the output map
-    /// - `field_ptr: i32, field_len: i32` — field name of the nested map (e.g. `"annotations"`)
-    /// - `map_key: *mut CelValue` — runtime key (arg0, must be a valid map key type)
-    /// - `value: *mut CelValue` — runtime value (arg1)
-    ///
-    /// Returns a new `*mut CelValue` (Object map).
     BuilderMapEntryCall,
 }
 
@@ -648,6 +589,8 @@ impl RuntimeFunction {
             Self::VapSerializeReject => "cel_serialize_vap_reject",
             Self::VapResolveParams => "cel_vap_resolve_params",
             Self::VapResolveNamespaceObject => "cel_vap_resolve_namespace_object",
+            Self::VapReset => "cel_vap_reset",
+            Self::VapExpressionErrored => "cel_vap_expression_errored",
 
             Self::BuilderStepCall => "cel_builder_step",
             Self::BuilderMapEntryCall => "cel_builder_map_entry",

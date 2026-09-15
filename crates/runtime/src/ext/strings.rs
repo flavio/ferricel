@@ -5,7 +5,8 @@
 //! `split`, `substring`, `trim`, `reverse`, `format`, and `strings.quote`.
 
 use crate::{
-    error::{CelError, read_ptr},
+    error::CelError,
+    memory::read_ptr,
     types::{CelMapKey, CelValue},
 };
 

@@ -1,7 +1,10 @@
 //! JSON serialization of CEL values with memory-encoded results.
 //! Returns i64 with pointer in low 32 bits, length in high 32 bits.
 
-use crate::{error::read_ptr, memory::cel_malloc, types::CelValue};
+use crate::{
+    memory::{cel_malloc, read_ptr},
+    types::CelValue,
+};
 
 /// Encode pointer and length into a single i64.
 /// Low 32 bits = pointer, High 32 bits = length.

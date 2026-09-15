@@ -3,12 +3,12 @@
 //! - `reverse`: `String` → character reversal; `Array` → element reversal
 
 use crate::{
-    error::read_ptr,
     ext::{
         lists::list_reverse_impl,
         strings::{find_index_of, find_last_index_of, string_reverse_impl},
     },
     helpers::cel_equals,
+    memory::read_ptr,
     types::CelValue,
 };
 

@@ -13,18 +13,9 @@ use std::collections::HashMap;
 
 use crate::{
     error::abort_with_error,
+    memory::read_str,
     types::{CelMapKey, CelValue},
 };
-
-/// Read a UTF-8 string from Wasm linear memory.
-///
-/// # Safety
-/// `ptr` must point to `len` valid, initialised bytes in Wasm linear memory.
-#[inline]
-unsafe fn read_str<'a>(ptr: i32, len: i32) -> &'a str {
-    let slice = unsafe { std::slice::from_raw_parts(ptr as *const u8, len as usize) };
-    std::str::from_utf8(slice).unwrap_or_else(|_| abort_with_error("invalid UTF-8 in builder key"))
-}
 
 /// Produce or update a builder state map for one step in a fluent chain.
 ///
@@ -45,9 +36,9 @@ unsafe fn read_str<'a>(ptr: i32, len: i32) -> &'a str {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_builder_step(
     receiver: *mut CelValue,
-    type_tag_ptr: i32,
+    type_tag_ptr: *const u8,
     type_tag_len: i32,
-    key_ptr: i32,
+    key_ptr: *const u8,
     key_len: i32,
     value: *mut CelValue,
     accumulate: i32,
@@ -124,9 +115,9 @@ pub unsafe extern "C" fn cel_builder_step(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cel_builder_map_entry(
     receiver: *mut CelValue,
-    type_tag_ptr: i32,
+    type_tag_ptr: *const u8,
     type_tag_len: i32,
-    field_ptr: i32,
+    field_ptr: *const u8,
     field_len: i32,
     map_key: *mut CelValue,
     value: *mut CelValue,

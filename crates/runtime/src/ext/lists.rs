@@ -11,8 +11,9 @@
 //! - `sort` — sort comparable elements
 
 use crate::{
-    error::{CelError, read_ptr},
+    error::CelError,
     helpers::{cel_equals, cel_value_less_than},
+    memory::read_ptr,
     types::CelValue,
 };
 

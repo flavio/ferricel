@@ -7,10 +7,7 @@
 //!
 //! See: <https://pkg.go.dev/github.com/google/cel-go/ext#Math>
 
-use crate::{
-    error::{CelError, read_ptr},
-    types::CelValue,
-};
+use crate::{error::CelError, memory::read_ptr, types::CelValue};
 
 // ---------------------------------------------------------------------------
 // Internal helpers

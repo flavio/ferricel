@@ -94,11 +94,23 @@ fn extract_var_names(
 
 /// Shared loop setup: compiles the range, calls IterPrepare, gets length.
 ///
+/// If `IterPrepare` returns an error (the range is neither a list nor a map,
+/// or is itself an error), that error becomes the result of the whole macro
+/// call — for example `object.missing.exists(i, v, true)` evaluates to the
+/// "no such key" error, not a trap. The caller must therefore write every
+/// subsequent instruction (accumulator init, loop, final result) into the
+/// returned `else_id` sequence instead of `body`, by shadowing its `body`
+/// binding: `let mut body = body.instr_seq(else_id);`. That sequence only
+/// runs when `prepared` is not an error, and its single result becomes the
+/// macro's result on that path; the error path (built from `then_id`,
+/// already emitted) supplies the result on the other.
+///
 /// After this function returns:
 /// - `range_local`: holds the original range pointer (list or map)
 /// - `prepared_local`: holds the result of `cel_iter_prepare(range)` (always an array for `cel_array_len`)
 /// - `length_local`: holds the i32 iteration count
 /// - `index_local`: initialized to 0
+/// - `else_id`: the sequence the caller must build the rest of the macro into
 fn emit_loop_setup(
     target: &cel::common::ast::Expr,
     body: &mut InstrSeqBuilder,
@@ -111,6 +123,7 @@ fn emit_loop_setup(
         walrus::LocalId,
         walrus::LocalId,
         walrus::LocalId,
+        InstrSeqId,
     ),
     anyhow::Error,
 > {
@@ -125,18 +138,41 @@ fn emit_loop_setup(
     let prepared_local = module.locals.add(ValType::I32);
     body.local_set(prepared_local);
 
-    // 3. Get iteration length
+    // if IsError(prepared): result = prepared (the error)
+    // else: <rest of the macro, written by the caller into `else_id`>
     body.local_get(prepared_local);
-    body.call(env.get(RuntimeFunction::ArrayLen));
+    body.call(env.get(RuntimeFunction::IsError)); // Returns i32: 1 if error, 0 otherwise
+
+    let then_seq = body.dangling_instr_seq(Some(ValType::I32));
+    let then_id = then_seq.id();
+    let else_seq = body.dangling_instr_seq(Some(ValType::I32));
+    let else_id = else_seq.id();
+    body.instr(walrus::ir::IfElse {
+        consequent: then_id,
+        alternative: else_id,
+    });
+    body.instr_seq(then_id).local_get(prepared_local);
+
+    let mut else_body = body.instr_seq(else_id);
+
+    // 3. Get iteration length
+    else_body.local_get(prepared_local);
+    else_body.call(env.get(RuntimeFunction::ArrayLen));
     let length_local = module.locals.add(ValType::I32);
-    body.local_set(length_local);
+    else_body.local_set(length_local);
 
     // 4. Index starts at 0
     let index_local = module.locals.add(ValType::I32);
-    body.i32_const(0);
-    body.local_set(index_local);
+    else_body.i32_const(0);
+    else_body.local_set(index_local);
 
-    Ok((range_local, prepared_local, length_local, index_local))
+    Ok((
+        range_local,
+        prepared_local,
+        length_local,
+        index_local,
+        else_id,
+    ))
 }
 
 /// Bind var1 and var2 in the loop body.
@@ -230,8 +266,14 @@ fn compile_exists(
     let (var1, var2) = extract_var_names(call_expr, "exists")?;
     let pred_expr = &call_expr.args[2].expr;
 
-    let (range_local, prepared_local, length_local, index_local) =
+    let (range_local, prepared_local, length_local, index_local, else_id) =
         emit_loop_setup(&target.expr, body, env, ctx, module)?;
+    // Everything from here on must be written into the `else_id` sequence:
+    // it only runs when `IterPrepare` did not return an error. Shadowing
+    // `body` keeps every line below unchanged from the pre-error-check
+    // version of this function.
+    let mut body = body.instr_seq(else_id);
+    let body = &mut body;
 
     // accu = Bool(false)
     body.i64_const(0);
@@ -311,8 +353,14 @@ fn compile_all(
     let (var1, var2) = extract_var_names(call_expr, "all")?;
     let pred_expr = &call_expr.args[2].expr;
 
-    let (range_local, prepared_local, length_local, index_local) =
+    let (range_local, prepared_local, length_local, index_local, else_id) =
         emit_loop_setup(&target.expr, body, env, ctx, module)?;
+    // Everything from here on must be written into the `else_id` sequence:
+    // it only runs when `IterPrepare` did not return an error. Shadowing
+    // `body` keeps every line below unchanged from the pre-error-check
+    // version of this function.
+    let mut body = body.instr_seq(else_id);
+    let body = &mut body;
 
     // accu = Bool(true)
     body.i64_const(1);
@@ -392,8 +440,14 @@ fn compile_exists_one(
     let (var1, var2) = extract_var_names(call_expr, "existsOne")?;
     let pred_expr = &call_expr.args[2].expr;
 
-    let (range_local, prepared_local, length_local, index_local) =
+    let (range_local, prepared_local, length_local, index_local, else_id) =
         emit_loop_setup(&target.expr, body, env, ctx, module)?;
+    // Everything from here on must be written into the `else_id` sequence:
+    // it only runs when `IterPrepare` did not return an error. Shadowing
+    // `body` keeps every line below unchanged from the pre-error-check
+    // version of this function.
+    let mut body = body.instr_seq(else_id);
+    let body = &mut body;
 
     // accu = Int(0)
     body.i64_const(0);
@@ -476,8 +530,14 @@ fn compile_transform_list(
         (None, &call_expr.args[2].expr)
     };
 
-    let (range_local, prepared_local, length_local, index_local) =
+    let (range_local, prepared_local, length_local, index_local, else_id) =
         emit_loop_setup(&target.expr, body, env, ctx, module)?;
+    // Everything from here on must be written into the `else_id` sequence:
+    // it only runs when `IterPrepare` did not return an error. Shadowing
+    // `body` keeps every line below unchanged from the pre-error-check
+    // version of this function.
+    let mut body = body.instr_seq(else_id);
+    let body = &mut body;
 
     // accu = [] (empty array)
     body.call(env.get(RuntimeFunction::CreateArray));
@@ -651,8 +711,14 @@ fn compile_transform_map(
         (None, &call_expr.args[2].expr)
     };
 
-    let (range_local, prepared_local, length_local, index_local) =
+    let (range_local, prepared_local, length_local, index_local, else_id) =
         emit_loop_setup(&target.expr, body, env, ctx, module)?;
+    // Everything from here on must be written into the `else_id` sequence:
+    // it only runs when `IterPrepare` did not return an error. Shadowing
+    // `body` keeps every line below unchanged from the pre-error-check
+    // version of this function.
+    let mut body = body.instr_seq(else_id);
+    let body = &mut body;
 
     // accu = {} (empty map)
     body.call(env.get(RuntimeFunction::CreateMap));
@@ -827,8 +893,14 @@ fn compile_transform_map_entry(
         (None, &call_expr.args[2].expr)
     };
 
-    let (range_local, prepared_local, length_local, index_local) =
+    let (range_local, prepared_local, length_local, index_local, else_id) =
         emit_loop_setup(&target.expr, body, env, ctx, module)?;
+    // Everything from here on must be written into the `else_id` sequence:
+    // it only runs when `IterPrepare` did not return an error. Shadowing
+    // `body` keeps every line below unchanged from the pre-error-check
+    // version of this function.
+    let mut body = body.instr_seq(else_id);
+    let body = &mut body;
 
     // accu = {} (empty map)
     body.call(env.get(RuntimeFunction::CreateMap));

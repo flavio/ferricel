@@ -457,6 +457,31 @@ pub fn compile_comprehension(
     let prepared_local = module.locals.add(ValType::I32);
     body.local_set(prepared_local);
 
+    // If `IterPrepare` returned an error (the range is neither a list nor a
+    // map, or is itself an error), that error is the result of the whole
+    // comprehension: `object.missing.all(x, true)` evaluates to the
+    // "no such key" error, not a trap. Steps 3 onward (which assume
+    // `prepared` is an array) run only in the `else` branch; the error
+    // path supplies the result on the other.
+    body.local_get(prepared_local);
+    body.call(env.get(RuntimeFunction::IsError)); // Returns i32: 1 if error, 0 otherwise
+
+    let then_seq = body.dangling_instr_seq(Some(ValType::I32));
+    let then_id = then_seq.id();
+    let else_seq = body.dangling_instr_seq(Some(ValType::I32));
+    let else_id = else_seq.id();
+    body.instr(walrus::ir::IfElse {
+        consequent: then_id,
+        alternative: else_id,
+    });
+    body.instr_seq(then_id).local_get(prepared_local);
+
+    // Everything from here on must be written into the `else_id` sequence.
+    // Shadowing `body` keeps every line below unchanged from the
+    // pre-error-check version of this function.
+    let mut body = body.instr_seq(else_id);
+    let body = &mut body;
+
     // Step 3: Get the iteration length from the prepared array
     body.local_get(prepared_local);
     body.call(env.get(RuntimeFunction::ArrayLen)); // Returns i32 length

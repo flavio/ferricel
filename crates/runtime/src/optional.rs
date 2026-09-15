@@ -17,7 +17,8 @@
 use slog::error;
 
 use crate::{
-    error::{create_error_value, read_ptr},
+    error::create_error_value,
+    memory::read_ptr,
     types::{CelMapKey, CelValue},
 };
 

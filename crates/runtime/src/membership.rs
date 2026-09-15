@@ -7,12 +7,18 @@
 //! Per CEL spec:
 //! - Time cost for lists: O(n×m) where n is list size, m is element size
 //! - Time cost for maps: O(1) expected (implementation may vary)
+//!
+//! `value_in` returns `CelValue::Error` for a non-collection container, an
+//! invalid map-key element, or an error operand, instead of aborting: this
+//! is what lets `1 in object.missing` evaluate to the "no such key" error
+//! instead of a trap.
 
-use slog::{debug, error};
+use slog::debug;
 
 use crate::{
-    error::{abort_with_error, read_ptr},
+    error::{abort_with_error, no_such_overload},
     helpers::cel_equals,
+    memory::read_ptr,
     types::CelValue,
 };
 
@@ -24,6 +30,8 @@ use crate::{
 ///
 /// # Returns
 /// - Pointer to CelValue::Bool(true) if element is found, false otherwise
+/// - Pointer to CelValue::Error for a non-collection container, an invalid
+///   map-key element, or a propagated error operand
 ///
 /// # Safety
 ///
@@ -36,19 +44,13 @@ pub unsafe extern "C" fn cel_value_in(
     element_ptr: *mut CelValue,
     container_ptr: *mut CelValue,
 ) -> *mut CelValue {
-    let log = crate::logging::get_logger();
-
+    // A null pointer here is a compiler bug: the compiler always evaluates
+    // both operands to a CelValue before calling this function.
     if element_ptr.is_null() {
-        error!(log, "Element pointer is null";
-            "function" => "cel_value_in",
-            "parameter" => "element_ptr");
-        abort_with_error("no such overload");
+        abort_with_error("cel_value_in: null element pointer, this is a compiler bug");
     }
     if container_ptr.is_null() {
-        error!(log, "Container pointer is null";
-            "function" => "cel_value_in",
-            "parameter" => "container_ptr");
-        abort_with_error("no such overload");
+        abort_with_error("cel_value_in: null container pointer, this is a compiler bug");
     }
 
     let element = read_ptr(element_ptr);
@@ -60,9 +62,12 @@ pub unsafe extern "C" fn cel_value_in(
 fn value_in(element: CelValue, container: CelValue) -> CelValue {
     let log = crate::logging::get_logger();
 
-    match container {
+    match (element, container) {
+        (CelValue::Error(e), _) => CelValue::Error(e),
+        (_, CelValue::Error(e)) => CelValue::Error(e),
+
         // List membership: A in list(A)
-        CelValue::Array(arr) => {
+        (element, CelValue::Array(arr)) => {
             debug!(log, "Checking list membership"; "list_size" => arr.len());
             // Linear search through array using CEL equality (supports cross-type numeric equality)
             let found = arr.iter().any(|item| cel_equals(item, &element));
@@ -73,7 +78,7 @@ fn value_in(element: CelValue, container: CelValue) -> CelValue {
         // Map key membership: A in map(A, B)
         // Only checks key existence, not values
         // Maps can have bool, int, uint, or string keys per CEL spec
-        CelValue::Object(map) => {
+        (element, CelValue::Object(map)) => {
             use crate::types::CelMapKey;
             match CelMapKey::from_cel_value(&element) {
                 Some(key) => {
@@ -85,21 +90,21 @@ fn value_in(element: CelValue, container: CelValue) -> CelValue {
                     CelValue::Bool(found)
                 }
                 None => {
-                    error!(log, "Maps require bool, int, uint, or string keys for membership test";
-                        "function" => "cel_value_in",
+                    debug!(log, "Maps require bool, int, uint, or string keys for membership test";
                         "actual_key_type" => format!("{:?}", element));
-                    abort_with_error("no such overload")
+                    CelValue::Error(crate::error::CelError::new(
+                        "no such overload: invalid map key type",
+                    ))
                 }
             }
         }
 
         // Type mismatch - no matching overload
-        _ => {
-            error!(log, "No matching overload for membership test";
-                "function" => "cel_value_in",
+        (element, container) => {
+            debug!(log, "No matching overload for membership test";
                 "element_type" => format!("{:?}", element),
                 "container_type" => format!("{:?}", container));
-            abort_with_error("no such overload")
+            CelValue::Error(no_such_overload(&container))
         }
     }
 }
@@ -111,6 +116,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::error::CelError;
 
     // Helper function to test membership operations
     fn assert_membership(element: CelValue, container: CelValue, expected: bool) {
@@ -249,6 +255,40 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_membership(element, container, expected);
+    }
+
+    /// A non-collection container, an invalid map-key element, and a
+    /// propagated error operand are all error values, not traps.
+    #[rstest]
+    #[case::wrong_container_type(CelValue::Int(1), CelValue::Int(2), "no such overload")]
+    #[case::invalid_map_key(
+        CelValue::Double(1.5),
+        CelValue::Object(HashMap::new()),
+        "invalid map key type"
+    )]
+    #[case::element_is_error(
+        CelValue::Error(CelError::new("no such key: 'x'")),
+        CelValue::Array(vec![]),
+        "no such key: 'x'"
+    )]
+    #[case::container_is_error(
+        CelValue::Int(1),
+        CelValue::Error(CelError::new("no such key: 'y'")),
+        "no such key: 'y'"
+    )]
+    fn test_value_in_rejects_bad_input(
+        #[case] element: CelValue,
+        #[case] container: CelValue,
+        #[case] expected_substring: &str,
+    ) {
+        match value_in(element, container) {
+            CelValue::Error(err) => assert!(
+                err.message.contains(expected_substring),
+                "expected {expected_substring:?} in {:?}",
+                err.message
+            ),
+            other => panic!("expected an error value, got {other:?}"),
+        }
     }
 
     // Note: Cannot test panic cases with #[should_panic] for extern "C" functions
