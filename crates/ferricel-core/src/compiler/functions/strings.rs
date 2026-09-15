@@ -88,9 +88,9 @@ fn compile_size(
         _ => anyhow::bail!("size() expects 1 argument"),
     }
 
-    // Call polymorphic cel_value_size which returns i64
-    // We need to convert it to *mut CelValue::Int
-    body.call(env.get(RuntimeFunction::ValueSize)); // Returns i64
-    body.call(env.get(RuntimeFunction::CreateInt)); // Convert i64 to *mut CelValue
+    // `cel_value_size` returns a `*mut CelValue`: `CelValue::Int` on success,
+    // or `CelValue::Error` for a non-collection value (propagated or fresh
+    // `no such overload`).
+    body.call(env.get(RuntimeFunction::ValueSize));
     Ok(())
 }

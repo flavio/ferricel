@@ -147,9 +147,7 @@ expression. It records a metric and an audit annotation instead. The
 warnings are a ferricel addition.
 
 `Ignore` does not cover the `params` and `namespaceObject` lookups. An error
-there always traps (see below). `Ignore` also does not cover runtime
-functions that abort instead of returning an error value, such as
-`int("x")`. See
+there always traps (see below). See
 [LIMITATIONS.md](https://github.com/flavio/ferricel/blob/main/LIMITATIONS.md).
 
 ### Errors that are never errors

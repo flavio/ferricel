@@ -56,29 +56,6 @@ pub unsafe extern "C" fn cel_create_string(data_ptr: *const u8, len: usize) -> *
     Box::into_raw(value)
 }
 
-/// Returns the size of a string in Unicode codepoints.
-///
-/// # Arguments
-/// - `string_ptr`: Pointer to a CelValue containing a string
-///
-/// # Returns
-/// The number of Unicode codepoints in the string
-///
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers. The caller must ensure:
-/// - `string_ptr` is a valid pointer to an initialized CelValue instance
-#[allow(unsafe_op_in_unsafe_fn)]
-pub unsafe fn cel_string_size(string_ptr: *const CelValue) -> i64 {
-    // SAFETY: Caller guarantees string_ptr is valid
-    let value = unsafe { &*string_ptr };
-
-    match value {
-        CelValue::String(s) => s.chars().count() as i64,
-        _ => 0, // Not a string, return 0
-    }
-}
-
 /// Tests whether a string starts with a given prefix.
 ///
 /// # Safety
@@ -201,19 +178,6 @@ mod tests {
                 CelValue::String(s) => assert_eq!(s, "café ☕"),
                 _ => panic!("Expected String variant"),
             }
-        }
-    }
-
-    #[rstest]
-    #[case::basic("hello", 5)]
-    #[case::unicode("café", 4)]
-    #[case::emoji("👋", 1)]
-    fn test_string_size(#[case] input: &str, #[case] expected: i64) {
-        let test_str = CelValue::String(input.to_string());
-
-        unsafe {
-            let size = cel_string_size(&test_str as *const CelValue);
-            assert_eq!(size, expected);
         }
     }
 

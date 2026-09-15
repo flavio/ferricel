@@ -729,6 +729,57 @@ fn test_vap_failure_policy_error_then_validation(
     assert_outcome(eval_vap(spec, &bindings, None), &expected);
 }
 
+/// The motivating example: `int()` on a non-numeric annotation used to trap
+/// the whole policy even under `Ignore`, because `cel_int` aborted instead
+/// of returning an error value. It now evaluates to an error value like any
+/// other CEL runtime error, so `Ignore` skips it and the next validation
+/// decides.
+#[rstest]
+#[case::ignore_bad_annotation_second_denies(
+    Some(serde_json::json!("Ignore")),
+    "invalid",
+    100,
+    Expected::rejected_with_warnings(
+        "too many replicas",
+        422,
+        vec!["validation[0]"],
+    )
+)]
+#[case::ignore_bad_annotation_second_passes(
+    Some(serde_json::json!("Ignore")),
+    "invalid",
+    1,
+    Expected::AcceptedWithWarnings(vec!["validation[0]"])
+)]
+#[case::fail_bad_annotation(
+    Some(serde_json::json!("Fail")),
+    "invalid",
+    100,
+    Expected::Error("type conversion error from 'string' to 'int'")
+)]
+fn test_vap_failure_policy_int_conversion_error(
+    #[case] policy: Option<serde_json::Value>,
+    #[case] count: &str,
+    #[case] replicas: i64,
+    #[case] expected: Expected,
+) {
+    let spec = r#"spec:
+  validations:
+    - expression: "int(object.metadata.annotations['count']) <= 10"
+      message: "count too high"
+    - expression: "object.spec.replicas <= 3"
+      message: "too many replicas"
+"#;
+    let bindings = bindings_with_failure_policy(
+        policy,
+        serde_json::json!({
+            "metadata": { "annotations": { "count": count } },
+            "spec": { "replicas": replicas }
+        }),
+    );
+    assert_outcome(eval_vap(spec, &bindings, None), &expected);
+}
+
 /// The label names the validation that evaluated to an error, not the first
 /// one.
 #[test]
