@@ -27,7 +27,7 @@ k8s-vap = ["dep:k8s-openapi", "dep:yaml_serde"]
 
 [dependencies]
 anyhow         = { workspace = true }
-cel            = "0.14"
+cel            = "0.15"
 ferricel-types = { workspace = true }
 k8s-openapi    = { workspace = true, optional = true }
 prost          = { workspace = true }

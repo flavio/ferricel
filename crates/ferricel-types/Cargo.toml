@@ -20,7 +20,7 @@ thiserror   = { workspace = true }
 
 [build-dependencies]
 prost-build = "0.14"
-protox      = "0.9"
+protox      = "0.10"
 
 [dev-dependencies]
 rstest = { workspace = true }
