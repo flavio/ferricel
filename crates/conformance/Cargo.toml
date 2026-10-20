@@ -23,4 +23,4 @@ toml           = { version = "1.1", features = ["parse"] }
 [build-dependencies]
 prost       = { workspace = true }
 prost-build = "0.14"
-protox      = "0.9"
+protox      = "0.10"
