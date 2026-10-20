@@ -86,14 +86,14 @@ jobs:
 
       - name: Upload binary
         if: ${{ !inputs.build_only }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ferricel-linux-${{ matrix.targetarch }}
           path: ferricel-linux-${{ matrix.targetarch }}.zip
 
       - name: Install syft
         if: ${{ !inputs.build_only }}
-        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
 
       - name: Create SBOM file
         if: ${{ !inputs.build_only }}
@@ -114,7 +114,7 @@ jobs:
 
       - name: Upload ferricel SBOM files
         if: ${{ !inputs.build_only }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ferricel-linux-${{ matrix.targetarch }}-sbom
           path: |
@@ -181,14 +181,14 @@ jobs:
 
       - name: Upload binary
         if: ${{ !inputs.build_only }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ferricel-darwin-${{ matrix.targetarch }}
           path: ferricel-darwin-${{ matrix.targetarch }}.zip
 
       - name: Install syft
         if: ${{ !inputs.build_only }}
-        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
 
       - name: Create SBOM file
         if: ${{ !inputs.build_only }}
@@ -209,7 +209,7 @@ jobs:
 
       - name: Upload ferricel SBOM files
         if: ${{ !inputs.build_only }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ferricel-darwin-${{ matrix.targetarch }}-sbom
           path: |
@@ -269,14 +269,14 @@ jobs:
 
       - name: Upload binary
         if: ${{ !inputs.build_only }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ferricel-windows-x86_64
           path: ferricel-windows-x86_64.exe.zip
 
       - name: Install syft
         if: ${{ !inputs.build_only }}
-        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
 
       - name: Create SBOM file
         if: ${{ !inputs.build_only }}
@@ -299,7 +299,7 @@ jobs:
 
       - name: Upload ferricel SBOM files
         if: ${{ !inputs.build_only }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ferricel-windows-x86_64-sbom
           path: |
