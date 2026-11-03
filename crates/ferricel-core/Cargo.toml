@@ -35,7 +35,7 @@ prost-types    = { workspace = true }
 serde          = { workspace = true }
 serde_json     = { workspace = true, features = ["raw_value"] }
 slog           = { workspace = true }
-walrus         = "0.27"
+walrus         = "0.28"
 wasmparser     = { workspace = true }
 wasmtime       = "50.0"
 yaml_serde     = { workspace = true, optional = true }
